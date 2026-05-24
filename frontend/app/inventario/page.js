@@ -1,0 +1,258 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { Download, Search, AlertTriangle, Coins, Layers } from 'lucide-react'
+import { getStock, getTiendas, getDefaultEmpresaId } from '../../lib/queries'
+import { exportToExcel } from '../../lib/export'
+
+// Pivot flat stock rows into one row per product with per-tienda quantities
+function pivotStock(stockRows) {
+  const productMap = {}
+  const tiendaMap = {}
+
+  stockRows.forEach(row => {
+    const prod = row.productos
+    const tienda = row.tiendas
+    if (!prod || !tienda) return
+
+    tiendaMap[tienda.id] = tienda.nombre
+
+    if (!productMap[prod.id]) {
+      productMap[prod.id] = {
+        id: prod.id,
+        nombre: prod.nombre,
+        categoria: prod.categorias?.nombre || '—',
+        costo: Number(prod.ultimo_costo) || 0,
+        sugerido: Number(prod.precio_venta_sugerido) || 0,
+        stocks: {}
+      }
+    }
+    productMap[prod.id].stocks[tienda.id] = row.cantidad
+  })
+
+  const productos = Object.values(productMap)
+  const tiendas = Object.entries(tiendaMap)
+    .map(([id, nombre]) => ({ id: Number(id), nombre }))
+    .sort((a, b) => a.id - b.id)
+
+  return { productos, tiendas }
+}
+
+export default function Inventario() {
+  const [empresaId, setEmpresaId] = useState(null)
+  const [productos, setProductos] = useState([])
+  const [tiendas, setTiendas] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [categoria, setCategoria] = useState('all')
+  const [tiendaFiltro, setTiendaFiltro] = useState('all')
+
+  useEffect(() => {
+    getDefaultEmpresaId().then(setEmpresaId)
+  }, [])
+
+  const loadStock = useCallback(async () => {
+    if (!empresaId) return
+    setLoading(true)
+    const tiendaId = tiendaFiltro === 'all' ? null : tiendaFiltro
+    const stockData = await getStock(empresaId, tiendaId)
+    const { productos: prods, tiendas: tiends } = pivotStock(stockData)
+    setProductos(prods)
+    // Always load all tiendas for the filter dropdown (independent of pivot)
+    const allTiendas = await getTiendas(empresaId)
+    setTiendas(allTiendas)
+    setLoading(false)
+  }, [empresaId, tiendaFiltro])
+
+  useEffect(() => { loadStock() }, [loadStock])
+
+  // Derive unique categories from loaded products
+  const categorias = [...new Set(productos.map(p => p.categoria).filter(c => c !== '—'))]
+
+  const filteredProductos = productos.filter(item => {
+    const matchesSearch = item.nombre.toLowerCase().includes(search.toLowerCase())
+    const matchesCat = categoria === 'all' || item.categoria === categoria
+    return matchesSearch && matchesCat
+  })
+
+  const getTiendaStock = (prod, tiendaId) => prod.stocks[tiendaId] ?? 0
+
+  const getTotalStock = (prod) => Object.values(prod.stocks).reduce((s, v) => s + v, 0)
+
+  // Tiendas visible in the current pivot (may be subset when tiendaFiltro is set)
+  const pivotTiendas = tiendaFiltro === 'all'
+    ? tiendas
+    : tiendas.filter(t => String(t.id) === tiendaFiltro)
+
+  const valorTotalInventario = filteredProductos.reduce((acc, prod) => {
+    return acc + getTotalStock(prod) * prod.costo
+  }, 0)
+
+  const alertasCount = filteredProductos.filter(prod =>
+    Object.values(prod.stocks).some(s => s < 5)
+  ).length
+
+  const handleExportExcel = () => {
+    const rows = filteredProductos.map(prod => {
+      const base = {
+        Producto: prod.nombre,
+        Categoria: prod.categoria,
+      }
+      tiendas.forEach(t => {
+        base[`Stock ${t.nombre}`] = getTiendaStock(prod, t.id)
+      })
+      base['Stock Total'] = getTotalStock(prod)
+      base['Costo Unitario'] = prod.costo
+      base['Precio Sugerido'] = prod.sugerido
+      base['Valorizacion Stock'] = getTotalStock(prod) * prod.costo
+      return base
+    })
+    exportToExcel(rows, 'Inventario', 'inventario_gms.xlsx')
+  }
+
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '2rem', marginBottom: '6px' }}>Control de Inventario</h1>
+          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
+            Valorización de mercancía en almacenes y monitoreo de quiebres de stock.
+          </p>
+        </div>
+        <button onClick={handleExportExcel} className="btn btn-primary" disabled={loading}>
+          <Download size={16} />
+          Exportar Inventario (.xlsx)
+        </button>
+      </div>
+
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ background: 'hsl(var(--color-ingreso) / 0.15)', color: 'hsl(var(--color-ingreso))', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+            <Coins size={28} />
+          </div>
+          <div>
+            <span style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem', fontWeight: 600 }}>VALOR TOTAL INVENTARIO</span>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginTop: '4px' }}>
+              {loading ? '—' : `S/ ${valorTotalInventario.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </h2>
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ background: 'hsl(var(--accent) / 0.15)', color: 'hsl(var(--accent))', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+            <Layers size={28} />
+          </div>
+          <div>
+            <span style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem', fontWeight: 600 }}>PRODUCTOS REGISTRADOS</span>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginTop: '4px' }}>
+              {loading ? '—' : `${filteredProductos.length} Items`}
+            </h2>
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ background: 'hsl(var(--color-gasto) / 0.15)', color: 'hsl(var(--color-gasto))', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+            <AlertTriangle size={28} />
+          </div>
+          <div>
+            <span style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem', fontWeight: 600 }}>ALERTAS DE QUIEBRE</span>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginTop: '4px' }}>
+              {loading ? '—' : `${alertasCount} Alertas`}
+            </h2>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="glass-card" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', padding: '20px' }}>
+        <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+          <input
+            type="text"
+            placeholder="Buscar por nombre de producto..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field"
+            style={{ paddingLeft: '44px' }}
+          />
+        </div>
+        <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="input-field" style={{ width: '220px' }}>
+          <option value="all">Todas las Categorías</option>
+          {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={tiendaFiltro} onChange={(e) => setTiendaFiltro(e.target.value)} className="input-field" style={{ width: '180px' }}>
+          <option value="all">Todas las Tiendas</option>
+          {tiendas.map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
+        </select>
+      </div>
+
+      {/* Tabla */}
+      <div className="glass-card">
+        <div className="table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Nombre del Producto</th>
+                <th>Categoría</th>
+                {pivotTiendas.map(t => <th key={t.id}>{t.nombre}</th>)}
+                <th>Stock Total</th>
+                <th>Costo Unit.</th>
+                <th>Sugerido</th>
+                <th>Valor Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
+                    Cargando inventario...
+                  </td>
+                </tr>
+              ) : filteredProductos.length === 0 ? (
+                <tr>
+                  <td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
+                    No se encontraron productos con los filtros actuales.
+                  </td>
+                </tr>
+              ) : filteredProductos.map((prod) => {
+                const totalStock = getTotalStock(prod)
+                const valorStock = totalStock * prod.costo
+
+                return (
+                  <tr key={prod.id}>
+                    <td style={{ fontWeight: 600 }}>{prod.nombre}</td>
+                    <td>
+                      <span style={{ fontSize: '0.75rem', background: 'hsl(var(--bg-card-hover))', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
+                        {prod.categoria}
+                      </span>
+                    </td>
+                    {pivotTiendas.map(t => {
+                      const qty = getTiendaStock(prod, t.id)
+                      const low = qty < 5
+                      return (
+                        <td key={t.id} style={{ color: low ? 'hsl(var(--color-gasto))' : 'inherit', fontWeight: low ? 700 : 'normal' }}>
+                          {qty} {low && '⚠️'}
+                        </td>
+                      )
+                    })}
+                    <td style={{ fontWeight: 700, color: totalStock < 10 ? 'hsl(var(--color-traslado))' : 'inherit' }}>
+                      {totalStock} und
+                    </td>
+                    <td>S/ {prod.costo.toFixed(2)}</td>
+                    <td>S/ {prod.sugerido.toFixed(2)}</td>
+                    <td style={{ fontWeight: 700, color: 'hsl(var(--accent-light))' }}>
+                      S/ {valorStock.toFixed(2)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,671 @@
+{
+  "name": "Inventario AI MVP - Flujo Único (Fricción Cero) v2",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"INSERT INTO public.usuarios (telegram_id, nombre, rol, tienda_id) VALUES ('\" + $json.message.from.id + \"', '\" + (($json.message.from.first_name || 'Usuario').replace(/'/g, \"''\")) + \"', 'vendedor', 1) ON CONFLICT (telegram_id) DO UPDATE SET nombre = EXCLUDED.nombre RETURNING id AS usuario_id, tienda_id;\" }}"
+      },
+      "name": "Create or Get User (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$node[\"Telegram Trigger\"].json.message.voice }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Voice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $node[\"Telegram Trigger\"].json.message.voice.file_id }}"
+      },
+      "name": "Telegram Download Voice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        660,
+        160
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "sendBodyAs": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $binary.data }}"
+            },
+            {
+              "name": "model",
+              "value": "whisper-large-v3-turbo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Groq Whisper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        880,
+        160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Groq Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza el texto para que el flujo sea igual si viene de voz o texto\nconst msg = $node[\"Telegram Trigger\"].json.message;\nconst text = msg.text || msg.caption || '';\nreturn [{ json: { text } }];\n"
+      },
+      "name": "Normalize Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convierte la respuesta de Whisper a { text }\n// Groq devuelve: { text: \"...\" }\nconst text = $json.text || $json?.data?.text || '';\nreturn [{ json: { text } }];\n"
+      },
+      "name": "Whisper → Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente experto en inventarios de gasfitería. Transforma el texto de voz transcrito a un JSON estructurado con los siguientes campos estrictos:\\n- tipo (string: 'venta', 'ingreso', 'gasto', 'traslado')\\n- producto (string: nombre limpio del producto de gasfitería, ej. 'Tubo PVC 1/2', 'Codo de PVC 90 3/4', 'Llave de paso 1/2', 'Pegamento PVC', 'Cinta Teflón')\\n- cantidad (integer: número entero positivo)\\n- precio_unitario (number: precio por unidad en Soles, o null si no se menciona)\\n- categoria_ruta (string: una de las siguientes rutas de categoría válidas o null si no aplica:\\n  'tubos_conexiones', 'griferia_valvulas', 'herramientas_accesorios', 'repuestos_empaques', 'otros')\\n\\nEjemplos:\\n1. 'venta de tres tubos de pvc de media' => {\\\"tipo\\\": \\\"venta\\\", \\\"producto\\\": \\\"Tubo PVC 1/2\\\", \\\"cantidad\\\": 3, \\\"precio_unitario\\\": null, \\\"categoria_ruta\\\": \\\"tubos_conexiones\\\"}\\n2. 'ingresaron 5 llaves de paso de bronce a 25 soles cada una' => {\\\"tipo\\\": \\\"ingreso\\\", \\\"producto\\\": \\\"Llave de paso de bronce\\\", \\\"cantidad\\\": 5, \\\"precio_unitario\\\": 25.00, \\\"categoria_ruta\\\": \\\"griferia_valvulas\\\"}\\n\\nDevuelve únicamente el objeto JSON sin formato markdown ni texto explicativo.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ $json.text }}\"\n    }\n  ],\n  \"temperature\": 0\n}\n",
+        "options": {}
+      },
+      "name": "Groq Llama 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Groq Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsea el JSON que devuelve el modelo, tolerando markdown accidental y errores\nconst content = ($json && $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content) || '';\nlet parsed = {};\ntry {\n  parsed = JSON.parse(content);\n} catch (e) {\n  try {\n    const clean = content.replace(/```json/gi, '').replace(/```/g, '').trim();\n    parsed = JSON.parse(clean);\n  } catch (err) {\n    throw new Error(\"No se pudo parsear la respuesta del modelo de IA a JSON válido: \" + content);\n  }\n}\n\n// Validación y Sanitización estricta\nlet tipo = (parsed.tipo || 'venta').toString().toLowerCase().trim();\nif (!['venta', 'ingreso', 'gasto', 'traslado'].includes(tipo)) {\n  tipo = 'venta';\n}\n\nlet cantidad = Math.round(Number(parsed.cantidad || 0));\nif (isNaN(cantidad) || cantidad <= 0) {\n  cantidad = 1;\n}\n\nlet precio_unitario = parsed.precio_unitario === null || parsed.precio_unitario === undefined\n  ? null\n  : Math.abs(Number(parsed.precio_unitario));\nif (isNaN(precio_unitario)) {\n  precio_unitario = null;\n}\n\nlet producto = (parsed.producto || 'Producto Genérico').toString().trim();\n// Escapar comillas simples para seguridad SQL\nproducto = producto.replace(/'/g, \"''\");\n\nlet categoria_ruta = parsed.categoria_ruta ? String(parsed.categoria_ruta).toLowerCase().trim() : null;\nconst categorias_validas = ['tubos_conexiones', 'griferia_valvulas', 'herramientas_accesorios', 'repuestos_empaques', 'otros'];\nif (categoria_ruta && !categorias_validas.includes(categoria_ruta)) {\n  categoria_ruta = null;\n}\n\nreturn [{\n  json: {\n    tipo,\n    producto,\n    cantidad,\n    precio_unitario,\n    categoria_ruta\n  }\n}];\n"
+      },
+      "name": "Parse Groq JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.categoria_ruta ? (\"SELECT id FROM categorias WHERE ruta = '\" + $json.categoria_ruta.replace(/'/g, \"''\") + \"' LIMIT 1;\") : \"SELECT NULL::int as id;\" }}"
+      },
+      "name": "Get Category ID (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"INSERT INTO productos (nombre, categoria_id) VALUES ('\" + $node[\"Parse Groq JSON\"].json.producto + \"', \" + ($json.id ? $json.id : 'NULL') + \") ON CONFLICT (nombre) DO UPDATE SET categoria_id = EXCLUDED.categoria_id RETURNING id;\" }}"
+      },
+      "name": "Ensure Product (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"INSERT INTO stock (producto_id, tienda_id, cantidad) VALUES (\" + $json.id + \", \" + $node[\"Create or Get User (Postgres)\"].json.tienda_id + \", 0) ON CONFLICT (producto_id, tienda_id) DO UPDATE SET updated_at = NOW() RETURNING producto_id;\" }}"
+      },
+      "name": "Ensure Stock (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"INSERT INTO public.movimientos (tipo, producto_id, cantidad, precio_unitario, tienda_origen, tienda_destino, usuario_id, transcripcion) VALUES ('\" + $node[\"Parse Groq JSON\"].json.tipo + \"', \" + $node[\"Ensure Product (Postgres)\"].json.id + \", \" + $node[\"Parse Groq JSON\"].json.cantidad + \", \" + ($node[\"Parse Groq JSON\"].json.precio_unitario === null ? 'NULL' : $node[\"Parse Groq JSON\"].json.precio_unitario) + \", \" + (($node[\"Parse Groq JSON\"].json.tipo === 'venta' || $node[\"Parse Groq JSON\"].json.tipo === 'gasto' || $node[\"Parse Groq JSON\"].json.tipo === 'traslado') ? $node[\"Create or Get User (Postgres)\"].json.tienda_id : 'NULL') + \", \" + (($node[\"Parse Groq JSON\"].json.tipo === 'ingreso' || $node[\"Parse Groq JSON\"].json.tipo === 'traslado') ? $node[\"Create or Get User (Postgres)\"].json.tienda_id : 'NULL') + \", \" + $node[\"Create or Get User (Postgres)\"].json.usuario_id + \", '\" + ($node[\"Is Voice?\"].json.value1 ? $node[\"Whisper → Text\"].json.text.replace(/'/g, \"''\") : $node[\"Normalize Text\"].json.text.replace(/'/g, \"''\")) + \"') RETURNING id;\" }}"
+      },
+      "name": "Insert Movimiento (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Telegram Trigger\"].json.message.chat.id }}",
+        "text": "={{ '✅ <b>Movimiento Registrado</b>\\n\\n<b>Tipo:</b> ' + $node[\"Parse Groq JSON\"].json.tipo.toUpperCase() + '\\n<b>Producto:</b> ' + $node[\"Parse Groq JSON\"].json.producto.replace(/''/g, \"'\") + '\\n<b>Cantidad:</b> ' + $node[\"Parse Groq JSON\"].json.cantidad + ($node[\"Parse Groq JSON\"].json.precio_unitario ? '\\n<b>Precio Unit.:</b> S/. ' + $node[\"Parse Groq JSON\"].json.precio_unitario : '') + '\\n\\n¿Deseas revertir este registro?' }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "reply_markup": "={\n  \"inline_keyboard\": [\n    [\n      {\n        \"text\": \"↩️ Deshacer Registro\",\n        \"callback_data\": \"deshacer:{{ $json.id }}:{{ $node[\"Create or Get User (Postgres)\"].json.usuario_id }}\"\n      }\n    ]\n  ]\n}\n"
+        }
+      },
+      "name": "Notify Success and Offer Undo (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ]
+      },
+      "name": "Telegram Callback Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesa callback_data: \"deshacer:<movimiento_id>:<authorized_user_id>\"\nconst data = ($json.callback_query?.data || '').toString();\nconst [action, movimiento_id, authorized_user_id] = data.split(':');\nreturn [{\n  json: {\n    action,\n    movimiento_id: Number(movimiento_id),\n    authorized_user_id: Number(authorized_user_id),\n    clicker_telegram_id: Number($json.callback_query?.from?.id),\n    chat_id: $json.callback_query?.message?.chat?.id,\n    message_id: $json.callback_query?.message?.message_id\n  }\n}];\n"
+      },
+      "name": "Parse Callback Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.action === 'deshacer' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Undo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        420,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"SELECT m.created_at, m.usuario_id, u.telegram_id as creador_telegram_id FROM public.movimientos m LEFT JOIN public.usuarios u ON m.usuario_id = u.id WHERE m.id = \" + $json.movimiento_id + \";\" }}"
+      },
+      "name": "Get Movimiento (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        620,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const movimiento = $json;\nconst clicker_telegram_id = Number($node[\"Parse Callback Data\"].json.clicker_telegram_id);\n\nif (!movimiento || !movimiento.created_at) {\n  return [{\n    json: {\n      valid: false,\n      reason: \"⚠️ El registro ya no existe o ya fue revertido anteriormente.\"\n    }\n  }];\n}\n\nconst created_at = new Date(movimiento.created_at);\nconst now = new Date();\nconst diffMinutes = (now - created_at) / 1000 / 60;\n\nif (diffMinutes > 5) {\n  return [{\n    json: {\n      valid: false,\n      reason: \"⚠️ Tiempo límite excedido (máx 5 minutos). No es posible revertir esta operación.\"\n    }\n  }];\n}\n\nif (clicker_telegram_id !== Number(movimiento.creador_telegram_id)) {\n  return [{\n    json: {\n      valid: false,\n      reason: \"⚠️ No autorizado. Solo el operario que registró esta venta original puede revertirla.\"\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    movimiento_id: $node[\"Parse Callback Data\"].json.movimiento_id\n  }\n}];"
+      },
+      "name": "Validate Undo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Valid Undo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"DELETE FROM public.movimientos WHERE id = \" + $json.movimiento_id + \" RETURNING id;\" }}"
+      },
+      "name": "Delete Movimiento (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Parse Callback Data\"].json.chat_id }}",
+        "text": "↩️ <b>Registro Revertido</b>\\n\\nEl movimiento ha sido eliminado exitosamente y el stock original ha sido restaurado en la base de datos."
+      },
+      "name": "Confirm Reversion (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        480
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Parse Callback Data\"].json.chat_id }}",
+        "text": "={{ $json.reason }}"
+      },
+      "name": "Confirm Reversion Fail (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        640
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create or Get User (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create or Get User (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Is Voice?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Voice?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Download Voice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Download Voice": {
+      "main": [
+        [
+          {
+            "node": "Groq Whisper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Whisper": {
+      "main": [
+        [
+          {
+            "node": "Whisper → Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper → Text": {
+      "main": [
+        [
+          {
+            "node": "Groq Llama 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Text": {
+      "main": [
+        [
+          {
+            "node": "Groq Llama 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Llama 3": {
+      "main": [
+        [
+          {
+            "node": "Parse Groq JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Groq JSON": {
+      "main": [
+        [
+          {
+            "node": "Get Category ID (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Category ID (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Ensure Product (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Product (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Ensure Stock (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Stock (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Insert Movimiento (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Movimiento (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Notify Success and Offer Undo (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Callback Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Callback Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Callback Data": {
+      "main": [
+        [
+          {
+            "node": "Is Undo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Undo?": {
+      "main": [
+        [
+          {
+            "node": "Get Movimiento (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Movimiento (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Validate Undo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Undo": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Undo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Undo?": {
+      "main": [
+        [
+          {
+            "node": "Delete Movimiento (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Confirm Reversion Fail (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Movimiento (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Confirm Reversion (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}
