@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Building2, Mail, Lock, ArrowRight } from 'lucide-react'
+import { ArrowRight, Lock, Mail } from 'lucide-react'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -13,13 +13,11 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
-
-    // Simulación de ingreso con credenciales del usuario
     setTimeout(() => {
       if (email === 'carlosdantetadeo@gmail.com' && password === '123456') {
         window.location.href = '/'
       } else {
-        setError('Credenciales incorrectas. Prueba con carlosdantetadeo@gmail.com y clave 123456')
+        setError('Credenciales incorrectas.')
         setLoading(false)
       }
     }, 1000)
@@ -31,142 +29,185 @@ export default function Login() {
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
-      background: 'radial-gradient(circle at center, hsl(var(--bg-card)) 0%, hsl(var(--bg-base)) 100%)',
-      padding: '20px',
       position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 9999
+      top: 0, left: 0, right: 0, bottom: 0,
+      zIndex: 9999,
+      background: 'hsl(var(--bg-base))',
+      backgroundImage: `
+        linear-gradient(rgba(255,255,255,0.016) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px)
+      `,
+      backgroundSize: '28px 28px',
+      padding: '20px'
     }}>
-      
-      <div className="glass-card animate-fade-in" style={{
+
+      {/* Acento decorativo — barra lateral izquierda */}
+      <div style={{
+        position: 'fixed',
+        left: 0, top: 0, bottom: 0,
+        width: '4px',
+        background: `linear-gradient(to bottom, transparent, hsl(var(--accent)), transparent)`
+      }} />
+
+      <div style={{
         width: '100%',
-        maxWidth: '420px',
-        padding: '40px',
+        maxWidth: '400px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '28px'
+        gap: '32px'
       }}>
-        
-        {/* Brand Header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+
+        {/* Header */}
+        <div>
           <div style={{
-            background: 'hsl(var(--accent))',
-            padding: '12px',
-            borderRadius: 'var(--radius-md)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 0 20px hsl(var(--accent) / 0.3)'
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.7rem',
+            color: 'hsl(var(--accent))',
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            marginBottom: '12px'
           }}>
-            <Building2 size={28} />
+            AGENT GMS · v1.0
           </div>
-          <div>
-            <h2 style={{ fontSize: '1.6rem', fontWeight: 700 }}>Iniciar Sesión</h2>
-            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.85rem', marginTop: '4px' }}>
-              Plataforma Multi-Empresa GMS
-            </p>
-          </div>
+          <h1 style={{
+            fontSize: '3rem',
+            fontWeight: 800,
+            lineHeight: 1,
+            marginBottom: '8px'
+          }}>
+            CONTROL<br />
+            <span style={{ color: 'hsl(var(--accent))' }}>CENTRAL</span>
+          </h1>
+          <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.875rem' }}>
+            Sistema de inventario inteligente por voz
+          </p>
         </div>
 
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>EMAIL CORPORATIVO</label>
-            <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{
-                position: 'absolute',
-                left: '14px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'hsl(var(--text-muted))'
-              }} />
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ejemplo@empresa.com" 
-                className="input-field"
-                style={{ paddingLeft: '44px' }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>CONTRASEÑA</label>
-            <div style={{ position: 'relative' }}>
-              <Lock size={16} style={{
-                position: 'absolute',
-                left: '14px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'hsl(var(--text-muted))'
-              }} />
-              <input 
-                type="password" 
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••" 
-                className="input-field"
-                style={{ paddingLeft: '44px' }}
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div style={{
-              background: 'rgba(244, 63, 94, 0.08)',
-              border: '1px solid rgba(244, 63, 94, 0.2)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '12px',
-              fontSize: '0.8rem',
-              color: 'hsl(var(--color-gasto))',
-              lineHeight: '1.4'
-            }}>
-              {error}
-            </div>
-          )}
-
-          <button type="submit" disabled={loading} className="btn btn-primary" style={{
-            width: '100%',
-            padding: '14px',
-            marginTop: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}>
-            {loading ? 'Validando...' : (
-              <>
-                Ingresar al Panel
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-
-        </form>
-
-        {/* Footer info de prueba */}
+        {/* Form */}
         <div style={{
-          textAlign: 'center',
-          fontSize: '0.75rem',
-          color: 'hsl(var(--text-muted))',
-          borderTop: '1px solid hsl(var(--border))',
-          paddingTop: '20px'
+          background: 'hsl(var(--bg-card))',
+          border: '1px solid hsl(var(--border))',
+          borderLeft: '3px solid hsl(var(--accent))',
+          borderRadius: 'var(--radius-md)',
+          padding: '28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px'
         }}>
-          <span>Demo Admin: <b>carlosdantetadeo@gmail.com</b></span>
-          <br/>
-          <span>Clave de acceso: <b>123456</b></span>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'hsl(var(--text-muted))'
+              }}>
+                Email
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Mail size={14} style={{
+                  position: 'absolute', left: '12px', top: '50%',
+                  transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))'
+                }} />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="usuario@empresa.com"
+                  className="input-field"
+                  style={{ paddingLeft: '38px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'hsl(var(--text-muted))'
+              }}>
+                Contraseña
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Lock size={14} style={{
+                  position: 'absolute', left: '12px', top: '50%',
+                  transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))'
+                }} />
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="input-field"
+                  style={{ paddingLeft: '38px' }}
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div style={{
+                background: 'hsl(var(--color-gasto) / 0.08)',
+                border: '1px solid hsl(var(--color-gasto) / 0.25)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 14px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                color: 'hsl(var(--color-gasto))'
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '13px', marginTop: '4px' }}
+            >
+              {loading ? 'Verificando...' : (
+                <>
+                  Ingresar al Sistema
+                  <ArrowRight size={15} />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Demo credentials */}
+          <div style={{
+            borderTop: '1px solid hsl(var(--border))',
+            paddingTop: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px'
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.65rem',
+              color: 'hsl(var(--text-muted))',
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              marginBottom: '6px'
+            }}>
+              — Acceso Demo —
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'hsl(var(--text-secondary))' }}>
+              carlosdantetadeo@gmail.com
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'hsl(var(--text-secondary))' }}>
+              pass: 123456
+            </div>
+          </div>
         </div>
 
       </div>
-
     </div>
   )
 }

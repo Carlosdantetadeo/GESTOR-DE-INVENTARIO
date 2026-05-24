@@ -1,39 +1,42 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --font-display: 'Outfit', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
 
-  /* HSL Tailored Colors - Premium Fintech Dark Theme */
-  --bg-base: 222 47% 6%;         /* #030712 */
-  --bg-surface: 223 47% 11%;     /* #0b111e */
-  --bg-card: 223 47% 14%;        /* #0f172a */
-  --bg-card-hover: 223 47% 18%;  /* #1e293b */
+  /* Carbón cálido — no navy, no azul */
+  --bg-base: 25 8% 7%;           /* #131110 */
+  --bg-surface: 25 8% 10%;       /* #1a1714 */
+  --bg-card: 25 8% 13%;          /* #211d1a */
+  --bg-card-hover: 25 8% 17%;    /* #2b2622 */
 
-  --text-primary: 210 40% 98%;   /* #f8fafc */
-  --text-secondary: 215 20% 65%; /* #94a3b8 */
-  --text-muted: 215 16% 47%;      /* #64748b */
+  --text-primary: 30 20% 95%;    /* #f5f2ef — blanco cálido */
+  --text-secondary: 30 10% 58%;  /* #978d85 */
+  --text-muted: 30 8% 40%;       /* #685f59 */
 
-  /* Bsale Custom Accent (Teal) */
-  --accent: 171 77% 40%;         /* #0d9488 */
-  --accent-glow: 171 77% 40% / 0.15;
-  --accent-light: 172 66% 50%;   /* #14b8a6 */
+  /* Amber industrial — reemplaza el teal genérico */
+  --accent: 28 92% 52%;          /* #f5791a */
+  --accent-light: 34 95% 58%;    /* #f9a33a */
+  --accent-glow: 28 92% 52% / 0.15;
 
-  /* Transaction Colors */
-  --color-venta: 217 91% 60%;     /* Blue #3b82f6 */
-  --color-ingreso: 142 70% 45%;   /* Emerald Green #10b981 */
-  --color-gasto: 350 89% 60%;     /* Red/Rose #f43f5e */
-  --color-traslado: 36 96% 53%;   /* Orange #f59e0b */
+  /* Colores de transacción */
+  --color-venta: 217 91% 60%;     /* Azul  #3b82f6 */
+  --color-ingreso: 142 70% 45%;   /* Verde #10b981 */
+  --color-gasto: 350 89% 60%;     /* Rojo  #f43f5e */
+  --color-traslado: 199 85% 48%;  /* Cyan  #0ba5d9 — diferenciado del accent */
 
-  --border: 223 47% 18% / 0.8;
-  --glass-bg: 223 47% 11% / 0.6;
-  --glass-border: 255 255 255 / 0.05;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --border: 25 10% 20% / 0.75;
+  --glass-bg: 25 8% 10% / 0.85;
+  --glass-border: 255 255 255 / 0.035;
 
-  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
+  /* Radio mínimo — industrial, sin redondeos exagerados */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-premium: 0 4px 20px -4px rgba(0, 0, 0, 0.65);
 }
 
 * {
@@ -44,49 +47,51 @@
 
 body {
   background-color: hsl(var(--bg-base));
+  /* Grilla técnica sutil — evoca papel de ingeniería */
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+  background-size: 28px 28px;
   color: hsl(var(--text-primary));
   font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  line-height: 1.1;
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+h1 { font-size: 2.4rem; font-weight: 800; }
+h2 { font-size: 1.9rem; }
+h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: 0.02em; }
 
-::-webkit-scrollbar-track {
-  background: hsl(var(--bg-base));
-}
-
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: hsl(var(--bg-base)); }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--bg-card));
-  border-radius: var(--radius-sm);
+  background: hsl(25 10% 22%);
+  border-radius: 2px;
 }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--accent)); }
 
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--accent));
-}
-
-/* Glassmorphism Classes */
+/* Panel lateral — base sin blur */
 .glass {
-  background: rgba(var(--glass-bg));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(var(--glass-border));
+  background: hsl(var(--bg-surface));
+  border: 1px solid hsl(var(--border));
 }
 
+/* Card — sólida, sin glassmorphism */
 .glass-card {
-  background: hsl(var(--bg-surface) / 0.7);
-  backdrop-filter: blur(12px);
+  background: hsl(var(--bg-card));
   border: 1px solid hsl(var(--border));
+  border-left: 2px solid hsl(var(--border));
   border-radius: var(--radius-md);
   padding: 24px;
   box-shadow: var(--shadow-premium);
@@ -95,20 +100,21 @@ h1, h2, h3, h4, h5, h6 {
 
 .glass-card:hover {
   border-color: hsl(var(--accent) / 0.3);
-  transform: translateY(-2px);
+  border-left-color: hsl(var(--accent) / 0.75);
+  box-shadow: var(--shadow-premium), inset 0 0 0 0 transparent;
 }
 
-/* Animations */
+/* Animación entrada */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Base Layout */
+/* Layout */
 .layout-wrapper {
   display: flex;
   min-height: 100vh;
@@ -117,7 +123,7 @@ h1, h2, h3, h4, h5, h6 {
 .main-content {
   flex: 1;
   padding: 32px;
-  margin-left: 260px; /* Sidebar width */
+  margin-left: 260px;
   transition: var(--transition);
 }
 
@@ -125,51 +131,52 @@ h1, h2, h3, h4, h5, h6 {
   .main-content {
     margin-left: 0;
     padding: 20px;
-    padding-bottom: 90px; /* Space for mobile nav */
+    padding-bottom: 90px;
   }
 }
 
-/* Badges for transaction types */
+/* Badges — rectangulares, estilo etiqueta de almacén */
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .badge-venta {
-  background: hsl(var(--color-venta) / 0.15);
+  background: hsl(var(--color-venta) / 0.12);
   color: hsl(var(--color-venta));
   border: 1px solid hsl(var(--color-venta) / 0.3);
 }
 
 .badge-ingreso {
-  background: hsl(var(--color-ingreso) / 0.15);
+  background: hsl(var(--color-ingreso) / 0.12);
   color: hsl(var(--color-ingreso));
   border: 1px solid hsl(var(--color-ingreso) / 0.3);
 }
 
 .badge-gasto {
-  background: hsl(var(--color-gasto) / 0.15);
+  background: hsl(var(--color-gasto) / 0.12);
   color: hsl(var(--color-gasto));
   border: 1px solid hsl(var(--color-gasto) / 0.3);
 }
 
 .badge-traslado {
-  background: hsl(var(--color-traslado) / 0.15);
+  background: hsl(var(--color-traslado) / 0.12);
   color: hsl(var(--color-traslado));
   border: 1px solid hsl(var(--color-traslado) / 0.3);
 }
 
-/* Forms & Inputs */
+/* Inputs */
 .input-field {
   width: 100%;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: hsl(var(--bg-surface));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-sm);
@@ -182,15 +189,19 @@ h1, h2, h3, h4, h5, h6 {
 
 .input-field:focus {
   border-color: hsl(var(--accent));
-  box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15);
+  box-shadow: 0 0 0 2px hsl(var(--accent) / 0.18);
 }
 
-/* Tables */
+.input-field option {
+  background: hsl(var(--bg-card));
+}
+
+/* Tablas */
 .table-container {
   overflow-x: auto;
   border-radius: var(--radius-md);
   border: 1px solid hsl(var(--border));
-  background: hsl(var(--bg-surface) / 0.4);
+  background: hsl(var(--bg-surface) / 0.5);
 }
 
 .custom-table {
@@ -200,59 +211,71 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .custom-table th {
-  padding: 16px 20px;
+  padding: 12px 18px;
   background: hsl(var(--bg-card));
   font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: hsl(var(--text-secondary));
+  letter-spacing: 0.08em;
+  color: hsl(var(--text-muted));
   border-bottom: 1px solid hsl(var(--border));
 }
 
 .custom-table td {
-  padding: 16px 20px;
+  padding: 13px 18px;
   font-size: 0.875rem;
   color: hsl(var(--text-primary));
-  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  border-bottom: 1px solid hsl(var(--border) / 0.4);
   transition: var(--transition);
+  /* Números alineados y de ancho fijo */
+  font-variant-numeric: tabular-nums;
 }
 
-.custom-table tr:last-child td {
-  border-bottom: none;
-}
+.custom-table tr:last-child td { border-bottom: none; }
 
 .custom-table tr:hover td {
-  background: hsl(var(--bg-card-hover) / 0.4);
+  background: hsl(var(--bg-card-hover) / 0.5);
 }
 
-/* Buttons */
+/* Columnas numéricas con monospace */
+.custom-table td:is(:nth-child(3), :nth-child(4), :nth-child(5)) {
+  font-family: var(--font-mono);
+  font-size: 0.825rem;
+}
+
+/* Botones */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 10px 20px;
   border-radius: var(--radius-sm);
   font-family: var(--font-display);
   font-size: 0.9rem;
-  font-weight: 550;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
   border: none;
   transition: var(--transition);
 }
 
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .btn-primary {
   background: hsl(var(--accent));
   color: #fff;
-  box-shadow: 0 4px 14px 0 hsl(var(--accent) / 0.3);
+  box-shadow: 0 2px 12px hsl(var(--accent) / 0.35);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: hsl(var(--accent-light));
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px 0 hsl(var(--accent) / 0.45);
+  box-shadow: 0 4px 18px hsl(var(--accent) / 0.5);
 }
 
 .btn-secondary {
@@ -261,6 +284,7 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid hsl(var(--border));
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: hsl(var(--bg-card-hover));
+  border-color: hsl(var(--accent) / 0.35);
 }
