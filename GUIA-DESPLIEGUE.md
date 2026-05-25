@@ -146,4 +146,4 @@ En Telegram, pulsa el botón **`[ ↩️ Deshacer Registro ]`**.
 
 
 token de groq
-ROTA_ESTA_KEY_EN_console.groq.com
+ROTA ESTA KEY EN console.groq.com — no incluir tokens reales en archivos de documentación
