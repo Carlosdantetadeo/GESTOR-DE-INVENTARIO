@@ -11,12 +11,11 @@ import {
   Users,
   Settings,
   LogOut,
-  Building2,
   Menu,
   X
 } from 'lucide-react'
 
-export default function Sidebar({ empresa = { nombre: 'Empresa Demo GMS' } }) {
+export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
@@ -77,25 +76,21 @@ export default function Sidebar({ empresa = { nombre: 'Empresa Demo GMS' } }) {
           paddingBottom: '24px'
         }}>
           <div style={{
+            width: '34px', height: '34px',
             background: 'hsl(var(--accent))',
-            padding: '7px',
-            borderRadius: 'var(--radius-sm)',
-            color: '#fff',
+            borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0
           }}>
-            <Building2 size={18} />
+            <Package size={17} color="#fff" />
           </div>
           <div style={{ overflow: 'hidden', flex: 1 }}>
             <div style={{
-              fontFamily: 'var(--font-display)',
               fontSize: '1rem',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.02em',
-              lineHeight: 1.1,
+              fontWeight: 700,
+              lineHeight: 1.2,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis'
@@ -103,13 +98,10 @@ export default function Sidebar({ empresa = { nombre: 'Empresa Demo GMS' } }) {
               {empresa.nombre}
             </div>
             <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.65rem',
-              color: 'hsl(var(--accent))',
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase'
+              fontSize: '0.72rem',
+              color: 'hsl(var(--text-muted))'
             }}>
-              SYS · OPERATIVO
+              Control de stock
             </span>
           </div>
           {/* Mobile close button */}
@@ -146,19 +138,14 @@ export default function Sidebar({ empresa = { nombre: 'Empresa Demo GMS' } }) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  padding: '10px 12px',
-                  borderRadius: 'var(--radius-sm)',
+                  padding: '9px 12px',
+                  borderRadius: 'var(--radius-md)',
                   textDecoration: 'none',
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '0.95rem',
-                  fontWeight: isActive ? 700 : 500,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  color: isActive ? '#fff' : 'hsl(var(--text-muted))',
-                  background: isActive ? 'hsl(var(--accent))' : 'transparent',
-                  borderLeft: isActive ? '3px solid hsl(var(--accent-light))' : '3px solid transparent',
+                  fontSize: '0.9rem',
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? 'hsl(var(--accent))' : 'hsl(var(--text-secondary))',
+                  background: isActive ? 'hsl(var(--accent) / 0.08)' : 'transparent',
                   transition: 'var(--transition)',
-                  boxShadow: isActive ? '0 2px 12px hsl(var(--accent) / 0.3)' : 'none'
                 }}
                 aria-current={isActive ? 'page' : undefined}
               >

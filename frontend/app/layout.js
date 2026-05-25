@@ -9,7 +9,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   // Datos simulados de la empresa logueada
   const empresaDemo = {
-    nombre: 'Ferretería GMS'
+    nombre: 'Inventario'
   }
 
   return (
