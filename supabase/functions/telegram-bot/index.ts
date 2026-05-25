@@ -10,7 +10,7 @@
 //   GROQ_API_KEY
 //   TELEGRAM_BOT_TOKEN
 //   SUPABASE_URL          (disponible automáticamente en Supabase)
-//   SUPABASE_SERVICE_ROLE_KEY
+//   SERVICE_ROLE_KEY
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -24,7 +24,7 @@ const TG_FILE   = `https://api.telegram.org/file/bot${BOT_TOKEN}`
 // Siempre service_role — bypasea RLS para que n8n/bots puedan escribir.
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  Deno.env.get('SERVICE_ROLE_KEY')!,
 )
 
 // ─── Entry point ─────────────────────────────────────────────────────────────

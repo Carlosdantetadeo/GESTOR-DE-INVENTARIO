@@ -4,7 +4,7 @@
 //
 // Variables de entorno requeridas (Supabase Dashboard → Edge Functions → Secrets):
 //   SUPABASE_URL              (disponible automáticamente)
-//   SUPABASE_SERVICE_ROLE_KEY (disponible automáticamente)
+//   SERVICE_ROLE_KEY          (disponible automáticamente)
 //   RESEND_API_KEY            → console.resend.com
 //   RESEND_FROM_EMAIL         → ej. "Agent GMS <onboarding@tudominio.com>"
 //                               Debe ser un dominio verificado en Resend.
@@ -17,7 +17,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  Deno.env.get('SERVICE_ROLE_KEY')!,
 )
 
 // ─── CORS (la página de registro llama esta función desde el browser) ─────────
