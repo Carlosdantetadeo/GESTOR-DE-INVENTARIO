@@ -9,7 +9,7 @@ import {
   Package,
   AlertCircle
 } from 'lucide-react'
-import { getDashboardKPIs, getMovimientos, getTiendas, getStock, getDefaultEmpresaId } from '../lib/queries'
+import { getDashboardKPIs, getMovimientos, getTiendas, getStock, getEmpresaId } from '../lib/queries'
 import { useRealtimeMovimientos } from '../lib/realtime'
 
 function formatFecha(dateStr) {
@@ -41,7 +41,7 @@ export default function Dashboard() {
   const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
-    getDefaultEmpresaId().then(setEmpresaId)
+    getEmpresaId().then(setEmpresaId)
   }, [])
 
   useEffect(() => {

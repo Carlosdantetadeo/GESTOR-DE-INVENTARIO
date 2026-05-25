@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart3, FileSpreadsheet, FileText, TrendingUp, Package, ArrowLeftRight } from 'lucide-react'
-import { getMovimientos, getStock, getTiendas, getDefaultEmpresaId } from '../../lib/queries'
+import { getMovimientos, getStock, getTiendas, getEmpresaId } from '../../lib/queries'
 import { exportToPDF, exportToExcel } from '../../lib/export'
 
 function getTiendaNombre(mov) {
@@ -33,7 +33,7 @@ export default function Reportes() {
   const [generando, setGenerando] = useState(null) // reporteId being generated
 
   useEffect(() => {
-    getDefaultEmpresaId().then(id => {
+    getEmpresaId().then(id => {
       setEmpresaId(id)
       if (id) getTiendas(id).then(setTiendas)
     })

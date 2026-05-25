@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Download, FileText, Search, Undo2, CheckCircle, AlertCircle } from 'lucide-react'
-import { getMovimientos, getTiendas, deleteMovimiento, getDefaultEmpresaId } from '../../lib/queries'
+import { getMovimientos, getTiendas, deleteMovimiento, getEmpresaId } from '../../lib/queries'
 import { exportToExcel, exportToPDF } from '../../lib/export'
 
 function formatFecha(dateStr) {
@@ -40,7 +40,7 @@ export default function Movimientos() {
   const [tienda, setTienda] = useState('all')
 
   useEffect(() => {
-    getDefaultEmpresaId().then(setEmpresaId)
+    getEmpresaId().then(setEmpresaId)
   }, [])
 
   useEffect(() => {

@@ -2,25 +2,43 @@
 
 import { useState } from 'react'
 import { Lock, Mail, Package } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setTimeout(() => {
-      if (email === 'carlosdantetadeo@gmail.com' && password === '123456') {
-        window.location.href = '/'
-      } else {
-        setError('Correo o contraseña incorrectos.')
-        setLoading(false)
-      }
-    }, 1000)
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (authError) {
+      setError('Correo o contraseña incorrectos.')
+      setLoading(false)
+      return
+    }
+
+    // Leer empresa_id desde los metadatos del usuario autenticado
+    const { data: { user } } = await supabase.auth.getUser()
+    const empresaId = user?.user_metadata?.empresa_id
+
+    if (!empresaId) {
+      setError('Tu cuenta no tiene una empresa asignada. Contactá al administrador.')
+      await supabase.auth.signOut()
+      setLoading(false)
+      return
+    }
+
+    // Redirigir: full reload para que el middleware valide la sesión recién creada
+    window.location.href = new URLSearchParams(window.location.search).get('redirect') || '/'
   }
 
   return (
@@ -66,7 +84,7 @@ export default function Login() {
           <div>
             <h1 style={{ fontSize: '1.4rem', marginBottom: '4px' }}>Iniciar sesión</h1>
             <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.875rem' }}>
-              Ingresa tus datos para continuar
+              Ingresá tus datos para continuar
             </p>
           </div>
 
@@ -142,8 +160,10 @@ export default function Login() {
             fontSize: '0.8rem',
             color: 'hsl(var(--text-muted))'
           }}>
-            <div style={{ marginBottom: '4px', fontWeight: 500 }}>Acceso demo:</div>
-            <div>carlosdantetadeo@gmail.com · 123456</div>
+            ¿No tenés cuenta?{' '}
+            <a href="/registro" style={{ color: 'hsl(var(--accent))', textDecoration: 'none', fontWeight: 500 }}>
+              Registrá tu empresa
+            </a>
           </div>
         </div>
 

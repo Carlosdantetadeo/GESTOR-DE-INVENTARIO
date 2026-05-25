@@ -1,8 +1,10 @@
 import { supabase } from './supabase'
 
-export async function getDefaultEmpresaId() {
-  const { data } = await supabase.from('empresas').select('id').limit(1).single()
-  return data?.id || null
+/** empresa_id del tenant actual (viene del JWT tras login o registro). */
+export async function getEmpresaId() {
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) return null
+  return user.user_metadata?.empresa_id ?? null
 }
 
 export async function deleteMovimiento(id) {
@@ -11,23 +13,14 @@ export async function deleteMovimiento(id) {
 }
 
 /**
- * Obtener los KPIs principales para el Dashboard
+ * KPIs del Dashboard.
+ * El aislamiento por empresa lo aplica RLS automáticamente con el JWT del usuario.
+ * Los filtros de tienda y rango de fechas se aplican directamente en SQL.
  */
 export async function getDashboardKPIs(empresaId, tiendaId = null, range = 'today') {
-  let query = supabase
-    .from('movimientos')
-    .select(`
-      id,
-      tipo,
-      total,
-      created_at,
-      tienda_origen (id, empresa_id),
-      tienda_destino (id, empresa_id)
-    `)
-
-  // Determinar rango de fecha
   const now = new Date()
-  let startDate = new Date()
+  const startDate = new Date()
+
   if (range === 'today') {
     startDate.setHours(0, 0, 0, 0)
   } else if (range === '7d') {
@@ -35,8 +28,15 @@ export async function getDashboardKPIs(empresaId, tiendaId = null, range = 'toda
   } else if (range === '30d') {
     startDate.setDate(now.getDate() - 30)
   }
-  
-  query = query.gte('created_at', startDate.toISOString())
+
+  let query = supabase
+    .from('movimientos')
+    .select('id, tipo, total, created_at')
+    .gte('created_at', startDate.toISOString())
+
+  if (tiendaId) {
+    query = query.or(`tienda_origen.eq.${tiendaId},tienda_destino.eq.${tiendaId}`)
+  }
 
   const { data, error } = await query
 
@@ -45,45 +45,25 @@ export async function getDashboardKPIs(empresaId, tiendaId = null, range = 'toda
     return { ventas: 0, ingresos: 0, gastos: 0, totalMovimientos: 0 }
   }
 
-  // Filtrar en memoria para asegurar que correspondan a la empresa y tienda correcta
-  const filtered = data.filter(mov => {
-    // 1. Filtrar por empresa (basado en tienda origen o destino)
-    const empresaOrig = mov.tienda_origen?.empresa_id
-    const empresaDest = mov.tienda_destino?.empresa_id
-    const belongsToEmpresa = (empresaOrig === empresaId || empresaDest === empresaId)
-    if (!belongsToEmpresa) return false
-
-    // 2. Filtrar por tienda si está seleccionada
-    if (tiendaId) {
-      const isTiendaOrig = mov.tienda_origen?.id === Number(tiendaId)
-      const isTiendaDest = mov.tienda_destino?.id === Number(tiendaId)
-      return isTiendaOrig || isTiendaDest
-    }
-
-    return true
-  })
-
   let ventas = 0
   let ingresos = 0
   let gastos = 0
 
-  filtered.forEach(mov => {
-    const totalVal = Number(mov.total) || 0
-    if (mov.tipo === 'venta') ventas += totalVal
-    else if (mov.tipo === 'ingreso') ingresos += totalVal
-    else if (mov.tipo === 'gasto') gastos += totalVal
+  ;(data ?? []).forEach(mov => {
+    const total = Number(mov.total) || 0
+    if (mov.tipo === 'venta')   ventas   += total
+    else if (mov.tipo === 'ingreso') ingresos += total
+    else if (mov.tipo === 'gasto')   gastos   += total
   })
 
-  return {
-    ventas,
-    ingresos,
-    gastos,
-    totalMovimientos: filtered.length
-  }
+  return { ventas, ingresos, gastos, totalMovimientos: (data ?? []).length }
 }
 
 /**
- * Obtener lista de movimientos con filtros detallados
+ * Lista de movimientos con filtros.
+ * - Tienda y tipo: filtros SQL directos.
+ * - Búsqueda por nombre de producto: filtro en memoria (columna de tabla relacionada,
+ *   no filtreable directamente con PostgREST sin una vista o función RPC).
  */
 export async function getMovimientos(empresaId, filters = {}) {
   const { tiendaId, tipo, search, limit = 50 } = filters
@@ -98,15 +78,20 @@ export async function getMovimientos(empresaId, filters = {}) {
       total,
       transcripcion,
       created_at,
-      productos (id, nombre, categoria_id, categorias (id, nombre)),
-      tienda_origen (id, nombre, empresa_id),
-      tienda_destino (id, nombre, empresa_id),
+      productos (id, nombre, categorias (id, nombre)),
+      tienda_origen (id, nombre),
+      tienda_destino (id, nombre),
       usuarios (id, nombre)
     `)
     .order('created_at', { ascending: false })
+    .limit(limit)
 
-  if (limit) {
-    query = query.limit(limit)
+  if (tiendaId) {
+    query = query.or(`tienda_origen.eq.${tiendaId},tienda_destino.eq.${tiendaId}`)
+  }
+
+  if (tipo) {
+    query = query.eq('tipo', tipo)
   }
 
   const { data, error } = await query
@@ -116,35 +101,18 @@ export async function getMovimientos(empresaId, filters = {}) {
     return []
   }
 
-  // Filtrado multi-tenant y dinámico en memoria para precisión y manejo de relaciones complejas en Supabase sin triggers costosos
-  return data.filter(mov => {
-    // Aislamiento de empresa
-    const empresaOrig = mov.tienda_origen?.empresa_id
-    const empresaDest = mov.tienda_destino?.empresa_id
-    if (empresaOrig !== empresaId && empresaDest !== empresaId) return false
+  if (!search) return data ?? []
 
-    // Filtro por tienda
-    if (tiendaId) {
-      const matchOrig = mov.tienda_origen?.id === Number(tiendaId)
-      const matchDest = mov.tienda_destino?.id === Number(tiendaId)
-      if (!matchOrig && !matchDest) return false
-    }
-
-    // Filtro por tipo
-    if (tipo && mov.tipo !== tipo) return false
-
-    // Filtro por término de búsqueda (producto)
-    if (search) {
-      const prodName = mov.productos?.nombre?.toLowerCase() || ''
-      if (!prodName.includes(search.toLowerCase())) return false
-    }
-
-    return true
-  })
+  const term = search.toLowerCase()
+  return (data ?? []).filter(mov =>
+    mov.productos?.nombre?.toLowerCase().includes(term)
+  )
 }
 
 /**
- * Obtener catálogo e inventario (stock)
+ * Stock por tienda.
+ * - Tienda: filtro SQL directo sobre tienda_id (columna propia de stock).
+ * - Empresa: aislado por RLS automáticamente.
  */
 export async function getStock(empresaId, tiendaId = null) {
   let query = supabase
@@ -153,15 +121,19 @@ export async function getStock(empresaId, tiendaId = null) {
       id,
       cantidad,
       updated_at,
-      tiendas (id, nombre, empresa_id),
+      tiendas (id, nombre),
       productos (
-        id, 
-        nombre, 
-        ultimo_costo, 
+        id,
+        nombre,
+        ultimo_costo,
         precio_venta_sugerido,
         categorias (id, nombre)
       )
     `)
+
+  if (tiendaId) {
+    query = query.eq('tienda_id', tiendaId)
+  }
 
   const { data, error } = await query
 
@@ -170,27 +142,25 @@ export async function getStock(empresaId, tiendaId = null) {
     return []
   }
 
-  // Filtrado multi-tenant
-  return data.filter(item => {
-    if (item.tiendas?.empresa_id !== empresaId) return false
-    if (tiendaId && item.tiendas?.id !== Number(tiendaId)) return false
-    return true
-  })
+  return data ?? []
 }
 
 /**
- * Obtener tiendas asociadas a una empresa
+ * Tiendas activas de la empresa.
+ * empresa_id está en la tabla directamente → filtro SQL explícito.
  */
 export async function getTiendas(empresaId) {
   const { data, error } = await supabase
     .from('tiendas')
-    .select('*')
+    .select('id, nombre, activa')
     .eq('empresa_id', empresaId)
     .eq('activa', true)
+    .order('nombre')
 
   if (error) {
     console.error('Error fetching tiendas:', error)
     return []
   }
-  return data
+
+  return data ?? []
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Download, Search, AlertTriangle, Coins, Layers } from 'lucide-react'
-import { getStock, getTiendas, getDefaultEmpresaId } from '../../lib/queries'
+import { getStock, getTiendas, getEmpresaId } from '../../lib/queries'
 import { exportToExcel } from '../../lib/export'
 
 // Pivot flat stock rows into one row per product with per-tienda quantities
@@ -48,7 +48,7 @@ export default function Inventario() {
   const [tiendaFiltro, setTiendaFiltro] = useState('all')
 
   useEffect(() => {
-    getDefaultEmpresaId().then(setEmpresaId)
+    getEmpresaId().then(setEmpresaId)
   }, [])
 
   const loadStock = useCallback(async () => {
