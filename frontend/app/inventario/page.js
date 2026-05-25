@@ -234,7 +234,10 @@ export default function Inventario() {
                       const low = qty < 5
                       return (
                         <td key={t.id} style={{ color: low ? 'hsl(var(--color-gasto))' : 'inherit', fontWeight: low ? 700 : 'normal' }}>
-                          {qty} {low && '⚠️'}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            {qty}
+                            {low && <AlertTriangle size={12} aria-label="Stock bajo" />}
+                          </span>
                         </td>
                       )
                     })}

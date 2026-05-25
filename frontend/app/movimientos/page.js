@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Download, FileText, Search, Undo2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Download, FileText, Search, Undo2, CheckCircle, AlertCircle } from 'lucide-react'
 import { getMovimientos, getTiendas, deleteMovimiento, getDefaultEmpresaId } from '../../lib/queries'
 import { exportToExcel, exportToPDF } from '../../lib/export'
 
@@ -25,6 +25,14 @@ export default function Movimientos() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [undoingId, setUndoingId] = useState(null)
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  const showToast = (message, type = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast({ message, type })
+    toastTimer.current = setTimeout(() => setToast(null), 4000)
+  }
 
   // Filters (client-side over loaded data)
   const [search, setSearch] = useState('')
@@ -51,13 +59,15 @@ export default function Movimientos() {
   useEffect(() => { loadMovimientos() }, [loadMovimientos])
 
   const handleUndo = async (item) => {
-    if (!confirm(`¿Revertir el movimiento de "${item.productos?.nombre || 'este producto'}"? El stock se restaurará automáticamente.`)) return
+    const prodName = item.productos?.nombre || 'este producto'
+    if (!confirm(`¿Revertir el movimiento de "${prodName}"? El stock se restaurará automáticamente.`)) return
     setUndoingId(item.id)
     const ok = await deleteMovimiento(item.id)
     if (ok) {
       setData(prev => prev.filter(x => x.id !== item.id))
+      showToast(`Movimiento de "${prodName}" revertido. Stock restaurado.`, 'success')
     } else {
-      alert('Error al revertir el movimiento. Intenta de nuevo.')
+      showToast('No se pudo revertir el movimiento. Intenta de nuevo.', 'error')
     }
     setUndoingId(null)
   }
@@ -211,6 +221,17 @@ export default function Movimientos() {
           </table>
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className={`toast toast-${toast.type}`} role="status" aria-live="polite">
+          {toast.type === 'success'
+            ? <CheckCircle size={16} aria-hidden="true" />
+            : <AlertCircle size={16} aria-hidden="true" />
+          }
+          {toast.message}
+        </div>
+      )}
     </div>
   )
 }

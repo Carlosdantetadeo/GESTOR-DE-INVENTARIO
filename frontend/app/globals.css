@@ -127,12 +127,96 @@ h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: 0.02em; }
   transition: var(--transition);
 }
 
+/* Mobile sidebar — slide in/out */
+.sidebar {
+  transform: translateX(0);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 90;
+  cursor: pointer;
+}
+
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 101;
+  background: hsl(var(--bg-card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-sm);
+  color: hsl(var(--text-primary));
+  padding: 8px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 1024px) {
   .main-content {
     margin-left: 0;
     padding: 20px;
+    padding-top: 64px;
     padding-bottom: 90px;
   }
+
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.sidebar-open {
+    display: block;
+  }
+
+  .hamburger-btn {
+    display: flex;
+  }
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-premium);
+  animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast-success {
+  background: hsl(var(--color-ingreso) / 0.15);
+  border: 1px solid hsl(var(--color-ingreso) / 0.4);
+  color: hsl(var(--color-ingreso));
+}
+
+.toast-error {
+  background: hsl(var(--color-gasto) / 0.12);
+  border: 1px solid hsl(var(--color-gasto) / 0.3);
+  color: hsl(var(--color-gasto));
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Badges — rectangulares, estilo etiqueta de almacén */
