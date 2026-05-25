@@ -51,8 +51,16 @@ Deno.serve(async (req) => {
   // Validación básica
   if (!empresa_nombre?.trim()) return json({ error: 'Nombre de empresa requerido' }, 400)
   if (!admin_email?.trim())    return json({ error: 'Email del administrador requerido' }, 400)
-  if (!Array.isArray(sedes) || sedes.filter(s => s?.trim()).length < 3) {
-    return json({ error: 'Se requieren exactamente 3 nombres de sede' }, 400)
+  const sedesValidas = Array.isArray(sedes)
+    ? sedes.map(s => (s ?? '').trim()).filter(Boolean)
+    : []
+
+  if (sedesValidas.length < 1) {
+    return json({ error: 'Agregá al menos una sede con nombre' }, 400)
+  }
+
+  if (sedesValidas.length > 20) {
+    return json({ error: 'Máximo 20 sedes por registro' }, 400)
   }
 
   // ── PASO 1: Crear empresa con telegram_token único ─────────────────────────
@@ -73,11 +81,12 @@ Deno.serve(async (req) => {
     return json({ error: 'No se pudo crear la empresa. ' + empErr?.message }, 500)
   }
 
-  // ── PASO 2: Crear las 3 sedes vinculadas a la empresa ─────────────────────
+  // ── PASO 2: Crear las sedes vinculadas a la empresa ───────────────────────
 
-  const tiendasPayload = sedes
-    .slice(0, 3)
-    .map(nombre => ({ nombre: nombre.trim(), empresa_id: empresa.id }))
+  const tiendasPayload = sedesValidas.map(nombre => ({
+    nombre,
+    empresa_id: empresa.id,
+  }))
 
   const { error: tiendasErr } = await supabase
     .from('tiendas')
@@ -118,7 +127,7 @@ Deno.serve(async (req) => {
     empresa_nombre:  empresa.nombre,
     telegram_token:  empresa.telegram_token,
     temp_password:   tempPassword,
-    sedes:           sedes.slice(0, 3).map(s => s.trim()),
+    sedes:           sedesValidas,
   })
 
   if (!emailSent) {

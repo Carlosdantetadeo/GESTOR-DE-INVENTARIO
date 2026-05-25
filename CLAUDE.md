@@ -64,7 +64,7 @@ New customer → /registro page
 - `lib/queries.js` — all filters applied in SQL (no in-memory empresa filtering). empresa isolation is enforced by RLS on the authenticated session; tienda/tipo filters use `.eq()` and `.or()` directly on the query.
 - `lib/realtime.js` — `useRealtimeMovimientos` hook: subscribes to `postgres_changes` INSERT on `movimientos`, re-fetches the full row with joins. RLS on the authenticated client automatically scopes results to the user's empresa.
 - `lib/export.js` — XLSX/PDF export utilities.
-- `app/registro/page.js` — public onboarding form (empresa name, admin email, 3 sede names).
+- `app/registro/page.js` — public onboarding form (empresa name, admin email, dynamic sede list: min 1, max 20).
 - `app/login/page.js` — Supabase Auth (`signInWithPassword`); reads `empresa_id` from `user.user_metadata` after login.
 
 **Note**: `app/page.js` (Dashboard) still uses static `MOCK_MOVIMIENTOS` for KPI cards and the chart. These need to be wired to `getDashboardKPIs()` from `lib/queries.js`.

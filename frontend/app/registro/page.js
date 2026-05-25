@@ -1,37 +1,53 @@
 'use client'
 
 import { useState } from 'react'
-import { Building2, Mail, MapPin, Package, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Building2, Mail, MapPin, Package, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
 
 const EDGE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/onboarding`
+const MAX_SEDES = 20
 
 export default function Registro() {
-  const [form, setForm] = useState({
-    empresa: '',
-    email:   '',
-    sede1:   '',
-    sede2:   '',
-    sede3:   '',
-  })
+  const [empresa, setEmpresa] = useState('')
+  const [email, setEmail]     = useState('')
+  const [sedes, setSedes]     = useState([''])
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [success, setSuccess] = useState(false)
 
-  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+  const addSede = () => {
+    if (sedes.length >= MAX_SEDES) return
+    setSedes(s => [...s, ''])
+  }
+
+  const removeSede = (index) => {
+    if (sedes.length <= 1) return
+    setSedes(s => s.filter((_, i) => i !== index))
+  }
+
+  const updateSede = (index, value) => {
+    setSedes(s => s.map((v, i) => (i === index ? value : v)))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
+    const sedesValidas = sedes.map(s => s.trim()).filter(Boolean)
+    if (sedesValidas.length < 1) {
+      setError('Agregá al menos una sede con nombre.')
+      setLoading(false)
+      return
+    }
+
     try {
       const res = await fetch(EDGE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          empresa_nombre: form.empresa,
-          admin_email:    form.email,
-          sedes:          [form.sede1, form.sede2, form.sede3],
+          empresa_nombre: empresa.trim(),
+          admin_email:    email.trim(),
+          sedes:          sedesValidas,
         }),
       })
 
@@ -102,15 +118,14 @@ export default function Registro() {
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
-            {/* Nombre de empresa */}
             <Field label="Nombre de la empresa">
               <div style={{ position: 'relative' }}>
                 <Building2 size={15} style={styles.fieldIcon} />
                 <input
                   type="text"
                   required
-                  value={form.empresa}
-                  onChange={set('empresa')}
+                  value={empresa}
+                  onChange={(e) => setEmpresa(e.target.value)}
                   placeholder="Ej: Ferretería Los Andes"
                   className="input-field"
                   style={{ paddingLeft: '38px' }}
@@ -118,15 +133,14 @@ export default function Registro() {
               </div>
             </Field>
 
-            {/* Email administrador */}
             <Field label="Email del administrador">
               <div style={{ position: 'relative' }}>
                 <Mail size={15} style={styles.fieldIcon} />
                 <input
                   type="email"
                   required
-                  value={form.email}
-                  onChange={set('email')}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@tuempresa.com"
                   className="input-field"
                   style={{ paddingLeft: '38px' }}
@@ -134,33 +148,80 @@ export default function Registro() {
               </div>
             </Field>
 
-            {/* Sedes */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={styles.label}>Nombres de las 3 sedes</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={styles.label}>Sedes / sucursales</label>
+                <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
+                  Mínimo 1 · máx. {MAX_SEDES}
+                </span>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
+                Agregá las que tengas hoy (1, 2, 3 o más).
+              </p>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[
-                  { key: 'sede1', placeholder: 'Ej: Sede Centro' },
-                  { key: 'sede2', placeholder: 'Ej: Sede Norte' },
-                  { key: 'sede3', placeholder: 'Ej: Sede Sur' },
-                ].map(({ key, placeholder }, i) => (
-                  <div key={key} style={{ position: 'relative' }}>
-                    <MapPin size={15} style={styles.fieldIcon} />
-                    <input
-                      type="text"
-                      required
-                      value={form[key]}
-                      onChange={set(key)}
-                      placeholder={placeholder}
-                      className="input-field"
-                      style={{ paddingLeft: '38px' }}
-                      aria-label={`Sede ${i + 1}`}
-                    />
+                {sedes.map((nombre, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <MapPin size={15} style={styles.fieldIcon} />
+                      <input
+                        type="text"
+                        value={nombre}
+                        onChange={(e) => updateSede(i, e.target.value)}
+                        placeholder={i === 0 ? 'Ej: Sede Centro' : `Sede ${i + 1}`}
+                        className="input-field"
+                        style={{ paddingLeft: '38px' }}
+                        aria-label={`Sede ${i + 1}`}
+                      />
+                    </div>
+                    {sedes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSede(i)}
+                        className="btn"
+                        style={{
+                          padding: '10px',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'transparent',
+                          color: 'hsl(var(--text-muted))',
+                          cursor: 'pointer',
+                        }}
+                        aria-label={`Quitar sede ${i + 1}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
+
+              {sedes.length < MAX_SEDES && (
+                <button
+                  type="button"
+                  onClick={addSede}
+                  className="btn"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '10px',
+                    border: '1px dashed hsl(var(--border))',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'transparent',
+                    color: 'hsl(var(--accent))',
+                    fontSize: '0.85rem',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Plus size={16} />
+                  Agregar otra sede
+                </button>
+              )}
             </div>
 
-            {/* Error */}
             {error && (
               <div style={styles.errorBox}>
                 <AlertCircle size={14} style={{ flexShrink: 0 }} />
@@ -219,8 +280,6 @@ function Field({ label, children }) {
     </div>
   )
 }
-
-// ─── Estilos compartidos ──────────────────────────────────────────────────────
 
 const styles = {
   wrapper: {
