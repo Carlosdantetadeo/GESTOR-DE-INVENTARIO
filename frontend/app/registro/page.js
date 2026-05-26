@@ -43,7 +43,10 @@ export default function Registro() {
     try {
       const res = await fetch(EDGE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        },
         body: JSON.stringify({
           empresa_nombre: empresa.trim(),
           admin_email:    email.trim(),
