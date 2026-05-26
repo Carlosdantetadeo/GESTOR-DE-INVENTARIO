@@ -52,7 +52,7 @@ export default function Registro() {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      if (!res.ok) throw new Error(data.error ?? data.msg ?? data.message ?? `Error ${res.status}`)
       setSuccess(true)
     } catch (err) {
       setError(err.message)

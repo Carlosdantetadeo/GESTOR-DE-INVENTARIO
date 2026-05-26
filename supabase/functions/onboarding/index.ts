@@ -122,18 +122,20 @@ Deno.serve(async (req) => {
 
   // ── PASO 4: Enviar email de bienvenida via Resend ─────────────────────────
 
-  const emailSent = await sendOnboardingEmail({
-    to:              admin_email.trim(),
-    empresa_nombre:  empresa.nombre,
-    telegram_token:  empresa.telegram_token,
-    temp_password:   tempPassword,
-    sedes:           sedesValidas,
-  })
-
-  if (!emailSent) {
-    // No fallamos el request: empresa y usuario ya se crearon.
-    // El admin igual puede ingresar con la contraseña temporal.
-    console.error('[onboarding] email no enviado — verificar RESEND_API_KEY y dominio')
+  try {
+    const emailSent = await sendOnboardingEmail({
+      to:              admin_email.trim(),
+      empresa_nombre:  empresa.nombre,
+      telegram_token:  empresa.telegram_token,
+      temp_password:   tempPassword,
+      sedes:           sedesValidas,
+    })
+    if (!emailSent) {
+      console.error('[onboarding] email no enviado — verificar RESEND_API_KEY y dominio')
+    }
+  } catch (emailErr) {
+    // El email falló pero empresa y usuario ya fueron creados — no fallamos el request.
+    console.error('[onboarding] excepción al enviar email:', emailErr)
   }
 
   return json({ ok: true, empresa_id: empresa.id })
