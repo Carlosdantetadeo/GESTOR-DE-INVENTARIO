@@ -1,41 +1,45 @@
 // supabase/functions/telegram-bot/index.ts
-// Edge Function para el bot de Telegram de Agent GMS.
+// Bot de Telegram para Agent GMS.
 //
-// Flujo completo:
-//  Mensaje de voz → Groq Whisper (STT) → transcript → handleTranscript
-//  Mensaje de texto                               → handleTranscript
-//  handleTranscript → Groq Llama (NLU) → INSERT movimiento
-//    → Telegram: confirmación + botón "↩️ Deshacer" (callback undo_<id>)
-//  Callback undo_<id> → DELETE movimiento → trigger revierte stock → confirmación
-//
-// Variables de entorno requeridas (Supabase Dashboard → Edge Functions → Secrets):
-//   GROQ_API_KEY
-//   TELEGRAM_BOT_TOKEN
-//   SUPABASE_URL          (disponible automáticamente en Supabase)
-//   SERVICE_ROLE_KEY
+// Soporta: voz (Groq Whisper STT) · texto · foto (Groq Vision)
+// NLU multi-modelo: groq-llama · anthropic-haiku · anthropic-sonnet
+// Consumo diferenciado por empresa en tabla consumo_ia.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// ─── Clientes globales ────────────────────────────────────────────────────────
+// ─── Constantes ───────────────────────────────────────────────────────────────
 
-const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!
-const GROQ_KEY  = Deno.env.get('GROQ_API_KEY')!
-const TG_API    = `https://api.telegram.org/bot${BOT_TOKEN}`
-const TG_FILE   = `https://api.telegram.org/file/bot${BOT_TOKEN}`
+const BOT_TOKEN     = Deno.env.get('TELEGRAM_BOT_TOKEN')!
+const GROQ_KEY      = Deno.env.get('GROQ_API_KEY')!
+const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+const TG_API        = `https://api.telegram.org/bot${BOT_TOKEN}`
+const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
 
-// Siempre service_role — bypasea RLS para que n8n/bots puedan escribir.
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SERVICE_ROLE_KEY')!,
 )
 
+// Modelos disponibles y sus IDs de API
+const GROQ_MODEL_IDS: Record<string, string> = {
+  'groq-llama': 'llama-3.3-70b-versatile',
+}
+const ANTHROPIC_MODEL_IDS: Record<string, string> = {
+  'anthropic-haiku':  'claude-haiku-4-5-20251001',
+  'anthropic-sonnet': 'claude-sonnet-4-6',
+}
+
+// Costo por token en USD [entrada, salida]
+const TOKEN_COSTS: Record<string, [number, number]> = {
+  'groq-llama':       [0.00000059, 0.00000079],
+  'anthropic-haiku':  [0.0000008,  0.000004  ],
+  'anthropic-sonnet': [0.000003,   0.000015  ],
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
-  // Telegram envía siempre POST; cualquier otra cosa puede ser health-check
-  if (req.method !== 'POST') {
-    return new Response('ok', { status: 200 })
-  }
+  if (req.method !== 'POST') return new Response('ok', { status: 200 })
 
   let update: TelegramUpdate
   try {
@@ -45,7 +49,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Callback del botón Deshacer
     if (update.callback_query?.data?.startsWith('undo_')) {
       await handleUndo(update.callback_query)
       return new Response('ok', { status: 200 })
@@ -54,80 +57,60 @@ Deno.serve(async (req) => {
     const msg = update.message
     if (!msg) return new Response('ok', { status: 200 })
 
-    // Mensaje de voz → STT → NLU → INSERT
     if (msg.voice) {
       await handleVoice(msg)
       return new Response('ok', { status: 200 })
     }
 
-    // Mensaje de texto → NLU → INSERT (omite el paso de STT)
     if (msg.text && !msg.text.startsWith('/')) {
       await handleTranscript(msg.chat.id, msg.from?.id, msg.text.trim())
       return new Response('ok', { status: 200 })
     }
 
-    // Foto → Groq Vision → descripción → NLU → INSERT
     if (msg.photo?.length) {
       await handlePhoto(msg)
       return new Response('ok', { status: 200 })
     }
-
-    // Comandos /start o cualquier otro — ignorar silenciosamente
   } catch (err) {
     console.error('[telegram-bot] error no controlado:', err)
   }
 
-  // Siempre 200 → Telegram no reintenta el webhook
   return new Response('ok', { status: 200 })
 })
 
-// ─── PASO 8: Manejar callback "undo_<movimiento_id>" ─────────────────────────
+// ─── Undo ─────────────────────────────────────────────────────────────────────
 
 async function handleUndo(cb: CallbackQuery) {
-  const chatId  = cb.message.chat.id
-  const msgId   = cb.message.message_id
-  const moviId  = cb.data.replace('undo_', '')
+  const chatId = cb.message.chat.id
+  const msgId  = cb.message.message_id
+  const moviId = cb.data.replace('undo_', '')
 
-  // Telegram requiere responder al callback para quitar el spinner del botón
-  await tg('answerCallbackQuery', {
-    callback_query_id: cb.id,
-    text: 'Revirtiendo...',
-  })
+  await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Revirtiendo...' })
 
-  const { error } = await supabase
-    .from('movimientos')
-    .delete()
-    .eq('id', moviId)
+  const { error } = await supabase.from('movimientos').delete().eq('id', moviId)
 
   if (error) {
-    await tg('sendMessage', {
-      chat_id: chatId,
-      text: '❌ No se pudo revertir el registro. Verifica en el dashboard e intenta de nuevo.',
-    })
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo revertir el registro.' })
     return
   }
 
-  // El trigger tr_actualizar_stock con factor -1 ya revirtió el stock automáticamente.
-  // Editamos el mensaje original para que quede como registro de la reversión.
   await tg('editMessageText', {
-    chat_id: chatId,
-    message_id: msgId,
+    chat_id: chatId, message_id: msgId,
     text:
       '↩️ *Registro revertido*\n' +
       'El stock fue restaurado automáticamente.\n\n' +
-      '_Podés volver a enviar el audio con el dato correcto._',
+      '_Podés volver a enviar el mensaje con el dato correcto._',
     parse_mode: 'Markdown',
   })
 }
 
-// ─── Manejar mensaje de voz: STT → handleTranscript ─────────────────────────
+// ─── Voz → STT → handleTranscript ────────────────────────────────────────────
 
 async function handleVoice(message: TelegramMessage) {
   const chatId         = message.chat.id
   const telegramUserId = message.from?.id
-  const fileId         = message.voice!.file_id
 
-  const fileInfo = await tg('getFile', { file_id: fileId })
+  const fileInfo = await tg('getFile', { file_id: message.voice!.file_id })
   if (!fileInfo.ok || !fileInfo.result?.file_path) {
     await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo obtener el audio.' })
     return
@@ -138,10 +121,9 @@ async function handleVoice(message: TelegramMessage) {
     await tg('sendMessage', { chat_id: chatId, text: '❌ Error descargando el audio.' })
     return
   }
-  const audioBuffer = await audioResp.arrayBuffer()
 
   const form = new FormData()
-  form.append('file', new Blob([audioBuffer], { type: 'audio/ogg' }), 'audio.ogg')
+  form.append('file', new Blob([await audioResp.arrayBuffer()], { type: 'audio/ogg' }), 'audio.ogg')
   form.append('model', 'whisper-large-v3-turbo')
   form.append('language', 'es')
   form.append('response_format', 'json')
@@ -171,8 +153,7 @@ async function handlePhoto(message: TelegramMessage) {
   const chatId         = message.chat.id
   const telegramUserId = message.from?.id
 
-  // Telegram envía varias resoluciones; la última es la de mayor calidad
-  const photo  = message.photo![message.photo!.length - 1]
+  const photo    = message.photo![message.photo!.length - 1]
   const fileInfo = await tg('getFile', { file_id: photo.file_id })
   if (!fileInfo.ok || !fileInfo.result?.file_path) {
     await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo obtener la imagen.' })
@@ -185,43 +166,32 @@ async function handlePhoto(message: TelegramMessage) {
     return
   }
 
-  // Convertir a base64 para la API de visión
-  const imgBuffer = await imgResp.arrayBuffer()
-  const base64    = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)))
-  const mimeType  = fileInfo.result.file_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
+  const base64   = btoa(String.fromCharCode(...new Uint8Array(await imgResp.arrayBuffer())))
+  const mimeType = fileInfo.result.file_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
 
   await tg('sendMessage', { chat_id: chatId, text: '🔍 Analizando imagen...' })
 
   const visionResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GROQ_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mimeType};base64,${base64}` },
-            },
-            {
-              type: 'text',
-              text: `Eres el asistente de inventario de una ferretería.
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+          {
+            type: 'text',
+            text: `Eres el asistente de inventario de una ferretería.
 Analizá esta imagen e identificá cualquier movimiento de inventario visible:
 facturas, remitos, pizarras, anotaciones, etiquetas de productos, o stock.
-
 Describí en una sola oración en español qué movimiento ves, mencionando:
-producto, cantidad, tipo de movimiento (venta/ingreso/gasto/traslado) y tienda si es visible.
-Si no hay información de inventario en la imagen, respondé solo: "NO_INVENTARIO".`,
-            },
-          ],
-        },
-      ],
+producto, cantidad, tipo (venta/ingreso/gasto/traslado) y tienda si es visible.
+Si no hay información de inventario, respondé solo: NO_INVENTARIO.`,
+          },
+        ],
+      }],
     }),
   })
 
@@ -240,14 +210,24 @@ Si no hay información de inventario en la imagen, respondé solo: "NO_INVENTARI
   await handleTranscript(chatId, telegramUserId, descripcion)
 }
 
-// ─── NLU → INSERT → Confirmar (compartido por voz y texto) ───────────────────
+// ─── NLU → INSERT → Confirmar ────────────────────────────────────────────────
 
 async function handleTranscript(
   chatId: number,
   telegramUserId: number | undefined,
   transcript: string,
 ) {
-  // Cargar catálogos para el prompt (primeros 200 items cada uno)
+  // Buscar usuario + modelo NLU de su empresa en una sola query
+  const { data: usuario } = await supabase
+    .from('usuarios')
+    .select('id, empresa_id, empresas(nlu_model)')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle() as { data: UsuarioConEmpresa | null }
+
+  const empresaId = usuario?.empresa_id ?? undefined
+  const nluModel  = (usuario?.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
+
+  // Cargar catálogos
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
     supabase.from('productos').select('id, nombre').limit(200),
     supabase.from('tiendas').select('id, nombre').eq('activa', true),
@@ -256,21 +236,7 @@ async function handleTranscript(
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
-  // Extraer estructura con Groq Llama
-  const llmResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GROQ_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: `Eres el asistente de inventario de una ferretería peruana.
+  const systemPrompt = `Eres el asistente de inventario de una ferretería peruana.
 Extrae del texto del operario los siguientes campos y responde SOLO con JSON válido:
 {
   "producto_id": <número del catálogo, o null si no coincide>,
@@ -289,26 +255,15 @@ CATÁLOGO DE TIENDAS (id|nombre):
 ${listaTienda}
 
 Reglas:
-- Si el operario dice "vendí" o "vendimos" → tipo = "venta"
-- Si dice "entró", "llegó", "recibimos" → tipo = "ingreso"
-- Si dice "gasté", "compré para la tienda" → tipo = "gasto"
-- Si dice "trasladé", "mandé a" → tipo = "traslado"
-- Busca el producto más parecido al nombre mencionado (ignora tildes y mayúsculas).
-- Si el nombre no coincide con ningún producto, devuelve producto_id = null.`,
-        },
-        { role: 'user', content: transcript },
-      ],
-    }),
-  })
+- "vendí"/"vendimos" → tipo = "venta"
+- "entró"/"llegó"/"recibimos" → tipo = "ingreso"
+- "gasté"/"compré para la tienda" → tipo = "gasto"
+- "trasladé"/"mandé a" → tipo = "traslado"
+- Busca el producto más parecido (ignora tildes y mayúsculas).
+- Si no coincide ningún producto, devuelve producto_id = null.`
 
-  const llmData = await llmResp.json()
-  let parsed: ParsedMovimiento | null = null
-
-  try {
-    parsed = JSON.parse(llmData.choices[0].message.content)
-  } catch {
-    // JSON malformado
-  }
+  // Llamar al modelo NLU de la empresa
+  const { parsed, tokensIn, tokensOut } = await callNLU(nluModel, systemPrompt, transcript)
 
   if (!parsed || !parsed.producto_id || !parsed.tipo || !parsed.cantidad) {
     await tg('sendMessage', {
@@ -321,30 +276,21 @@ Reglas:
     return
   }
 
-  // Buscar usuario por telegram_id y hacer INSERT movimiento
-  const { data: usuario } = await supabase
-    .from('usuarios')
-    .select('id')
-    .eq('telegram_id', telegramUserId)
-    .maybeSingle()
-
+  // INSERT movimiento
   const payload: Record<string, unknown> = {
-    tipo:             parsed.tipo,
-    producto_id:      parsed.producto_id,
-    cantidad:         parsed.cantidad,
-    precio_unitario:  parsed.precio_unitario  ?? 0,
-    costo_unitario:   parsed.costo_unitario   ?? 0,
-    tienda_origen:    parsed.tienda_origen_id  ?? null,
-    tienda_destino:   parsed.tienda_destino_id ?? null,
-    transcripcion:    transcript,
-    usuario_id:       usuario?.id ?? null,
+    tipo:            parsed.tipo,
+    producto_id:     parsed.producto_id,
+    cantidad:        parsed.cantidad,
+    precio_unitario: parsed.precio_unitario ?? 0,
+    costo_unitario:  parsed.costo_unitario  ?? 0,
+    tienda_origen:   parsed.tienda_origen_id  ?? null,
+    tienda_destino:  parsed.tienda_destino_id ?? null,
+    transcripcion:   transcript,
+    usuario_id:      usuario?.id ?? null,
   }
 
   const { data: movimiento, error: insertErr } = await supabase
-    .from('movimientos')
-    .insert(payload)
-    .select('id')
-    .single()
+    .from('movimientos').insert(payload).select('id').single()
 
   if (insertErr || !movimiento) {
     await tg('sendMessage', {
@@ -354,29 +300,111 @@ Reglas:
     return
   }
 
-  // Confirmar en Telegram con botón inline "↩️ Deshacer"
+  // Registrar consumo (fire-and-forget, no bloquea la respuesta)
+  logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'nlu').catch(console.error)
+
+  // Confirmar con botón Deshacer
   const productoNombre = productos?.find(p => p.id === parsed!.producto_id)?.nombre ?? `Producto #${parsed.producto_id}`
   const tiendaNombre   = tiendaLabel(tiendas, parsed)
   const total          = (parsed.cantidad * (parsed.precio_unitario ?? 0)).toFixed(2)
   const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
 
-  const texto =
-    `${emoji[parsed.tipo] ?? '✅'} *${capitalize(parsed.tipo)} registrada*\n` +
-    `📦 ${productoNombre}\n` +
-    `🔢 Cantidad: ${parsed.cantidad}\n` +
-    `📍 ${tiendaNombre}\n` +
-    (parsed.precio_unitario ? `💵 Total: S/. ${total}\n` : '') +
-    `\n_¿Hubo un error? Pulsá Deshacer para revertir._`
-
   await tg('sendMessage', {
     chat_id: chatId,
-    text: texto,
+    text:
+      `${emoji[parsed.tipo] ?? '✅'} *${capitalize(parsed.tipo)} registrada*\n` +
+      `📦 ${productoNombre}\n` +
+      `🔢 Cantidad: ${parsed.cantidad}\n` +
+      `📍 ${tiendaNombre}\n` +
+      (parsed.precio_unitario ? `💵 Total: S/. ${total}\n` : '') +
+      `\n_¿Hubo un error? Pulsá Deshacer para revertir._`,
     parse_mode: 'Markdown',
     reply_markup: {
-      inline_keyboard: [[
-        { text: '↩️ Deshacer', callback_data: `undo_${movimiento.id}` },
-      ]],
+      inline_keyboard: [[{ text: '↩️ Deshacer', callback_data: `undo_${movimiento.id}` }]],
     },
+  })
+}
+
+// ─── NLU multi-modelo ─────────────────────────────────────────────────────────
+
+async function callNLU(
+  nluModel: string,
+  systemPrompt: string,
+  transcript: string,
+): Promise<{ parsed: ParsedMovimiento | null; tokensIn: number; tokensOut: number }> {
+
+  // ── Groq ──
+  if (nluModel in GROQ_MODEL_IDS) {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_MODEL_IDS[nluModel],
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: transcript },
+        ],
+      }),
+    })
+    const data = await resp.json()
+    const tokensIn  = data.usage?.prompt_tokens     ?? 0
+    const tokensOut = data.usage?.completion_tokens ?? 0
+    try {
+      return { parsed: JSON.parse(data.choices[0].message.content), tokensIn, tokensOut }
+    } catch {
+      return { parsed: null, tokensIn, tokensOut }
+    }
+  }
+
+  // ── Anthropic ──
+  if (nluModel in ANTHROPIC_MODEL_IDS) {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL_IDS[nluModel],
+        max_tokens: 512,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: transcript }],
+      }),
+    })
+    const data = await resp.json()
+    const tokensIn  = data.usage?.input_tokens  ?? 0
+    const tokensOut = data.usage?.output_tokens ?? 0
+    try {
+      return { parsed: JSON.parse(data.content[0].text), tokensIn, tokensOut }
+    } catch {
+      return { parsed: null, tokensIn, tokensOut }
+    }
+  }
+
+  return { parsed: null, tokensIn: 0, tokensOut: 0 }
+}
+
+// ─── Registro de consumo ──────────────────────────────────────────────────────
+
+async function logConsumo(
+  empresaId: string | undefined,
+  modelo: string,
+  tokensIn: number,
+  tokensOut: number,
+  tipo: string,
+) {
+  if (!empresaId) return
+  const [cIn, cOut] = TOKEN_COSTS[modelo] ?? [0, 0]
+  await supabase.from('consumo_ia').insert({
+    empresa_id:     empresaId,
+    modelo,
+    tipo,
+    tokens_entrada: tokensIn,
+    tokens_salida:  tokensOut,
+    costo_usd:      tokensIn * cIn + tokensOut * cOut,
   })
 }
 
@@ -439,20 +467,8 @@ interface ParsedMovimiento {
   costo_unitario:    number
 }
 
-// ==============================================================================
-// REGISTRAR EL WEBHOOK EN TELEGRAM
-// Ejecutar UNA sola vez después de hacer deploy de la función.
-//
-// curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
-//   -H "Content-Type: application/json" \
-//   -d '{"url":"https://<PROJECT_REF>.supabase.co/functions/v1/telegram-bot","secret_token":"<TOKEN_ALEATORIO>"}'
-//
-// Reemplazar:
-//   <TELEGRAM_BOT_TOKEN>  → token de @BotFather
-//   <PROJECT_REF>         → referencia del proyecto en Supabase (ej. abcdefghijklmnop)
-//   <TOKEN_ALEATORIO>     → cualquier string largo (ej. openssl rand -hex 32)
-//                           Supabase lo valida automáticamente en la cabecera X-Telegram-Bot-Api-Secret-Token
-//
-// Para verificar que el webhook quedó registrado:
-// curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
-// ==============================================================================
+interface UsuarioConEmpresa {
+  id:         string
+  empresa_id: string
+  empresas:   { nlu_model: string } | null
+}
