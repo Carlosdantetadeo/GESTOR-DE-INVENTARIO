@@ -1,9 +1,10 @@
 import { createBrowserClient } from '@supabase/ssr'
 
-// createBrowserClient (de @supabase/ssr) almacena la sesión en cookies
-// además de localStorage, lo que permite que el middleware de Next.js
-// lea el JWT sin necesidad de llamadas adicionales al servidor.
+// Normaliza la URL por si el env var tiene /rest/v1 u otra ruta de más
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const supabaseUrl = rawUrl.replace(/\/(rest|auth|storage|functions)(\/.*)?$/, '').replace(/\/$/, '')
+
 export const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  supabaseUrl,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 )
