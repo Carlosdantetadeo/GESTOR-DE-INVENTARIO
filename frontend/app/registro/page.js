@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { Building2, Mail, MapPin, Package, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
 
-const EDGE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/onboarding`
+const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '')
+const EDGE_URL = `${SUPABASE_URL}/functions/v1/onboarding`
 const MAX_SEDES = 20
 
 export default function Registro() {
@@ -41,6 +42,7 @@ export default function Registro() {
     }
 
     try {
+      console.log('[registro] POST →', EDGE_URL)
       const res = await fetch(EDGE_URL, {
         method: 'POST',
         headers: {
@@ -55,6 +57,7 @@ export default function Registro() {
       })
 
       const data = await res.json()
+      console.log('[registro] response', res.status, data)
       if (!res.ok) throw new Error(data.error ?? data.msg ?? data.message ?? `Error ${res.status}`)
       setSuccess(true)
     } catch (err) {
