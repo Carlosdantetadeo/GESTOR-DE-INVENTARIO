@@ -8,8 +8,11 @@ export async function middleware(request) {
   let response = NextResponse.next({ request })
 
   // Crear un cliente Supabase que lee/escribe cookies desde el contexto del middleware
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const supabaseUrl = rawUrl.replace(/\/(rest|auth|storage|functions)(\/.*)?$/, '').replace(/\/$/, '')
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseUrl,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {

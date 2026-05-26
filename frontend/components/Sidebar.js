@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -14,11 +14,23 @@ import {
   Menu,
   X
 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+  const [userInitials, setUserInitials] = useState('--')
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      const email = user.email ?? ''
+      setUserEmail(email)
+      setUserInitials(email.slice(0, 2).toUpperCase())
+    })
+  }, [])
 
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -29,8 +41,9 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
     { name: 'Configuración', path: '/admin/config', icon: Settings },
   ]
 
-  const handleLogout = () => {
-    router.push('/login')
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
   }
 
   const closeMobile = () => setIsMobileOpen(false)
@@ -179,14 +192,11 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
               border: '1px solid hsl(var(--border))',
               flexShrink: 0
             }} aria-hidden="true">
-              CD
+              {userInitials}
             </div>
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                Carlos Dante
-              </div>
               <span style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
-                carlosdantetadeo@gmail.com
+                {userEmail || '…'}
               </span>
             </div>
           </div>
