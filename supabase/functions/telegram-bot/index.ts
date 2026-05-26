@@ -66,6 +66,12 @@ Deno.serve(async (req) => {
       return new Response('ok', { status: 200 })
     }
 
+    // Foto → Groq Vision → descripción → NLU → INSERT
+    if (msg.photo?.length) {
+      await handlePhoto(msg)
+      return new Response('ok', { status: 200 })
+    }
+
     // Comandos /start o cualquier otro — ignorar silenciosamente
   } catch (err) {
     console.error('[telegram-bot] error no controlado:', err)
@@ -157,6 +163,81 @@ async function handleVoice(message: TelegramMessage) {
   }
 
   await handleTranscript(chatId, telegramUserId, transcript)
+}
+
+// ─── Foto → Groq Vision → handleTranscript ───────────────────────────────────
+
+async function handlePhoto(message: TelegramMessage) {
+  const chatId         = message.chat.id
+  const telegramUserId = message.from?.id
+
+  // Telegram envía varias resoluciones; la última es la de mayor calidad
+  const photo  = message.photo![message.photo!.length - 1]
+  const fileInfo = await tg('getFile', { file_id: photo.file_id })
+  if (!fileInfo.ok || !fileInfo.result?.file_path) {
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo obtener la imagen.' })
+    return
+  }
+
+  const imgResp = await fetch(`${TG_FILE}/${fileInfo.result.file_path}`)
+  if (!imgResp.ok) {
+    await tg('sendMessage', { chat_id: chatId, text: '❌ Error descargando la imagen.' })
+    return
+  }
+
+  // Convertir a base64 para la API de visión
+  const imgBuffer = await imgResp.arrayBuffer()
+  const base64    = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)))
+  const mimeType  = fileInfo.result.file_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
+
+  await tg('sendMessage', { chat_id: chatId, text: '🔍 Analizando imagen...' })
+
+  const visionResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${GROQ_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      temperature: 0,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mimeType};base64,${base64}` },
+            },
+            {
+              type: 'text',
+              text: `Eres el asistente de inventario de una ferretería.
+Analizá esta imagen e identificá cualquier movimiento de inventario visible:
+facturas, remitos, pizarras, anotaciones, etiquetas de productos, o stock.
+
+Describí en una sola oración en español qué movimiento ves, mencionando:
+producto, cantidad, tipo de movimiento (venta/ingreso/gasto/traslado) y tienda si es visible.
+Si no hay información de inventario en la imagen, respondé solo: "NO_INVENTARIO".`,
+            },
+          ],
+        },
+      ],
+    }),
+  })
+
+  const visionData = await visionResp.json()
+  const descripcion: string = visionData.choices?.[0]?.message?.content?.trim() ?? ''
+
+  if (!descripcion || descripcion === 'NO_INVENTARIO') {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '❓ No encontré información de inventario en la imagen.\n\n_Enviá una foto de una factura, remito o pizarra con productos y cantidades._',
+      parse_mode: 'Markdown',
+    })
+    return
+  }
+
+  await handleTranscript(chatId, telegramUserId, descripcion)
 }
 
 // ─── NLU → INSERT → Confirmar (compartido por voz y texto) ───────────────────
@@ -335,10 +416,11 @@ interface TelegramUpdate {
 }
 
 interface TelegramMessage {
-  chat:   { id: number }
-  from?:  { id: number }
-  voice?: { file_id: string }
-  text?:  string
+  chat:    { id: number }
+  from?:   { id: number }
+  voice?:  { file_id: string }
+  text?:   string
+  photo?:  Array<{ file_id: string; width: number; height: number }>
 }
 
 interface CallbackQuery {
