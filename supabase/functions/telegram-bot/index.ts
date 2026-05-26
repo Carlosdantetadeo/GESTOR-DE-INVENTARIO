@@ -1,9 +1,11 @@
 // supabase/functions/telegram-bot/index.ts
-// Edge Function que reemplaza el workflow de n8n para el bot de Telegram de Agent GMS.
+// Edge Function para el bot de Telegram de Agent GMS.
 //
 // Flujo completo:
-//  Mensaje de voz → Groq Whisper (STT) → Groq Llama (NLU) → INSERT movimiento
-//  → Telegram: confirmación + botón "↩️ Deshacer" (callback undo_<id>)
+//  Mensaje de voz → Groq Whisper (STT) → transcript → handleTranscript
+//  Mensaje de texto                               → handleTranscript
+//  handleTranscript → Groq Llama (NLU) → INSERT movimiento
+//    → Telegram: confirmación + botón "↩️ Deshacer" (callback undo_<id>)
 //  Callback undo_<id> → DELETE movimiento → trigger revierte stock → confirmación
 //
 // Variables de entorno requeridas (Supabase Dashboard → Edge Functions → Secrets):
@@ -43,17 +45,28 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // PASO 8 — callback del botón Deshacer
+    // Callback del botón Deshacer
     if (update.callback_query?.data?.startsWith('undo_')) {
       await handleUndo(update.callback_query)
       return new Response('ok', { status: 200 })
     }
 
-    // PASOS 1-7 — mensaje de voz
-    if (update.message?.voice) {
-      await handleVoice(update.message)
+    const msg = update.message
+    if (!msg) return new Response('ok', { status: 200 })
+
+    // Mensaje de voz → STT → NLU → INSERT
+    if (msg.voice) {
+      await handleVoice(msg)
       return new Response('ok', { status: 200 })
     }
+
+    // Mensaje de texto → NLU → INSERT (omite el paso de STT)
+    if (msg.text && !msg.text.startsWith('/')) {
+      await handleTranscript(msg.chat.id, msg.from?.id, msg.text.trim())
+      return new Response('ok', { status: 200 })
+    }
+
+    // Comandos /start o cualquier otro — ignorar silenciosamente
   } catch (err) {
     console.error('[telegram-bot] error no controlado:', err)
   }
@@ -101,21 +114,19 @@ async function handleUndo(cb: CallbackQuery) {
   })
 }
 
-// ─── PASOS 1-7: Manejar mensaje de voz ───────────────────────────────────────
+// ─── Manejar mensaje de voz: STT → handleTranscript ─────────────────────────
 
 async function handleVoice(message: TelegramMessage) {
-  const chatId   = message.chat.id
+  const chatId         = message.chat.id
   const telegramUserId = message.from?.id
-  const fileId   = message.voice!.file_id
+  const fileId         = message.voice!.file_id
 
-  // PASO 1 — Obtener ruta del archivo de audio en Telegram
   const fileInfo = await tg('getFile', { file_id: fileId })
   if (!fileInfo.ok || !fileInfo.result?.file_path) {
     await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo obtener el audio.' })
     return
   }
 
-  // PASO 2 — Descargar el audio
   const audioResp = await fetch(`${TG_FILE}/${fileInfo.result.file_path}`)
   if (!audioResp.ok) {
     await tg('sendMessage', { chat_id: chatId, text: '❌ Error descargando el audio.' })
@@ -123,7 +134,6 @@ async function handleVoice(message: TelegramMessage) {
   }
   const audioBuffer = await audioResp.arrayBuffer()
 
-  // PASO 3 — Transcribir con Groq Whisper
   const form = new FormData()
   form.append('file', new Blob([audioBuffer], { type: 'audio/ogg' }), 'audio.ogg')
   form.append('model', 'whisper-large-v3-turbo')
@@ -146,7 +156,17 @@ async function handleVoice(message: TelegramMessage) {
     return
   }
 
-  // PASO 4 — Cargar catálogos para el prompt (primeros 200 items cada uno)
+  await handleTranscript(chatId, telegramUserId, transcript)
+}
+
+// ─── NLU → INSERT → Confirmar (compartido por voz y texto) ───────────────────
+
+async function handleTranscript(
+  chatId: number,
+  telegramUserId: number | undefined,
+  transcript: string,
+) {
+  // Cargar catálogos para el prompt (primeros 200 items cada uno)
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
     supabase.from('productos').select('id, nombre').limit(200),
     supabase.from('tiendas').select('id, nombre').eq('activa', true),
@@ -155,7 +175,7 @@ async function handleVoice(message: TelegramMessage) {
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
-  // PASO 5 — Extraer estructura con Groq Llama
+  // Extraer estructura con Groq Llama
   const llmResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -220,7 +240,7 @@ Reglas:
     return
   }
 
-  // PASO 6 — Buscar usuario por telegram_id y hacer INSERT movimiento
+  // Buscar usuario por telegram_id y hacer INSERT movimiento
   const { data: usuario } = await supabase
     .from('usuarios')
     .select('id')
@@ -253,7 +273,7 @@ Reglas:
     return
   }
 
-  // PASO 7 — Confirmar en Telegram con botón inline "↩️ Deshacer"
+  // Confirmar en Telegram con botón inline "↩️ Deshacer"
   const productoNombre = productos?.find(p => p.id === parsed!.producto_id)?.nombre ?? `Producto #${parsed.producto_id}`
   const tiendaNombre   = tiendaLabel(tiendas, parsed)
   const total          = (parsed.cantidad * (parsed.precio_unitario ?? 0)).toFixed(2)
@@ -315,9 +335,10 @@ interface TelegramUpdate {
 }
 
 interface TelegramMessage {
-  chat:  { id: number }
-  from?: { id: number }
+  chat:   { id: number }
+  from?:  { id: number }
   voice?: { file_id: string }
+  text?:  string
 }
 
 interface CallbackQuery {
