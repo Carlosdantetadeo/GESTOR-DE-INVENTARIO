@@ -12,9 +12,10 @@ export default function Registro() {
   const [empresa, setEmpresa] = useState('')
   const [email, setEmail]     = useState('')
   const [sedes, setSedes]     = useState([''])
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
-  const [success, setSuccess] = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [success,   setSuccess]   = useState(false)
+  const [tempPass,  setTempPass]  = useState('')
 
   const addSede = () => {
     if (sedes.length >= MAX_SEDES) return
@@ -58,6 +59,7 @@ export default function Registro() {
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? data.msg ?? `Error ${res.status}`)
+      if (data.temp_password) setTempPass(data.temp_password)
       setSuccess(true)
     } catch (err) {
       setError(err.message)
@@ -84,11 +86,23 @@ export default function Registro() {
               </div>
             </div>
 
+            {tempPass && (
+              <div style={{ ...styles.infoBox, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontWeight: 600, marginBottom: '6px', fontSize: '0.875rem' }}>Tu contraseña temporal</div>
+                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '8px' }}>
+                  Guardala ahora — no se vuelve a mostrar
+                </div>
+                <code style={{ ...styles.code, display: 'block', padding: '8px 10px', fontSize: '0.9rem', letterSpacing: '0.05em' }}>
+                  {tempPass}
+                </code>
+              </div>
+            )}
+
             <div style={styles.infoBox}>
               <div style={{ fontWeight: 600, marginBottom: '8px', fontSize: '0.875rem' }}>Próximos pasos</div>
               <ol style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
-                <li>Revisá tu email — tiene tu contraseña temporal y el token del bot</li>
-                <li>Ingresá al dashboard con tu email y esa contraseña</li>
+                <li>Ingresá al dashboard con tu email y la contraseña de arriba</li>
+                <li>Cambiá la contraseña la primera vez que ingreses</li>
                 <li>Compartí el comando <code style={styles.code}>/start TOKEN</code> con cada empleado para que se vincule al bot de Telegram</li>
               </ol>
             </div>

@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
     console.error('[onboarding] excepción al enviar email:', emailErr)
   }
 
-  return json({ ok: true, empresa_id: empresa.id })
+  return json({ ok: true, empresa_id: empresa.id, temp_password: tempPassword })
 })
 
 // ─── Email de bienvenida via Resend ───────────────────────────────────────────
