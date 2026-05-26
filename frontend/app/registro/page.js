@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 import { Building2, Mail, MapPin, Package, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '')
-const EDGE_URL = `${SUPABASE_URL}/functions/v1/onboarding`
 const MAX_SEDES = 20
 
 export default function Registro() {
@@ -42,23 +41,16 @@ export default function Registro() {
     }
 
     try {
-      console.log('[registro] POST →', EDGE_URL)
-      const res = await fetch(EDGE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
+      const { data, error: fnError } = await supabase.functions.invoke('onboarding', {
+        body: {
           empresa_nombre: empresa.trim(),
           admin_email:    email.trim(),
           sedes:          sedesValidas,
-        }),
+        },
       })
 
-      const data = await res.json()
-      console.log('[registro] response', res.status, data)
-      if (!res.ok) throw new Error(data.error ?? data.msg ?? data.message ?? `Error ${res.status}`)
+      if (fnError) throw new Error(fnError.message ?? 'Error al conectar con el servidor')
+      if (!data?.ok) throw new Error(data?.error ?? 'Error desconocido')
       setSuccess(true)
     } catch (err) {
       setError(err.message)
