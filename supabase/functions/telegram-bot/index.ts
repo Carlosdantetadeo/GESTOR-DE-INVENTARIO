@@ -54,8 +54,18 @@ Deno.serve(async (req) => {
       return new Response('ok', { status: 200 })
     }
 
+    if (update.callback_query?.data?.startsWith('join_')) {
+      await handleJoin(update.callback_query)
+      return new Response('ok', { status: 200 })
+    }
+
     const msg = update.message
     if (!msg) return new Response('ok', { status: 200 })
+
+    if (msg.text?.startsWith('/start')) {
+      await handleStart(msg)
+      return new Response('ok', { status: 200 })
+    }
 
     if (msg.voice) {
       await handleVoice(msg)
@@ -78,26 +88,198 @@ Deno.serve(async (req) => {
   return new Response('ok', { status: 200 })
 })
 
-// ─── Undo ─────────────────────────────────────────────────────────────────────
+// ─── /start <token> — registro de operario ───────────────────────────────────
 
-async function handleUndo(cb: CallbackQuery) {
-  const chatId = cb.message.chat.id
-  const msgId  = cb.message.message_id
-  const moviId = cb.data.replace('undo_', '')
+async function handleStart(msg: TelegramMessage) {
+  const chatId         = msg.chat.id
+  const telegramUserId = msg.from?.id
+  const token          = msg.text?.split(' ')[1]?.trim()
 
-  await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Revirtiendo...' })
+  if (!token) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text:
+        '👋 Para registrarte como operario enviá:\n\n' +
+        '`/start TU_TOKEN`\n\n' +
+        'Pedí el token al administrador de tu empresa.',
+      parse_mode: 'Markdown',
+    })
+    return
+  }
 
-  const { error } = await supabase.from('movimientos').delete().eq('id', moviId)
+  // ¿Ya está registrado?
+  const { data: existente } = await supabase
+    .from('usuarios')
+    .select('id, nombre, empresa_id, tienda_id, empresas(nombre), tiendas(nombre)')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle()
+
+  if (existente) {
+    const empNombre    = (existente.empresas  as any)?.nombre ?? '—'
+    const tiendaNombre = (existente.tiendas   as any)?.nombre ?? 'Sin asignar'
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text:
+        `✅ Ya estás registrado.\n\n` +
+        `🏢 Empresa: *${empNombre}*\n` +
+        `📍 Sede: *${tiendaNombre}*\n\n` +
+        `Podés enviar notas de voz para registrar movimientos.`,
+      parse_mode: 'Markdown',
+    })
+    return
+  }
+
+  // Buscar empresa por token
+  const { data: empresa } = await supabase
+    .from('empresas')
+    .select('id, nombre')
+    .eq('telegram_token', token)
+    .eq('activa', true)
+    .maybeSingle()
+
+  if (!empresa) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '❌ Token inválido o empresa desactivada.\nVerificá el token con tu administrador.',
+    })
+    return
+  }
+
+  // Listar sedes de la empresa
+  const { data: tiendas } = await supabase
+    .from('tiendas')
+    .select('id, nombre')
+    .eq('empresa_id', empresa.id)
+    .eq('activa', true)
+    .order('id')
+
+  if (!tiendas?.length) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '❌ La empresa no tiene sedes configuradas aún.',
+    })
+    return
+  }
+
+  // Mostrar botones con las sedes
+  const buttons = tiendas.map(t => ([{
+    text: t.nombre,
+    callback_data: `join_${token}_${t.id}`,
+  }]))
+
+  await tg('sendMessage', {
+    chat_id: chatId,
+    text:
+      `👋 Hola *${msg.from?.first_name ?? 'operario'}*!\n\n` +
+      `Te vas a registrar en *${empresa.nombre}*.\n\n` +
+      `📍 ¿En qué sede trabajás?`,
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: buttons },
+  })
+}
+
+// ─── Selección de sede al registrarse ────────────────────────────────────────
+
+async function handleJoin(cb: CallbackQuery) {
+  const chatId         = cb.message.chat.id
+  const msgId          = cb.message.message_id
+  const telegramUserId = cb.from.id
+  const parts          = cb.data.split('_')   // ['join', token(uuid), tiendaId]
+  const token          = parts[1]
+  const tiendaId       = parseInt(parts[2])
+
+  await tg('answerCallbackQuery', { callback_query_id: cb.id })
+
+  // Verificar token
+  const { data: empresa } = await supabase
+    .from('empresas')
+    .select('id, nombre')
+    .eq('telegram_token', token)
+    .eq('activa', true)
+    .maybeSingle()
+
+  if (!empresa) {
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: '❌ Token expirado. Pedí un nuevo link al administrador.',
+    })
+    return
+  }
+
+  // Evitar doble registro
+  const { data: existente } = await supabase
+    .from('usuarios')
+    .select('id')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle()
+
+  if (existente) {
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: '⚠️ Ya tenés una cuenta registrada en este sistema.',
+    })
+    return
+  }
+
+  // Obtener nombre de la sede
+  const { data: tienda } = await supabase
+    .from('tiendas')
+    .select('nombre')
+    .eq('id', tiendaId)
+    .single()
+
+  // Insertar en usuarios
+  const nombre = [cb.from.first_name, cb.from.last_name].filter(Boolean).join(' ')
+  const { error } = await supabase.from('usuarios').insert({
+    telegram_id: telegramUserId,
+    nombre,
+    rol:        'vendedor',
+    tienda_id:  tiendaId,
+    empresa_id: empresa.id,
+  })
 
   if (error) {
-    await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo revertir el registro.' })
+    console.error('[handleJoin] insert error:', error)
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: `❌ Error al registrar: ${error.message}`,
+    })
     return
   }
 
   await tg('editMessageText', {
     chat_id: chatId, message_id: msgId,
     text:
-      '↩️ *Registro revertido*\n' +
+      `✅ *¡Registrado exitosamente!*\n\n` +
+      `🏢 Empresa: *${empresa.nombre}*\n` +
+      `📍 Sede: *${tienda?.nombre}*\n\n` +
+      `Ya podés enviar notas de voz para registrar movimientos.\n` +
+      `Decí algo como: _"Vendí 3 tubos PVC"_`,
+    parse_mode: 'Markdown',
+  })
+}
+
+// ─── Undo ─────────────────────────────────────────────────────────────────────
+
+async function handleUndo(cb: CallbackQuery) {
+  const chatId = cb.message.chat.id
+  const msgId  = cb.message.message_id
+  const ids    = cb.data.replace('undo_', '').split(',').filter(Boolean)
+
+  await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Revirtiendo...' })
+
+  const { error } = await supabase.from('movimientos').delete().in('id', ids)
+
+  if (error) {
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo revertir el registro.' })
+    return
+  }
+
+  const cantidad = ids.length
+  await tg('editMessageText', {
+    chat_id: chatId, message_id: msgId,
+    text:
+      `↩️ *${cantidad === 1 ? 'Registro revertido' : `${cantidad} registros revertidos`}*\n` +
       'El stock fue restaurado automáticamente.\n\n' +
       '_Podés volver a enviar el mensaje con el dato correcto._',
     parse_mode: 'Markdown',
@@ -220,107 +402,190 @@ async function handleTranscript(
   // Buscar usuario + modelo NLU de su empresa en una sola query
   const { data: usuario } = await supabase
     .from('usuarios')
-    .select('id, empresa_id, empresas(nlu_model)')
+    .select('id, empresa_id, tienda_id, empresas(nlu_model)')
     .eq('telegram_id', telegramUserId)
     .maybeSingle() as { data: UsuarioConEmpresa | null }
 
-  const empresaId = usuario?.empresa_id ?? undefined
-  const nluModel  = (usuario?.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
+  if (!usuario) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text:
+        '⛔ Tu cuenta de Telegram no está registrada en el sistema.\n\n' +
+        'Pedile al administrador que te agregue como operario.',
+    })
+    return
+  }
 
-  // Cargar catálogos
+  const empresaId = usuario.empresa_id
+  const nluModel  = (usuario.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
+
+  // Cargar catálogos filtrados por empresa
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
-    supabase.from('productos').select('id, nombre').limit(200),
-    supabase.from('tiendas').select('id, nombre').eq('activa', true),
+    supabase.from('productos').select('id, nombre').eq('empresa_id', empresaId).limit(200),
+    supabase.from('tiendas').select('id, nombre').eq('empresa_id', empresaId).eq('activa', true),
   ])
 
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
   const systemPrompt = `Eres el asistente de inventario de una ferretería peruana.
-Extrae del texto del operario los siguientes campos y responde SOLO con JSON válido:
+Extrae TODOS los productos mencionados y responde SOLO con JSON válido:
 {
-  "producto_id": <número del catálogo, o null si no coincide>,
-  "tipo": <"venta"|"ingreso"|"gasto"|"traslado">,
-  "cantidad": <número entero positivo>,
-  "tienda_origen_id": <id de tienda, requerido para venta/gasto/traslado, null si no aplica>,
-  "tienda_destino_id": <id de tienda, requerido para ingreso/traslado, null si no aplica>,
-  "precio_unitario": <número decimal, 0 si no se menciona>,
-  "costo_unitario": <número decimal, 0 si no se menciona>
+  "movimientos": [
+    {
+      "producto_id": <número del catálogo, o null si no coincide>,
+      "producto_nombre": <nombre limpio del producto, siempre requerido>,
+      "tipo": <"venta"|"ingreso"|"gasto"|"traslado">,
+      "cantidad": <número entero positivo>,
+      "tienda_origen_id": <id de tienda o null>,
+      "tienda_destino_id": <id de tienda o null>,
+      "precio_unitario": <número decimal, 0 si no se menciona>,
+      "costo_unitario": <número decimal, 0 si no se menciona>
+    }
+  ]
 }
 
 CATÁLOGO DE PRODUCTOS (id|nombre):
-${listaProd}
+${listaProd || '(vacío — todos los productos son nuevos)'}
 
 CATÁLOGO DE TIENDAS (id|nombre):
 ${listaTienda}
 
 Reglas:
+- Si el operario menciona varios productos, genera un objeto por cada uno.
 - "vendí"/"vendimos" → tipo = "venta"
 - "entró"/"llegó"/"recibimos" → tipo = "ingreso"
 - "gasté"/"compré para la tienda" → tipo = "gasto"
 - "trasladé"/"mandé a" → tipo = "traslado"
 - Busca el producto más parecido (ignora tildes y mayúsculas).
-- Si no coincide ningún producto, devuelve producto_id = null.`
+- Si no coincide ningún producto, devuelve producto_id = null pero SIEMPRE llena producto_nombre.
+- producto_nombre debe ser el nombre normalizado (ej: "Bomba 2 pulgadas").`
 
-  // Llamar al modelo NLU de la empresa
-  const { parsed, tokensIn, tokensOut } = await callNLU(nluModel, systemPrompt, transcript)
+  const { parsed: items, tokensIn, tokensOut } = await callNLU(nluModel, systemPrompt, transcript)
 
-  if (!parsed || !parsed.producto_id || !parsed.tipo || !parsed.cantidad) {
+  if (!items || items.length === 0) {
     await tg('sendMessage', {
       chat_id: chatId,
       text:
         `❓ No entendí bien: _"${transcript}"_\n\n` +
-        'Intentá decir: *"Vendí 5 tubos PVC media pulgada en Tienda 1"*',
+        'Intentá decir: *"Vendí 5 tubos PVC y 3 codos de media pulgada a 2 soles"*',
       parse_mode: 'Markdown',
     })
     return
   }
 
-  // INSERT movimiento
-  const payload: Record<string, unknown> = {
-    tipo:            parsed.tipo,
-    producto_id:     parsed.producto_id,
-    cantidad:        parsed.cantidad,
-    precio_unitario: parsed.precio_unitario ?? 0,
-    costo_unitario:  parsed.costo_unitario  ?? 0,
-    tienda_origen:   parsed.tienda_origen_id  ?? null,
-    tienda_destino:  parsed.tienda_destino_id ?? null,
-    transcripcion:   transcript,
-    usuario_id:      usuario?.id ?? null,
+  const primeraT = tiendas?.[0]?.id ?? null
+  const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
+  const movimientoIds: string[] = []
+  const lineas: string[] = []
+  let totalGeneral = 0
+
+  // Obtener o crear categoría "General" una sola vez
+  let categoriaIdGeneral: number | null = null
+  const { data: catExistente } = await supabase
+    .from('categorias')
+    .select('id')
+    .eq('empresa_id', empresaId)
+    .eq('nombre', 'General')
+    .maybeSingle()
+  if (catExistente) {
+    categoriaIdGeneral = catExistente.id
+  } else {
+    const { data: catNueva } = await supabase
+      .from('categorias')
+      .insert({ nombre: 'General', empresa_id: empresaId })
+      .select('id')
+      .single()
+    categoriaIdGeneral = catNueva?.id ?? null
   }
 
-  const { data: movimiento, error: insertErr } = await supabase
-    .from('movimientos').insert(payload).select('id').single()
+  let omitidos = 0
+  for (const item of items) {
+    if (!item.tipo || !item.cantidad) { omitidos++; continue }
 
-  if (insertErr || !movimiento) {
+    // Auto-crear producto si no existe
+    if (!item.producto_id && item.producto_nombre) {
+      const { data: prodNuevo } = await supabase
+        .from('productos')
+        .insert({
+          nombre:                item.producto_nombre.trim(),
+          empresa_id:            empresaId,
+          categoria_id:          categoriaIdGeneral,
+          precio_venta_sugerido: item.precio_unitario ?? 0,
+          ultimo_costo:          item.costo_unitario  ?? 0,
+        })
+        .select('id')
+        .single()
+      if (prodNuevo) {
+        item.producto_id = prodNuevo.id
+        productos?.push({ id: prodNuevo.id, nombre: item.producto_nombre.trim() })
+      }
+    }
+
+    if (!item.producto_id) { omitidos++; continue }
+
+    const tiendaOrigen  = item.tienda_origen_id
+      ?? (item.tipo !== 'ingreso' ? (usuario as any)?.tienda_id ?? primeraT : null)
+    const tiendaDestino = item.tienda_destino_id
+      ?? (item.tipo === 'ingreso' || item.tipo === 'traslado' ? primeraT : null)
+
+    const { data: mov, error: insertErr } = await supabase
+      .from('movimientos')
+      .insert({
+        tipo:            item.tipo,
+        producto_id:     item.producto_id,
+        cantidad:        item.cantidad,
+        precio_unitario: item.precio_unitario ?? 0,
+        costo_unitario:  item.costo_unitario  ?? 0,
+        tienda_origen:   tiendaOrigen,
+        tienda_destino:  tiendaDestino,
+        transcripcion:   transcript,
+        usuario_id:      usuario?.id ?? null,
+      })
+      .select('id')
+      .single()
+
+    if (insertErr || !mov) { omitidos++; continue }
+
+    movimientoIds.push(mov.id)
+    const prodNombre  = productos?.find(p => p.id === item.producto_id)?.nombre ?? item.producto_nombre ?? `#${item.producto_id}`
+    const tiendaLabel_ = tiendaLabel(tiendas, { ...item, tienda_origen_id: tiendaOrigen as number | null, tienda_destino_id: tiendaDestino as number | null })
+    const subtotal    = item.cantidad * (item.precio_unitario ?? 0)
+    totalGeneral += subtotal
+
+    lineas.push(
+      `${emoji[item.tipo] ?? '✅'} *${prodNombre}* × ${item.cantidad}` +
+      (item.precio_unitario ? ` — S/. ${subtotal.toFixed(2)}` : '') +
+      `\n   📍 ${tiendaLabel_}`
+    )
+  }
+
+  if (movimientoIds.length === 0) {
     await tg('sendMessage', {
       chat_id: chatId,
-      text: `❌ Error al guardar: ${insertErr?.message ?? 'desconocido'}`,
+      text: `❓ No pude identificar productos en: _"${transcript}"_\n\nMencioná el nombre del producto claramente.`,
+      parse_mode: 'Markdown',
     })
     return
   }
 
-  // Registrar consumo (fire-and-forget, no bloquea la respuesta)
   logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'nlu').catch(console.error)
 
-  // Confirmar con botón Deshacer
-  const productoNombre = productos?.find(p => p.id === parsed!.producto_id)?.nombre ?? `Producto #${parsed.producto_id}`
-  const tiendaNombre   = tiendaLabel(tiendas, parsed)
-  const total          = (parsed.cantidad * (parsed.precio_unitario ?? 0)).toFixed(2)
-  const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
+  const encabezado = movimientoIds.length === 1
+    ? `✅ *Movimiento registrado*`
+    : `✅ *${movimientoIds.length} movimientos registrados*`
 
   await tg('sendMessage', {
     chat_id: chatId,
     text:
-      `${emoji[parsed.tipo] ?? '✅'} *${capitalize(parsed.tipo)} registrada*\n` +
-      `📦 ${productoNombre}\n` +
-      `🔢 Cantidad: ${parsed.cantidad}\n` +
-      `📍 ${tiendaNombre}\n` +
-      (parsed.precio_unitario ? `💵 Total: S/. ${total}\n` : '') +
-      `\n_¿Hubo un error? Pulsá Deshacer para revertir._`,
+      `${encabezado}\n\n` +
+      lineas.join('\n\n') +
+      (totalGeneral > 0 ? `\n\n💵 *Total: S/. ${totalGeneral.toFixed(2)}*` : '') +
+      (omitidos > 0 ? `\n\n⚠️ _${omitidos} producto(s) no se entendieron — repetílos en un nuevo mensaje._` : '') +
+      `\n\n_¿Hubo un error? Pulsá Deshacer para revertir._`,
     parse_mode: 'Markdown',
     reply_markup: {
-      inline_keyboard: [[{ text: '↩️ Deshacer', callback_data: `undo_${movimiento.id}` }]],
+      inline_keyboard: [[{ text: '↩️ Deshacer', callback_data: `undo_${movimientoIds.join(',')}` }]],
     },
   })
 }
@@ -331,7 +596,14 @@ async function callNLU(
   nluModel: string,
   systemPrompt: string,
   transcript: string,
-): Promise<{ parsed: ParsedMovimiento | null; tokensIn: number; tokensOut: number }> {
+): Promise<{ parsed: ParsedMovimiento[] | null; tokensIn: number; tokensOut: number }> {
+
+  function extractItems(raw: unknown): ParsedMovimiento[] | null {
+    if (!raw || typeof raw !== 'object') return null
+    const obj = raw as Record<string, unknown>
+    const arr = Array.isArray(obj.movimientos) ? obj.movimientos : [obj]
+    return arr.length > 0 ? arr as ParsedMovimiento[] : null
+  }
 
   // ── Groq ──
   if (nluModel in GROQ_MODEL_IDS) {
@@ -341,6 +613,7 @@ async function callNLU(
       body: JSON.stringify({
         model: GROQ_MODEL_IDS[nluModel],
         temperature: 0,
+        max_tokens: 2048,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: systemPrompt },
@@ -352,7 +625,7 @@ async function callNLU(
     const tokensIn  = data.usage?.prompt_tokens     ?? 0
     const tokensOut = data.usage?.completion_tokens ?? 0
     try {
-      return { parsed: JSON.parse(data.choices[0].message.content), tokensIn, tokensOut }
+      return { parsed: extractItems(JSON.parse(data.choices[0].message.content)), tokensIn, tokensOut }
     } catch {
       return { parsed: null, tokensIn, tokensOut }
     }
@@ -369,7 +642,7 @@ async function callNLU(
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL_IDS[nluModel],
-        max_tokens: 512,
+        max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: transcript }],
       }),
@@ -378,7 +651,7 @@ async function callNLU(
     const tokensIn  = data.usage?.input_tokens  ?? 0
     const tokensOut = data.usage?.output_tokens ?? 0
     try {
-      return { parsed: JSON.parse(data.content[0].text), tokensIn, tokensOut }
+      return { parsed: extractItems(JSON.parse(data.content[0].text)), tokensIn, tokensOut }
     } catch {
       return { parsed: null, tokensIn, tokensOut }
     }
@@ -445,7 +718,7 @@ interface TelegramUpdate {
 
 interface TelegramMessage {
   chat:    { id: number }
-  from?:   { id: number }
+  from?:   { id: number; first_name?: string; last_name?: string }
   voice?:  { file_id: string }
   text?:   string
   photo?:  Array<{ file_id: string; width: number; height: number }>
@@ -454,11 +727,13 @@ interface TelegramMessage {
 interface CallbackQuery {
   id:      string
   data:    string
+  from:    { id: number; first_name?: string; last_name?: string }
   message: { chat: { id: number }; message_id: number }
 }
 
 interface ParsedMovimiento {
   producto_id:       number | null
+  producto_nombre:   string | null
   tipo:              string
   cantidad:          number
   tienda_origen_id:  number | null
@@ -470,5 +745,6 @@ interface ParsedMovimiento {
 interface UsuarioConEmpresa {
   id:         string
   empresa_id: string
+  tienda_id:  number | null
   empresas:   { nlu_model: string } | null
 }

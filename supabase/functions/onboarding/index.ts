@@ -1,13 +1,10 @@
 // supabase/functions/onboarding/index.ts
 // Registra una empresa nueva: crea la empresa, las sedes, el usuario admin en Supabase
-// Auth, y envía el email de bienvenida con el token de Telegram via Resend.
+// Auth, y envía el email de invitación vía el servicio de email integrado de Supabase.
 //
 // Variables de entorno requeridas (Supabase Dashboard → Edge Functions → Secrets):
 //   SUPABASE_URL              (disponible automáticamente)
 //   SERVICE_ROLE_KEY          (disponible automáticamente)
-//   RESEND_API_KEY            → console.resend.com
-//   RESEND_FROM_EMAIL         → ej. "Agent GMS <onboarding@tudominio.com>"
-//                               Debe ser un dominio verificado en Resend.
 //
 // Deploy: supabase functions deploy onboarding --no-verify-jwt
 
