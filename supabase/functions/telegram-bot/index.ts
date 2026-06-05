@@ -476,7 +476,7 @@ Reglas:
 
   const primeraT = tiendas?.[0]?.id ?? null
   const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
-  const movimientoIds: string[] = []
+  const movimientos: Array<{ id: string; nombre: string }> = []
   const lineas: string[] = []
   let totalGeneral = 0
 
@@ -547,12 +547,12 @@ Reglas:
 
     if (insertErr || !mov) { omitidos++; continue }
 
-    movimientoIds.push(mov.id)
-    const prodNombre  = productos?.find(p => p.id === item.producto_id)?.nombre ?? item.producto_nombre ?? `#${item.producto_id}`
+    const prodNombre   = productos?.find(p => p.id === item.producto_id)?.nombre ?? item.producto_nombre ?? `#${item.producto_id}`
     const tiendaLabel_ = tiendaLabel(tiendas, { ...item, tienda_origen_id: tiendaOrigen as number | null, tienda_destino_id: tiendaDestino as number | null })
-    const subtotal    = item.cantidad * (item.precio_unitario ?? 0)
+    const subtotal     = item.cantidad * (item.precio_unitario ?? 0)
     totalGeneral += subtotal
 
+    movimientos.push({ id: mov.id, nombre: prodNombre })
     lineas.push(
       `${emoji[item.tipo] ?? '✅'} *${prodNombre}* × ${item.cantidad}` +
       (item.precio_unitario ? ` — S/. ${subtotal.toFixed(2)}` : '') +
@@ -560,7 +560,7 @@ Reglas:
     )
   }
 
-  if (movimientoIds.length === 0) {
+  if (movimientos.length === 0) {
     await tg('sendMessage', {
       chat_id: chatId,
       text: `❓ No pude identificar productos en: _"${transcript}"_\n\nMencioná el nombre del producto claramente.`,
@@ -571,9 +571,18 @@ Reglas:
 
   logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'nlu').catch(console.error)
 
-  const encabezado = movimientoIds.length === 1
+  const encabezado = movimientos.length === 1
     ? `✅ *Movimiento registrado*`
-    : `✅ *${movimientoIds.length} movimientos registrados*`
+    : `✅ *${movimientos.length} movimientos registrados*`
+
+  // Botones: uno por producto + "Deshacer todo" si hay más de uno
+  const botonesIndividuales = movimientos.map(m => ([{
+    text:          `↩️ ${m.nombre.length > 25 ? m.nombre.slice(0, 23) + '…' : m.nombre}`,
+    callback_data: `undo_${m.id}`,
+  }]))
+  const keyboard = movimientos.length > 1
+    ? [...botonesIndividuales, [{ text: '↩️ Deshacer todo', callback_data: `undo_${movimientos.map(m => m.id).join(',')}` }]]
+    : botonesIndividuales
 
   await tg('sendMessage', {
     chat_id: chatId,
@@ -582,10 +591,10 @@ Reglas:
       lineas.join('\n\n') +
       (totalGeneral > 0 ? `\n\n💵 *Total: S/. ${totalGeneral.toFixed(2)}*` : '') +
       (omitidos > 0 ? `\n\n⚠️ _${omitidos} producto(s) no se entendieron — repetílos en un nuevo mensaje._` : '') +
-      `\n\n_¿Hubo un error? Pulsá Deshacer para revertir._`,
+      `\n\n_Deshacer individual o todo desde los botones._`,
     parse_mode: 'Markdown',
     reply_markup: {
-      inline_keyboard: [[{ text: '↩️ Deshacer', callback_data: `undo_${movimientoIds.join(',')}` }]],
+      inline_keyboard: keyboard,
     },
   })
 }
