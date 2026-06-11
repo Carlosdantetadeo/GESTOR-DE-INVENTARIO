@@ -66,3 +66,4 @@ Hemos reestructurado `n8n_workflow_fixed.json` para:
 1.  **Cambiar el flujo de confirmación:** Guardar el registro en base de datos inmediatamente después del mapeo semántico.
 2.  **Configurar Botón "Deshacer" en Telegram:** Enviar un mensaje con un botón de callback `deshacer_[movimiento_id]`.
 3.  **Añadir un disparador de Callback en n8n:** Escuchar cuando se pulsa el botón, ejecutar un `DELETE` en la tabla `movimientos` usando el `movimiento_id` recibido, y enviar una alerta en Telegram confirmando que el stock ha sido restaurado exitosamente.
+

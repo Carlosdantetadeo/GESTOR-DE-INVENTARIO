@@ -7,6 +7,9 @@ web_modules/
 frontend/.next/
 frontend/out/
 
+# Supabase CLI temp (refs de proyecto, urls del pooler)
+supabase/.temp/
+
 # Environment variables (NEVER commit these)
 .env
 .env.local

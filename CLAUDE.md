@@ -43,7 +43,8 @@ Operator → Telegram voice/text/photo message
         + "↩️ Deshacer todo" button when multiple products
   → Operator taps Undo
       → Telegram callback_query (prefix: undo_<id> or undo_<id1>,<id2>...)
-      → Edge Function: DELETE FROM movimientos WHERE id IN (ids)
+      → Edge Function: verifies the movimientos belong to the operator's empresa
+        (via productos.empresa_id), then DELETE FROM movimientos WHERE id IN (ids)
         → trigger reverses stock with factor -1
       → Telegram editMessageText: "↩️ Registro(s) revertido(s)"
 ```
@@ -66,9 +67,11 @@ New customer → /registro page
       → INSERT INTO empresas (nombre, telegram_token = crypto.randomUUID())
       → INSERT INTO tiendas × N (empresa_id)
       → supabase.auth.admin.createUser (email_confirm: true,
-                                        user_metadata: { empresa_id, rol: 'admin' })
+                                        app_metadata: { empresa_id, rol: 'admin' })
       → Resend API: email with temp password + /start <token> instructions
-  → Admin logs in at /login → Supabase Auth JWT contains empresa_id in user_metadata
+  → Admin logs in at /login → Supabase Auth JWT contains empresa_id in app_metadata
+    (app_metadata, NOT user_metadata: user_metadata is editable by the user
+     via auth.updateUser() and must never be trusted for tenant isolation)
 ```
 
 ### Frontend (Next.js 14 App Router)
@@ -95,7 +98,10 @@ Schema defined in `CREAR_TABLAS_SUPABASE_FINAL.sql`. Apply migrations in order v
 | `migrations/003_empresa_telegram_token.sql` | Adds `telegram_token TEXT UNIQUE` to `empresas` |
 | `migrations/004_nlu_model_consumo.sql` | Adds `nlu_model TEXT DEFAULT 'groq-llama'` to `empresas`; creates `consumo_ia` table |
 | `migrations/005_trigger_null_guard.sql` | Replaces trigger function with NULL guards on tienda_id; also updates `ultimo_costo`/`precio_venta_sugerido` on ingreso |
-| `migrations/006_fix_admin_rls.sql` | Updates `get_my_empresa_id()` to check JWT `user_metadata.empresa_id` first (admin), then fall back to `telegram_id` lookup (operator) |
+| `migrations/006_fix_admin_rls.sql` | (Superseded by 007) `get_my_empresa_id()` reading JWT `user_metadata.empresa_id` — **insecure**, kept only as history |
+| `migrations/007_empresa_id_app_metadata.sql` | **Security fix**: moves `empresa_id`/`rol` to `app_metadata` (user-editable `user_metadata` allowed cross-tenant escalation); backfills existing auth users; `get_my_empresa_id()` reads `app_metadata` + restores `SET search_path` |
+| `migrations/008_productos_unique_por_empresa.sql` | Drops global `productos_nombre_key`; adds unique index `(empresa_id, LOWER(nombre))` — run the duplicate precheck commented at the top first |
+| `migrations/009_telegram_updates_dedupe.sql` | Creates `telegram_updates (update_id PK)` — webhook dedupe so Telegram retries don't duplicate movimientos; the bot responds 200 immediately and processes in background via `EdgeRuntime.waitUntil` |
 
 Key tables:
 - `empresas` — multi-tenant root; `telegram_token` links operators; `nlu_model` sets per-tenant AI model
@@ -107,7 +113,7 @@ Key tables:
 
 **Trigger** `actualizar_stock_trigger`: fires `AFTER INSERT OR DELETE` on `movimientos`. NULL guards prevent errors when tienda fields are missing. DELETE uses `v_factor = -1` to invert stock math (the entire Undo implementation). On ingreso INSERT also updates `ultimo_costo` and `precio_venta_sugerido` on `productos`.
 
-**RLS** — `get_my_empresa_id()` SECURITY DEFINER: checks `auth.jwt()->'user_metadata'->>'empresa_id'` first (admin JWT flow), then falls back to `SELECT empresa_id FROM usuarios WHERE telegram_id::text = auth.jwt()->>'sub'` (operator). Edge Functions use `SERVICE_ROLE_KEY` which bypasses RLS.
+**RLS** — `get_my_empresa_id()` SECURITY DEFINER (`SET search_path = public`): checks `auth.jwt()->'app_metadata'->>'empresa_id'` first (admin JWT flow), then falls back to `SELECT empresa_id FROM usuarios WHERE telegram_id::text = auth.jwt()->>'sub'` (operator). Never read `user_metadata` here — it is user-editable. Edge Functions use `SERVICE_ROLE_KEY` which bypasses RLS, so any tenant scoping inside them must be explicit (see `handleUndo`/`handleJoin`).
 
 ### Edge Functions (Supabase / Deno)
 
@@ -143,6 +149,7 @@ supabase secrets set KEY=value
 |--------|-------------|-------------|
 | `GROQ_API_KEY` | `telegram-bot` | Groq API key for Whisper + Llama + Vision |
 | `TELEGRAM_BOT_TOKEN` | `telegram-bot` | Token from @BotFather |
+| `TELEGRAM_WEBHOOK_SECRET` | `telegram-bot` | **Required** — random string (1-256 chars of `A-Za-z0-9_-`). The function rejects any request whose `X-Telegram-Bot-Api-Secret-Token` header doesn't match (fail-closed: if unset, the bot rejects everything). Must equal the `secret_token` used in setWebhook. |
 | `ANTHROPIC_API_KEY` | `telegram-bot` | Required only if using `anthropic-haiku` or `anthropic-sonnet` NLU |
 | `RESEND_API_KEY` | `onboarding` | Resend API key for welcome emails |
 | `RESEND_FROM_EMAIL` | `onboarding` | Verified sender, e.g. `Agent GMS <onboarding@yourdomain.com>` |
@@ -160,17 +167,19 @@ Also add to `frontend/.env.local` for local development.
 
 ### Register the Telegram Webhook
 
-Run once after deploying `telegram-bot`:
+Run once after deploying `telegram-bot`. The `secret_token` must match the `TELEGRAM_WEBHOOK_SECRET` Supabase secret:
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://<project-ref>.supabase.co/functions/v1/telegram-bot"}'
+  -d '{"url":"https://<project-ref>.supabase.co/functions/v1/telegram-bot","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
 ```
 
 ## Security Notes
 
-- `GUIA-DESPLIEGUE.md` contains a hardcoded Groq API key (line 149) — rotate it at console.groq.com if not already done.
-- `get_my_empresa_id()` now uses a COALESCE strategy: admin users get empresa_id from the JWT `user_metadata` claim; operators are looked up via `telegram_id`. Both paths are in `migrations/006_fix_admin_rls.sql`.
-- The `onboarding` Edge Function creates Supabase Auth users with `email_confirm: true`. Ensure Resend is configured with a verified domain before production.
+- **Tenant isolation lives in `app_metadata`** (migration 007). Never put `empresa_id` or `rol` in `user_metadata` — it is editable by the end user via `supabase.auth.updateUser()` and reading it in RLS allows cross-tenant escalation.
+- **The Telegram webhook is authenticated** via the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET` (fail-closed). If the bot suddenly stops responding, check that the secret is set and matches the registered webhook.
+- **Edge Functions bypass RLS** (service role), so tenant checks inside them are explicit: `handleUndo` verifies movimientos belong to the operator's empresa; `handleJoin` verifies the tienda belongs to the token's empresa.
+- A Groq API key was committed historically (removed in `ebfe6a3`, but still present in git history) — it must be rotated at console.groq.com if the repo was ever pushed to a remote.
+- The `onboarding` Edge Function creates Supabase Auth users with `email_confirm: true`. Ensure Resend is configured with a verified domain before production. It has no rate limiting/captcha yet.
 - `SERVICE_ROLE_KEY` must be set manually as a Supabase secret for the `telegram-bot` function — it is **not** auto-injected under that name.
