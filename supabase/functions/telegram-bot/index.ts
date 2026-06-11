@@ -529,8 +529,8 @@ Extrae TODOS los productos mencionados y responde SOLO con JSON válido:
       "cantidad": <número entero positivo>,
       "tienda_origen_id": <id de tienda o null>,
       "tienda_destino_id": <id de tienda o null>,
-      "precio_unitario": <número decimal, 0 si no se menciona>,
-      "costo_unitario": <número decimal, 0 si no se menciona>
+      "precio_unitario": <precio de venta por unidad, 0 si no se menciona>,
+      "costo_unitario": <costo de compra por unidad, 0 si no se menciona>
     }
   ]
 }
@@ -549,7 +549,13 @@ Reglas:
 - "trasladé"/"mandé a" → tipo = "traslado"
 - Busca el producto más parecido (ignora tildes y mayúsculas).
 - Si no coincide ningún producto, devuelve producto_id = null pero SIEMPRE llena producto_nombre.
-- producto_nombre debe ser el nombre normalizado (ej: "Bomba 2 pulgadas").`
+- producto_nombre debe ser el nombre normalizado (ej: "Bomba 2 pulgadas").
+- PRECIOS según el tipo:
+  · venta o gasto → el monto mencionado es precio_unitario (costo_unitario = 0 salvo que se diga).
+  · ingreso → el monto mencionado es costo_unitario (lo que costó comprarlo); precio_unitario = 0
+    salvo que el operario distinga ("costó 8 y lo vendo a 12" → costo_unitario = 8, precio_unitario = 12).
+- Los montos son POR UNIDAD. Si el operario dice un total ("3 tubos por 30 soles en total"),
+  divide el total entre la cantidad.`
 
   const { parsed: items, tokensIn, tokensOut } = await callNLU(nluModel, systemPrompt, transcript)
 
