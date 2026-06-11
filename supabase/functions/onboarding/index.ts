@@ -96,9 +96,9 @@ Deno.serve(async (req) => {
 
   // ── PASO 3: Crear usuario admin en Supabase Auth ──────────────────────────
   // email_confirm: true  → auto-confirma el email, no envía el correo de Supabase.
-  // user_metadata        → queda en raw_user_meta_data y se incluye en el JWT
-  //                        como claim "user_metadata". El dashboard puede leerlo
-  //                        vía supabase.auth.getSession().data.session.user.user_metadata
+  // app_metadata         → queda en raw_app_meta_data y se incluye en el JWT
+  //                        como claim "app_metadata". RLS lo lee vía
+  //                        get_my_empresa_id(); el dashboard vía user.app_metadata.
 
   const tempPassword = `GMS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
 
@@ -106,7 +106,9 @@ Deno.serve(async (req) => {
     email:         admin_email.trim(),
     password:      tempPassword,
     email_confirm: true,
-    user_metadata: {
+    // app_metadata: solo modificable con service_role — es lo que lee RLS.
+    // NUNCA poner empresa_id en user_metadata (el usuario puede editarlo).
+    app_metadata: {
       empresa_id: empresa.id,
       rol:        'admin',
     },

@@ -12,6 +12,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const BOT_TOKEN     = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 const GROQ_KEY      = Deno.env.get('GROQ_API_KEY')!
 const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? ''
 const TG_API        = `https://api.telegram.org/bot${BOT_TOKEN}`
 const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
 
@@ -38,8 +39,19 @@ const TOKEN_COSTS: Record<string, [number, number]> = {
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
+// waitUntil mantiene viva la función después de responder (Supabase Edge Runtime)
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('ok', { status: 200 })
+
+  // FIX SEGURIDAD (S2): el endpoint es público (--no-verify-jwt). Solo se
+  // aceptan requests que traigan el secret registrado en setWebhook.
+  // Fail-closed: si TELEGRAM_WEBHOOK_SECRET no está configurado, rechaza todo.
+  if (!WEBHOOK_SECRET ||
+      req.headers.get('x-telegram-bot-api-secret-token') !== WEBHOOK_SECRET) {
+    return new Response('unauthorized', { status: 401 })
+  }
 
   let update: TelegramUpdate
   try {
@@ -48,45 +60,78 @@ Deno.serve(async (req) => {
     return new Response('bad request', { status: 400 })
   }
 
-  try {
-    if (update.callback_query?.data?.startsWith('undo_')) {
-      await handleUndo(update.callback_query)
-      return new Response('ok', { status: 200 })
+  // FIX (B5) parte 1: dedupe por update_id. Telegram reenvía el mismo update
+  // si no recibe 200 a tiempo; el PRIMARY KEY de telegram_updates convierte
+  // el reintento en un 23505 y se descarta sin duplicar movimientos.
+  if (typeof update.update_id === 'number') {
+    const { error: dupErr } = await supabase
+      .from('telegram_updates')
+      .insert({ update_id: update.update_id })
+    if (dupErr?.code === '23505') {
+      return new Response('ok', { status: 200 })   // ya procesado
     }
+    // Cualquier otro error (tabla faltante, red): se procesa igual — mejor
+    // arriesgar un duplicado que perder el mensaje del operario.
 
-    if (update.callback_query?.data?.startsWith('join_')) {
-      await handleJoin(update.callback_query)
-      return new Response('ok', { status: 200 })
+    // Limpieza oportunista (~1% de los updates): purgar registros de >2 días
+    if (update.update_id % 100 === 0) {
+      await supabase
+        .from('telegram_updates')
+        .delete()
+        .lt('created_at', new Date(Date.now() - 2 * 86_400_000).toISOString())
     }
+  }
 
-    const msg = update.message
-    if (!msg) return new Response('ok', { status: 200 })
-
-    if (msg.text?.startsWith('/start')) {
-      await handleStart(msg)
-      return new Response('ok', { status: 200 })
-    }
-
-    if (msg.voice) {
-      await handleVoice(msg)
-      return new Response('ok', { status: 200 })
-    }
-
-    if (msg.text && !msg.text.startsWith('/')) {
-      await handleTranscript(msg.chat.id, msg.from?.id, msg.text.trim())
-      return new Response('ok', { status: 200 })
-    }
-
-    if (msg.photo?.length) {
-      await handlePhoto(msg)
-      return new Response('ok', { status: 200 })
-    }
-  } catch (err) {
-    console.error('[telegram-bot] error no controlado:', err)
+  // FIX (B5) parte 2: responder 200 inmediato y procesar en background, para
+  // que Telegram no reintente mientras corre STT + NLU (pueden tardar >5s).
+  const tarea = procesarUpdate(update)
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+    EdgeRuntime.waitUntil(tarea)
+  } else {
+    await tarea   // fallback (ej. tests locales sin Edge Runtime)
   }
 
   return new Response('ok', { status: 200 })
 })
+
+async function procesarUpdate(update: TelegramUpdate) {
+  try {
+    if (update.callback_query?.data?.startsWith('undo_')) {
+      await handleUndo(update.callback_query)
+      return
+    }
+
+    if (update.callback_query?.data?.startsWith('join_')) {
+      await handleJoin(update.callback_query)
+      return
+    }
+
+    const msg = update.message
+    if (!msg) return
+
+    if (msg.text?.startsWith('/start')) {
+      await handleStart(msg)
+      return
+    }
+
+    if (msg.voice) {
+      await handleVoice(msg)
+      return
+    }
+
+    if (msg.text && !msg.text.startsWith('/')) {
+      await handleTranscript(msg.chat.id, msg.from?.id, msg.text.trim())
+      return
+    }
+
+    if (msg.photo?.length) {
+      await handlePhoto(msg)
+      return
+    }
+  } catch (err) {
+    console.error('[telegram-bot] error no controlado:', err)
+  }
+}
 
 // ─── /start <token> — registro de operario ───────────────────────────────────
 
@@ -221,12 +266,22 @@ async function handleJoin(cb: CallbackQuery) {
     return
   }
 
-  // Obtener nombre de la sede
+  // Obtener la sede validando que pertenece a la empresa del token (S3):
+  // el callback_data podría manipularse para apuntar a una tienda ajena.
   const { data: tienda } = await supabase
     .from('tiendas')
     .select('nombre')
     .eq('id', tiendaId)
-    .single()
+    .eq('empresa_id', empresa.id)
+    .maybeSingle()
+
+  if (!tienda) {
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: '❌ La sede seleccionada no pertenece a esta empresa. Volvé a enviar /start con el token.',
+    })
+    return
+  }
 
   // Insertar en usuarios
   const nombre = [cb.from.first_name, cb.from.last_name].filter(Boolean).join(' ')
@@ -268,14 +323,49 @@ async function handleUndo(cb: CallbackQuery) {
 
   await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Revirtiendo...' })
 
-  const { error } = await supabase.from('movimientos').delete().in('id', ids)
+  // FIX SEGURIDAD (S3): defensa en profundidad — solo se borran movimientos
+  // de la empresa del operario que pulsa el botón. El cliente usa service
+  // role (bypasea RLS), así que el scoping se hace explícito acá.
+  const { data: usuario } = await supabase
+    .from('usuarios')
+    .select('empresa_id')
+    .eq('telegram_id', cb.from.id)
+    .maybeSingle()
+
+  if (!usuario) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '⛔ Tu cuenta de Telegram no está registrada en el sistema.',
+    })
+    return
+  }
+
+  // Resolver qué ids pertenecen realmente a la empresa del operario
+  // (movimientos no tiene empresa_id propio; se filtra vía productos)
+  const { data: propios } = await supabase
+    .from('movimientos')
+    .select('id, productos!inner(empresa_id)')
+    .in('id', ids)
+    .eq('productos.empresa_id', usuario.empresa_id)
+
+  const idsValidos = (propios ?? []).map(m => m.id)
+
+  if (idsValidos.length === 0) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '❌ No se pudo revertir: el registro ya no existe o no pertenece a tu empresa.',
+    })
+    return
+  }
+
+  const { error } = await supabase.from('movimientos').delete().in('id', idsValidos)
 
   if (error) {
     await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo revertir el registro.' })
     return
   }
 
-  const cantidad = ids.length
+  const cantidad = idsValidos.length
   await tg('editMessageText', {
     chat_id: chatId, message_id: msgId,
     text:
@@ -348,7 +438,7 @@ async function handlePhoto(message: TelegramMessage) {
     return
   }
 
-  const base64   = btoa(String.fromCharCode(...new Uint8Array(await imgResp.arrayBuffer())))
+  const base64   = bufferToBase64(await imgResp.arrayBuffer())
   const mimeType = fileInfo.result.file_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
 
   await tg('sendMessage', { chat_id: chatId, text: '🔍 Analizando imagen...' })
@@ -505,10 +595,11 @@ Reglas:
 
     // Auto-crear producto si no existe
     if (!item.producto_id && item.producto_nombre) {
+      const nombre = item.producto_nombre.trim()
       const { data: prodNuevo } = await supabase
         .from('productos')
         .insert({
-          nombre:                item.producto_nombre.trim(),
+          nombre,
           empresa_id:            empresaId,
           categoria_id:          categoriaIdGeneral,
           precio_venta_sugerido: item.precio_unitario ?? 0,
@@ -518,16 +609,34 @@ Reglas:
         .single()
       if (prodNuevo) {
         item.producto_id = prodNuevo.id
-        productos?.push({ id: prodNuevo.id, nombre: item.producto_nombre.trim() })
+        productos?.push({ id: prodNuevo.id, nombre })
+      } else {
+        // El insert pudo chocar con el unique (empresa_id, LOWER(nombre)):
+        // el producto ya existe en esta empresa con otro casing, o no estaba
+        // en el catálogo que vio el NLU (límite 200). Reusar el existente.
+        const { data: prodExistente } = await supabase
+          .from('productos')
+          .select('id, nombre')
+          .eq('empresa_id', empresaId)
+          .ilike('nombre', nombre)
+          .maybeSingle()
+        if (prodExistente) {
+          item.producto_id = prodExistente.id
+          productos?.push({ id: prodExistente.id, nombre: prodExistente.nombre })
+        }
       }
     }
 
     if (!item.producto_id) { omitidos++; continue }
 
+    // FIX (B4): el default de tienda es la del operario, no la primera de la
+    // empresa — un ingreso dicho desde la Sede 3 debe sumar stock en la Sede 3.
+    const tiendaUsuario = usuario.tienda_id ?? primeraT
     const tiendaOrigen  = item.tienda_origen_id
-      ?? (item.tipo !== 'ingreso' ? (usuario as any)?.tienda_id ?? primeraT : null)
+      ?? (item.tipo !== 'ingreso' ? tiendaUsuario : null)
     const tiendaDestino = item.tienda_destino_id
-      ?? (item.tipo === 'ingreso' || item.tipo === 'traslado' ? primeraT : null)
+      ?? (item.tipo === 'ingreso' ? tiendaUsuario
+        : item.tipo === 'traslado' ? primeraT : null)
 
     const { data: mov, error: insertErr } = await supabase
       .from('movimientos')
@@ -580,8 +689,13 @@ Reglas:
     text:          `↩️ ${m.nombre.length > 25 ? m.nombre.slice(0, 23) + '…' : m.nombre}`,
     callback_data: `undo_${m.id}`,
   }]))
-  const keyboard = movimientos.length > 1
-    ? [...botonesIndividuales, [{ text: '↩️ Deshacer todo', callback_data: `undo_${movimientos.map(m => m.id).join(',')}` }]]
+  // FIX (B2): callback_data tiene un límite duro de 64 bytes en Telegram.
+  // Si la lista de ids no entra, Telegram rechaza el sendMessage COMPLETO y
+  // el operario se queda sin confirmación ni botones. En ese caso se omite
+  // solo el botón "Deshacer todo" (los individuales siempre caben).
+  const undoTodo = `undo_${movimientos.map(m => m.id).join(',')}`
+  const keyboard = movimientos.length > 1 && undoTodo.length <= 64
+    ? [...botonesIndividuales, [{ text: '↩️ Deshacer todo', callback_data: undoTodo }]]
     : botonesIndividuales
 
   await tg('sendMessage', {
@@ -692,6 +806,19 @@ async function logConsumo(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// FIX (B1): btoa(String.fromCharCode(...bytes)) hace spread de un argumento
+// por byte y revienta el stack con imágenes de >~100 KB (tamaño normal de una
+// foto de Telegram). Se convierte en chunks para mantener el stack acotado.
+function bufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  const CHUNK = 0x8000   // 32 KB por iteración, muy por debajo del límite de args
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
 async function tg(method: string, body: Record<string, unknown>) {
   const res = await fetch(`${TG_API}/${method}`, {
     method: 'POST',
@@ -721,6 +848,7 @@ function tiendaLabel(
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface TelegramUpdate {
+  update_id?:      number
   message?:        TelegramMessage
   callback_query?: CallbackQuery
 }

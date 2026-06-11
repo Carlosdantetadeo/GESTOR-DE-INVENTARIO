@@ -51,7 +51,7 @@ export default function ConfigPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const empId = user.user_metadata?.empresa_id
+      const empId = user.app_metadata?.empresa_id
       setEmpresaId(empId)
 
       const [{ data: empresa }, { data: rows }] = await Promise.all([

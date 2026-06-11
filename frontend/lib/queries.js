@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 export async function getEmpresaId() {
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) return null
-  return user.user_metadata?.empresa_id ?? null
+  return user.app_metadata?.empresa_id ?? null
 }
 
 export async function deleteMovimiento(id) {

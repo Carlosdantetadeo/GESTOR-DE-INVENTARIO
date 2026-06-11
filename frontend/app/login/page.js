@@ -26,7 +26,7 @@ export default function Login() {
     }
 
     const { data: { user } } = await supabase.auth.getUser()
-    const empresaId = user?.user_metadata?.empresa_id
+    const empresaId = user?.app_metadata?.empresa_id
 
     if (!empresaId) {
       setError('Tu cuenta no tiene una empresa asignada. Contactá al administrador.')
