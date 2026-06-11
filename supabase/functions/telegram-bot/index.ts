@@ -572,7 +572,13 @@ Reglas:
 
   const primeraT = tiendas?.[0]?.id ?? null
   const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
-  const movimientos: Array<{ id: string; nombre: string }> = []
+  const tipoRegistrado: Record<string, string> = {
+    venta:    'Venta registrada',
+    ingreso:  'Ingreso registrado',
+    gasto:    'Gasto registrado',
+    traslado: 'Traslado registrado',
+  }
+  const movimientos: Array<{ id: string; nombre: string; tipo: string }> = []
   const lineas: string[] = []
   let totalGeneral = 0
 
@@ -664,13 +670,24 @@ Reglas:
 
     const prodNombre   = productos?.find(p => p.id === item.producto_id)?.nombre ?? item.producto_nombre ?? `#${item.producto_id}`
     const tiendaLabel_ = tiendaLabel(tiendas, { ...item, tienda_origen_id: tiendaOrigen as number | null, tienda_destino_id: tiendaDestino as number | null })
-    const subtotal     = item.cantidad * (item.precio_unitario ?? 0)
+    const precioUnit   = Number(item.precio_unitario ?? 0)
+    const costoUnit    = Number(item.costo_unitario  ?? 0)
+    const subtotal     = item.cantidad * precioUnit
     totalGeneral += subtotal
 
-    movimientos.push({ id: mov.id, nombre: prodNombre })
+    // Línea de montos: en ventas/gastos muestra el precio unitario; en
+    // ingresos el costo unitario (es lo que carga el NLU para ese tipo).
+    let montoLinea = ''
+    if (precioUnit > 0) {
+      montoLinea = `\n   💵 S/. ${precioUnit.toFixed(2)} c/u → Subtotal: S/. ${subtotal.toFixed(2)}`
+    } else if (costoUnit > 0) {
+      montoLinea = `\n   💵 Costo: S/. ${costoUnit.toFixed(2)} c/u → S/. ${(item.cantidad * costoUnit).toFixed(2)}`
+    }
+
+    movimientos.push({ id: mov.id, nombre: prodNombre, tipo: item.tipo })
     lineas.push(
-      `${emoji[item.tipo] ?? '✅'} *${prodNombre}* × ${item.cantidad}` +
-      (item.precio_unitario ? ` — S/. ${subtotal.toFixed(2)}` : '') +
+      `${emoji[item.tipo] ?? '✅'} *${capitalize(item.tipo)}* — *${prodNombre}* × ${item.cantidad}` +
+      montoLinea +
       `\n   📍 ${tiendaLabel_}`
     )
   }
@@ -687,7 +704,7 @@ Reglas:
   logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'nlu').catch(console.error)
 
   const encabezado = movimientos.length === 1
-    ? `✅ *Movimiento registrado*`
+    ? `✅ *${tipoRegistrado[movimientos[0].tipo] ?? 'Movimiento registrado'}*`
     : `✅ *${movimientos.length} movimientos registrados*`
 
   // Botones: uno por producto + "Deshacer todo" si hay más de uno
