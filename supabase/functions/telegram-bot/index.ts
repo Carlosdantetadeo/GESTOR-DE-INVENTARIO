@@ -547,8 +547,10 @@ Reglas:
 - "entró"/"llegó"/"recibimos" → tipo = "ingreso"
 - "gasté"/"compré para la tienda" → tipo = "gasto"
 - "trasladé"/"mandé a" → tipo = "traslado"
-- Busca el producto más parecido (ignora tildes y mayúsculas).
-- Si no coincide ningún producto, devuelve producto_id = null pero SIEMPRE llena producto_nombre.
+- Coincidencia de catálogo: usa un producto del catálogo SOLO si es claramente el mismo artículo
+  (mismo tipo de producto y misma medida; ignora tildes y mayúsculas).
+  "Caño", "tubo", "codo", "llave" y "válvula" son productos DISTINTOS entre sí — nunca los mezcles.
+- Ante la duda, devuelve producto_id = null pero SIEMPRE llena producto_nombre (se creará nuevo).
 - producto_nombre debe ser el nombre normalizado (ej: "Bomba 2 pulgadas").
 - PRECIOS según el tipo:
   · venta o gasto → el monto mencionado es precio_unitario (costo_unitario = 0 salvo que se diga).
@@ -724,11 +726,12 @@ Reglas:
   await tg('sendMessage', {
     chat_id: chatId,
     text:
-      `${encabezado}\n\n` +
+      `${encabezado}\n` +
+      `🎤 "${mdSafe(transcript)}"\n\n` +
       lineas.join('\n\n') +
       (totalGeneral > 0 ? `\n\n💵 *Total: S/. ${totalGeneral.toFixed(2)}*` : '') +
       (omitidos > 0 ? `\n\n⚠️ _${omitidos} producto(s) no se entendieron — repetílos en un nuevo mensaje._` : '') +
-      `\n\n_Deshacer individual o todo desde los botones._`,
+      `\n\n_Si lo escuchado no es lo que dijiste, tocá Deshacer y repetí el mensaje._`,
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: keyboard,
@@ -853,6 +856,12 @@ async function tg(method: string, body: Record<string, unknown>) {
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// Quita caracteres que rompen el parse_mode Markdown de Telegram (un solo
+// '*' o '_' sin cerrar hace fallar el sendMessage COMPLETO y el bot queda mudo)
+function mdSafe(s: string) {
+  return s.replace(/[*_`\[\]]/g, '')
 }
 
 function tiendaLabel(
