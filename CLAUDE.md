@@ -102,6 +102,9 @@ Schema defined in `CREAR_TABLAS_SUPABASE_FINAL.sql`. Apply migrations in order v
 | `migrations/007_empresa_id_app_metadata.sql` | **Security fix**: moves `empresa_id`/`rol` to `app_metadata` (user-editable `user_metadata` allowed cross-tenant escalation); backfills existing auth users; `get_my_empresa_id()` reads `app_metadata` + restores `SET search_path` |
 | `migrations/008_productos_unique_por_empresa.sql` | Drops global `productos_nombre_key`; adds unique index `(empresa_id, LOWER(nombre))` — run the duplicate precheck commented at the top first |
 | `migrations/009_telegram_updates_dedupe.sql` | Creates `telegram_updates (update_id PK)` — webhook dedupe so Telegram retries don't duplicate movimientos; the bot responds 200 immediately and processes in background via `EdgeRuntime.waitUntil` |
+| `migrations/010_recalcular_stock.sql` | `recalcular_stock()` maintenance function: rebuilds `stock` from the `movimientos` ledger (EXECUTE revoked from anon/authenticated). Run after any stock drift. |
+
+> ⚠️ Production once ran a hand-edited trigger variant whose `ON CONFLICT` used `cantidad - EXCLUDED.cantidad` for ventas (double negation → sales ADDED stock). If stock ever disagrees with the ledger again, first compare `pg_proc.prosrc` for `actualizar_stock_trigger` against `migrations/005`, re-apply 005, then `SELECT recalcular_stock();`.
 
 Key tables:
 - `empresas` — multi-tenant root; `telegram_token` links operators; `nlu_model` sets per-tenant AI model
