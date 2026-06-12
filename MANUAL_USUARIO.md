@@ -127,25 +127,31 @@ El bot responde "🔍 Analizando imagen...", interpreta lo que ve y registra los
 
 ## 4. Confirmación del bot
 
-Después de cada registro el bot responde con el resumen y **un botón Deshacer por cada producto**. Si registraste más de un producto, agrega también un botón **"Deshacer todo"**:
+Después de cada registro el bot responde con el resumen y **un botón Deshacer por cada producto**. Si registraste más de un producto, agrega también un botón **"Deshacer todo"**.
+
+El mensaje **repite lo que el bot escuchó** (🎤) para que puedas verificar que la transcripción fue correcta:
 
 ```
 ✅ 2 movimientos registrados
+🎤 "vendí 3 bombas de 2 pulgadas a 5 soles y 2 tubos pvc"
 
-💰 Bomba 2 pulgadas × 3 — S/. 15.00
+💰 Venta — Bomba 2 pulgadas × 3
+   💵 S/. 5.00 c/u → Subtotal: S/. 15.00
    📍 Sede Centro
 
-📦 Tubo PVC × 2
+💰 Venta — Tubo PVC × 2
    📍 Sede Centro
 
 💵 Total: S/. 15.00
 
-Deshacer individual o todo desde los botones.
+Si lo escuchado no es lo que dijiste, tocá Deshacer y repetí el mensaje.
 
 [ ↩️ Bomba 2 pulgadas ]
 [ ↩️ Tubo PVC ]
 [ ↩️ Deshacer todo ]
 ```
+
+Si registraste un solo producto, el encabezado indica el tipo de movimiento: **"✅ Venta registrada"**, **"✅ Ingreso registrado"**, etc. En los **ingresos** la línea de monto muestra el costo unitario (*"💵 Costo: S/. 25.00 c/u → S/. 50.00"*) en lugar del precio de venta.
 
 Si algún producto no se entendió, el mensaje lo indica:
 

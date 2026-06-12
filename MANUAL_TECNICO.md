@@ -2,6 +2,8 @@
 
 Sistema de inventario por voz para ferreterías. Versión de producción activa.
 
+> Última actualización: 2026-06-12
+
 ---
 
 ## 1. Infraestructura
@@ -12,8 +14,9 @@ Sistema de inventario por voz para ferreterías. Versión de producción activa.
 | Base de datos | Supabase (PostgreSQL) | https://sqsqyzqwysygoperjwsd.supabase.co |
 | Edge Functions | Supabase Deno Runtime | https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/ |
 | STT | Groq Whisper (`whisper-large-v3-turbo`) | https://api.groq.com |
+| Vision | Groq (`meta-llama/llama-4-scout-17b-16e-instruct`) | https://api.groq.com |
 | NLU | Groq Llama (`llama-3.3-70b-versatile`) | https://api.groq.com |
-| NLU fallback | Anthropic Claude (`claude-haiku-4-5`, `claude-sonnet-4-6`) | https://api.anthropic.com |
+| NLU alternativo | Anthropic Claude (`claude-haiku-4-5`, `claude-sonnet-4-6`) | https://api.anthropic.com |
 | Email | Resend | https://api.resend.com |
 
 ---
@@ -26,7 +29,7 @@ Sistema de inventario por voz para ferreterías. Versión de producción activa.
 |----------|-------|
 | `SUPABASE_URL` | `https://sqsqyzqwysygoperjwsd.supabase.co` |
 | `SUPABASE_ANON_KEY` | Ver Supabase Dashboard → Settings → API → `anon public` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Ver Supabase Dashboard → Settings → API → `service_role` ⚠️ |
+| `SERVICE_ROLE_KEY` | Ver Supabase Dashboard → Settings → API → `service_role` ⚠️ |
 
 Panel de administración: https://supabase.com/dashboard/project/sqsqyzqwysygoperjwsd
 
@@ -42,12 +45,15 @@ supabase secrets set NOMBRE=valor
 
 | Secreto | Descripción | Dónde obtenerlo |
 |---------|-------------|-----------------|
-| `GROQ_API_KEY` | API Key de Groq (STT + NLU) | https://console.groq.com → API Keys |
+| `GROQ_API_KEY` | API Key de Groq (STT + NLU + Vision) | https://console.groq.com → API Keys |
 | `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram | @BotFather en Telegram → `/mybots` |
+| `TELEGRAM_WEBHOOK_SECRET` | **Obligatorio.** String aleatorio (1-256 chars de `A-Za-z0-9_-`). El bot rechaza todo request cuyo header `X-Telegram-Bot-Api-Secret-Token` no coincida. **Fail-closed:** si no está configurado, el bot rechaza todo. Debe ser igual al `secret_token` usado en setWebhook (sección 6). | Generarlo: `openssl rand -hex 32` |
 | `RESEND_API_KEY` | API Key de Resend (emails) | https://resend.com/api-keys |
 | `RESEND_FROM_EMAIL` | Sender verificado | `Agent GMS <onboarding@clarocomunica.com>` |
-| `ANTHROPIC_API_KEY` | API Key de Anthropic (fallback NLU) | https://console.anthropic.com → API Keys |
-| `SERVICE_ROLE_KEY` | Service role de Supabase | Supabase Dashboard → Settings → API |
+| `ANTHROPIC_API_KEY` | API Key de Anthropic (solo si alguna empresa usa NLU `anthropic-*`) | https://console.anthropic.com → API Keys |
+| `SERVICE_ROLE_KEY` | Service role de Supabase. **No se auto-inyecta con este nombre** — hay que setearlo manualmente (el código lee `SERVICE_ROLE_KEY`, no `SUPABASE_SERVICE_ROLE_KEY`). | Supabase Dashboard → Settings → API |
+
+`SUPABASE_URL` sí es auto-inyectado por Supabase.
 
 ### 2.3 Vercel — Variables de entorno
 
@@ -68,24 +74,44 @@ Para desarrollo local crear `frontend/.env.local` con las mismas variables.
 
 - **URL:** `https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/telegram-bot`
 - **Método:** POST (webhook de Telegram)
-- **Auth:** `--no-verify-jwt` (público)
+- **Auth:** `--no-verify-jwt` (público), pero autenticado por el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET` (fail-closed).
+
+**Recepción del webhook (antes de cualquier handler):**
+```
+POST recibido
+  → Verificar header X-Telegram-Bot-Api-Secret-Token == TELEGRAM_WEBHOOK_SECRET
+      (si no coincide o el secret no está configurado → 401)
+  → Dedupe por update_id: INSERT en telegram_updates (PK update_id)
+      → si ya existe (23505) → 200 y se descarta (Telegram reintentó)
+  → Responder 200 INMEDIATAMENTE y procesar en background
+      (EdgeRuntime.waitUntil — STT + NLU pueden tardar >5s y Telegram
+       reintenta si no recibe 200 a tiempo)
+```
 
 **Flujo principal:**
 ```
 Audio/Texto/Imagen recibido
   → Groq Whisper (si es audio)     → transcript
   → Groq Vision (si es imagen)     → descripción
-  → Groq Llama NLU                 → JSON con array de movimientos
-  → Auto-crear productos si no existen en catálogo
+  → NLU según empresas.nlu_model   → JSON con array de movimientos
+      (groq-llama | anthropic-haiku | anthropic-sonnet)
+  → Auto-crear productos si no existen en catálogo (categoría "General")
   → INSERT en movimientos (trigger actualiza stock)
-  → Telegram: confirmación + botón Deshacer
+  → INSERT en consumo_ia (tokens + costo)
+  → Telegram: confirmación con eco de la transcripción (🎤 "..."),
+    un botón "↩️ <producto>" por movimiento, y "↩️ Deshacer todo"
+    si hay varios (omitido si los ids no entran en los 64 bytes
+    del callback_data — los individuales siempre caben)
 ```
 
 **Flujo undo:**
 ```
-Callback undo_<id1,id2,...>
+Callback undo_<id> o undo_<id1>,<id2>,...
+  → Verificar que los movimientos pertenecen a la empresa del operario
+    (vía productos.empresa_id — las Edge Functions bypasean RLS,
+     el chequeo de tenant es explícito)
   → DELETE FROM movimientos WHERE id IN (ids)
-  → Trigger revierte stock automáticamente
+  → Trigger revierte stock automáticamente (factor -1)
   → Telegram: mensaje actualizado "Revertido"
 ```
 
@@ -93,8 +119,11 @@ Callback undo_<id1,id2,...>
 ```
 Usuario envía /start TOKEN
   → Buscar empresa por telegram_token
-  → Mostrar sedes disponibles (botones inline)
-  → Al seleccionar sede: INSERT en usuarios
+  → Mostrar sedes disponibles (botones inline, callback join_<token>_<tiendaId>)
+  → handleJoin: verifica que la tienda pertenece a la empresa del token
+    → INSERT en usuarios (rol 'vendedor', tienda_id, empresa_id)
+  → Si el telegram_id ya estaba registrado, el bot lo informa
+    (una cuenta de Telegram pertenece a una sola empresa)
 ```
 
 ### 3.2 `onboarding`
@@ -108,7 +137,10 @@ Usuario envía /start TOKEN
 POST { empresa_nombre, admin_email, sedes[] }
   → INSERT empresas (con telegram_token = UUID aleatorio)
   → INSERT tiendas × N
-  → supabase.auth.admin.createUser (email_confirm: true, user_metadata: { empresa_id, rol: 'admin' })
+  → supabase.auth.admin.createUser (email_confirm: true,
+        app_metadata: { empresa_id, rol: 'admin' })
+        ⚠️ app_metadata, NUNCA user_metadata: user_metadata es editable
+        por el propio usuario y permitiría escalación cross-tenant
   → Resend: email con contraseña temporal + token de Telegram
   → Response: { ok: true, empresa_id, temp_password }
 ```
@@ -132,11 +164,12 @@ supabase functions deploy onboarding   --no-verify-jwt
 | `empresas` | Raíz multi-tenant. Campo `telegram_token` (UUID) para vincular operarios. Campo `nlu_model` para elegir modelo IA por empresa. |
 | `tiendas` | Sucursales. FK `empresa_id`. |
 | `usuarios` | Operarios de Telegram. FK `empresa_id`, `tienda_id`. `telegram_id` = ID numérico de Telegram. |
-| `productos` | Catálogo. FK `empresa_id`, `categoria_id`. Se crean automáticamente desde el bot si no existen. |
+| `productos` | Catálogo. FK `empresa_id`, `categoria_id`. Se crean automáticamente desde el bot si no existen. Unicidad por `(empresa_id, LOWER(nombre))` — migración 008. |
 | `categorias` | Categorías de productos. FK `empresa_id`. La categoría `General` se crea automáticamente. |
 | `movimientos` | Log append-only. `tipo` ∈ {venta, ingreso, gasto, traslado}. `total` es columna generada (`cantidad × precio_unitario`). |
 | `stock` | Mantenido 100% por trigger. Nunca escribir directo. FK `producto_id`, `tienda_id`. |
 | `consumo_ia` | Log de tokens usados por empresa y modelo. |
+| `telegram_updates` | Dedupe de webhooks (PK `update_id`). Evita movimientos duplicados cuando Telegram reintenta. Se purga automáticamente (>2 días). |
 
 ### 4.2 Trigger de stock
 
@@ -144,26 +177,45 @@ supabase functions deploy onboarding   --no-verify-jwt
 -- Se ejecuta AFTER INSERT OR DELETE en movimientos
 -- INSERT: suma o resta stock según tipo
 -- DELETE: aplica factor -1 (esto implementa el Undo completo)
-tr_actualizar_stock
+-- En ingreso INSERT también actualiza ultimo_costo y
+-- precio_venta_sugerido del producto
+tr_actualizar_stock → actualizar_stock_trigger()
 ```
+
+> ⚠️ **Incidente conocido:** producción llegó a correr una variante editada a
+> mano del trigger cuyo `ON CONFLICT` usaba `cantidad - EXCLUDED.cantidad`
+> para ventas (doble negación → las ventas SUMABAN stock). Si el stock vuelve
+> a discrepar del ledger: comparar `pg_proc.prosrc` de
+> `actualizar_stock_trigger` contra `migrations/005_trigger_null_guard.sql`,
+> re-aplicar la 005 y ejecutar `SELECT recalcular_stock();` (migración 010).
 
 ### 4.3 RLS — Aislamiento multi-tenant
 
-Función SECURITY DEFINER que resuelve el `empresa_id` del usuario autenticado:
+Función SECURITY DEFINER que resuelve el `empresa_id` del usuario autenticado (versión vigente, migración 007):
 
 ```sql
-CREATE OR REPLACE FUNCTION get_my_empresa_id()
-RETURNS UUID LANGUAGE sql STABLE SECURITY DEFINER AS $$
+CREATE OR REPLACE FUNCTION public.get_my_empresa_id()
+RETURNS UUID
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
   SELECT COALESCE(
-    -- Admins: empresa_id en JWT user_metadata (creados vía onboarding)
-    (auth.jwt()->'user_metadata'->>'empresa_id')::uuid,
-    -- Operarios Telegram: buscar por telegram_id en usuarios
-    (SELECT empresa_id FROM usuarios WHERE telegram_id::text = auth.jwt()->>'sub')
+    -- Admin: empresa_id viene de app_metadata (solo modificable con service role)
+    (auth.jwt()->'app_metadata'->>'empresa_id')::uuid,
+    -- Operario Telegram: buscar por telegram_id
+    (SELECT empresa_id FROM public.usuarios WHERE telegram_id::text = auth.jwt()->>'sub')
   )
 $$;
 ```
 
-> Las Edge Functions usan `SERVICE_ROLE_KEY` y bypasean RLS completamente.
+> ⚠️ **Nunca leer `user_metadata` aquí.** Es editable por el propio usuario vía
+> `supabase.auth.updateUser()` y permitía falsificar el `empresa_id` (escalación
+> cross-tenant, lectura y escritura). Ese era el bug de la migración 006,
+> corregido en la 007.
+
+> Las Edge Functions usan `SERVICE_ROLE_KEY` y bypasean RLS completamente —
+> todo chequeo de tenant dentro de ellas es explícito (ver `handleUndo` /
+> `handleJoin`).
 
 ### 4.4 Migraciones
 
@@ -176,8 +228,12 @@ Aplicar en orden en Supabase SQL Editor:
 | `migrations/002_rls_multi_empresa.sql` | RLS con `get_my_empresa_id()` |
 | `migrations/003_empresa_telegram_token.sql` | Campo `telegram_token` en empresas |
 | `migrations/004_nlu_model_consumo.sql` | Campo `nlu_model`, tabla `consumo_ia` |
-| `migrations/005_trigger_null_guard.sql` | Guard para trigger con NULLs |
-| `migrations/006_fix_admin_rls.sql` | RLS compatible con admins via user_metadata |
+| `migrations/005_trigger_null_guard.sql` | Trigger con NULL guards; actualiza `ultimo_costo`/`precio_venta_sugerido` en ingreso |
+| `migrations/006_fix_admin_rls.sql` | **Superseded por 007** — leía `user_metadata` (inseguro). Se conserva solo como historia. |
+| `migrations/007_empresa_id_app_metadata.sql` | **Fix de seguridad:** mueve `empresa_id`/`rol` a `app_metadata`, backfill de usuarios existentes, restaura `SET search_path` |
+| `migrations/008_productos_unique_por_empresa.sql` | Unicidad de producto por `(empresa_id, LOWER(nombre))`. Correr primero el precheck de duplicados comentado al inicio del archivo. |
+| `migrations/009_telegram_updates_dedupe.sql` | Tabla `telegram_updates` para dedupe de webhooks |
+| `migrations/010_recalcular_stock.sql` | Función de mantenimiento `recalcular_stock()`: reconstruye `stock` desde el ledger `movimientos` (EXECUTE revocado a anon/authenticated) |
 
 ---
 
@@ -187,12 +243,13 @@ Aplicar en orden en Supabase SQL Editor:
 
 | Ruta | Descripción | Acceso |
 |------|-------------|--------|
-| `/` | Dashboard con KPIs y últimos movimientos | Autenticado |
-| `/movimientos` | Tabla completa + filtros + exportar | Autenticado |
-| `/inventario` | Stock por tienda | Autenticado |
-| `/reportes` | Reportes y gráficos | Autenticado |
-| `/admin` | Panel de administración | Autenticado |
-| `/login` | Login con Supabase Auth | Público |
+| `/` | Dashboard con KPIs, alertas de stock bajo y últimos movimientos en tiempo real | Autenticado |
+| `/movimientos` | Tabla completa + filtros + exportar + Undo por fila | Autenticado |
+| `/inventario` | Stock por tienda + valorización + exportar | Autenticado |
+| `/reportes` | Reportes descargables (Ventas, Valorización, Transacciones) en Excel/PDF | Autenticado |
+| `/admin/usuarios` | Token de Telegram de la empresa + lista de operarios vinculados | Autenticado |
+| `/admin/config` | Selector de modelo NLU por empresa + consumo de IA acumulado | Autenticado |
+| `/login` | Login con Supabase Auth + recuperación de contraseña | Público |
 | `/registro` | Onboarding de nueva empresa | Público |
 
 ### 5.2 Archivos clave
@@ -204,6 +261,7 @@ Aplicar en orden en Supabase SQL Editor:
 | `lib/queries.js` | Todas las queries SQL vía PostgREST |
 | `lib/realtime.js` | Hook `useRealtimeMovimientos` (websocket) |
 | `lib/export.js` | Exportar XLSX y PDF |
+| `components/Sidebar.js` | Navegación: Dashboard, Movimientos, Inventario, Reportes, Usuarios, Configuración |
 
 ### 5.3 Comandos de desarrollo
 
@@ -218,12 +276,12 @@ npm run lint
 
 ## 6. Configuración del Webhook de Telegram
 
-Ejecutar una vez después de deployar `telegram-bot`:
+Ejecutar una vez después de deployar `telegram-bot`. El `secret_token` **debe ser idéntico** al secreto `TELEGRAM_WEBHOOK_SECRET` configurado en Supabase (sección 2.2) — si difieren o falta, el bot rechaza todos los mensajes:
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/telegram-bot"}'
+  -d '{"url":"https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/telegram-bot","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
 ```
 
 Verificar:
@@ -231,6 +289,10 @@ Verificar:
 ```bash
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
 ```
+
+> Si el bot deja de responder de golpe, lo primero a revisar es que
+> `TELEGRAM_WEBHOOK_SECRET` esté configurado en Supabase y coincida con el
+> `secret_token` del webhook registrado.
 
 ---
 
@@ -255,17 +317,24 @@ El campo `empresas.nlu_model` define qué modelo usa cada empresa para NLU:
 | `anthropic-haiku` | `claude-haiku-4-5-20251001` | $0.0008/$0.004 por 1K tokens |
 | `anthropic-sonnet` | `claude-sonnet-4-6` | $0.003/$0.015 por 1K tokens |
 
-Cambiar modelo de una empresa:
+El admin lo cambia desde el dashboard en `/admin/config` (también se puede vía SQL):
+
 ```sql
 UPDATE empresas SET nlu_model = 'anthropic-haiku' WHERE id = '<empresa_id>';
 ```
+
+El consumo (llamadas, tokens, costo USD) queda registrado por empresa en `consumo_ia` y se visualiza en la misma página.
 
 ---
 
 ## 9. Seguridad
 
+- **Tenant isolation vive en `app_metadata`** (migración 007). Nunca poner `empresa_id` ni `rol` en `user_metadata`: es editable por el usuario final y leerla en RLS permite escalación cross-tenant.
+- **El webhook de Telegram está autenticado** vía header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET` (fail-closed).
+- **Las Edge Functions bypasean RLS** (service role); los chequeos de tenant dentro de ellas son explícitos: `handleUndo` verifica que los movimientos pertenezcan a la empresa del operario, `handleJoin` que la tienda pertenezca a la empresa del token.
 - `SERVICE_ROLE_KEY` nunca se expone al frontend. Solo se usa en Edge Functions server-side.
 - El frontend solo usa `NEXT_PUBLIC_SUPABASE_ANON_KEY` (segura para exponer).
 - RLS activo en todas las tablas. Aislamiento completo entre empresas.
-- Las Edge Functions son endpoints públicos (`--no-verify-jwt`) pero toda escritura requiere que el `telegram_id` o `empresa_id` exista en la base de datos.
+- Una API key de Groq estuvo commiteada históricamente (removida en `ebfe6a3`, pero sigue en el historial de git) — debe rotarse en console.groq.com si el repo se subió a algún remote.
+- La Edge Function `onboarding` no tiene rate limiting ni captcha todavía.
 - Resend configurado con dominio verificado `clarocomunica.com`.

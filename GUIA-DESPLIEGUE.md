@@ -1,149 +1,112 @@
-# Guía de Despliegue: Solución Completa de Inventario Zero-Typing Ferretería
+# Guía de Despliegue — Agent GMS
 
-¡Felicidades! Hemos implementado y optimizado la arquitectura completa para tu MVP de inventario sin fricción. Ahora el operario puede registrar ventas en 2 segundos por notas de voz y revertir cualquier error con un solo toque desde Telegram.
+> Última actualización: 2026-06-12
+>
+> ⚠️ Las versiones anteriores de esta guía describían un despliegue basado en
+> **n8n**, que ya no existe en el proyecto, e incluían una copia inline del
+> trigger de stock con un bug de doble negación (las ventas sumaban stock).
+> **Nunca copiar SQL de documentos**: la única fuente de verdad del schema son
+> `CREAR_TABLAS_SUPABASE_FINAL.sql` y los archivos de `migrations/`.
 
----
-
-## 🛠️ Lo que se ha Implementado
-
-1.  **Base de Datos (Supabase):**
-    *   Hemos actualizado `CREAR_TABLAS_SUPABASE_FINAL.sql` con una nueva lógica relacional.
-    *   **Trigger de Inventario de Fricción Cero:** Modificamos la función `actualizar_stock_trigger` para que soporte operaciones de **inserción** (`INSERT`) y **eliminación** (`DELETE`). Si eliminas un movimiento de venta erróneo, el stock regresa a su estado inicial automáticamente.
-2.  **Workflow n8n (`n8n_workflow_fixed.json`):**
-    *   **Auto-Commit:** Guardado inmediato en base de datos al finalizar la interpretación de Groq Llama 3.
-    *   **Botón de Deshacer en Telegram:** Envío de un botón interactivo `[ ↩️ Deshacer Registro ]` en el mensaje de éxito.
-    *   **Flujo de Reversión (Callback):** Automatización del borrado del movimiento y restauración de stock con 1 solo clic en Telegram.
+El sistema corre completamente en **Supabase** (base de datos + Edge Functions) y **Vercel** (frontend). No hay orquestadores externos.
 
 ---
 
-## 🚀 Guía de Despliegue Paso a Paso
+## Paso 1 — Base de datos en Supabase
 
-### Paso 1: Actualizar Supabase (La Base de Datos)
-1.  Ve a tu panel de **Supabase** ➔ **SQL Editor**.
-2.  Abre una nueva consulta (**New Query**).
-3.  Copia y ejecuta el siguiente bloque SQL para actualizar la función y el trigger de stock:
+Ir a **Supabase → SQL Editor** y ejecutar **los archivos del repositorio** en este orden:
 
-```sql
--- 1. Actualizar la función para soportar reversiones (DELETE)
-CREATE OR REPLACE FUNCTION public.actualizar_stock_trigger()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_tipo TEXT;
-  v_prod_id BIGINT;
-  v_tienda_orig BIGINT;
-  v_tienda_dest BIGINT;
-  v_cant INTEGER;
-  v_factor INTEGER;
-BEGIN
-  -- Determinar si es una inserción (INSERT) o una eliminación (DELETE)
-  IF TG_OP = 'INSERT' THEN
-    v_tipo := NEW.tipo;
-    v_prod_id := NEW.producto_id;
-    v_tienda_orig := NEW.tienda_origen;
-    v_tienda_dest := NEW.tienda_destino;
-    v_cant := NEW.cantidad;
-    v_factor := 1;
-  ELSIF TG_OP = 'DELETE' THEN
-    v_tipo := OLD.tipo;
-    v_prod_id := OLD.producto_id;
-    v_tienda_orig := OLD.tienda_origen;
-    v_tienda_dest := OLD.tienda_destino;
-    v_cant := OLD.cantidad;
-    v_factor := -1; -- Invierte la operación al eliminar (restaura el stock)
-  END IF;
-
-  -- Lógica de actualización de stock por tipo de movimiento
-  IF v_tipo = 'venta' OR v_tipo = 'gasto' THEN
-    INSERT INTO public.stock (producto_id, tienda_id, cantidad)
-    VALUES (v_prod_id, v_tienda_orig, -v_cant * v_factor)
-    ON CONFLICT (producto_id, tienda_id) 
-    DO UPDATE SET cantidad = stock.cantidad - (EXCLUDED.cantidad), updated_at = NOW();
-    
-  ELSIF v_tipo = 'ingreso' THEN
-    INSERT INTO public.stock (producto_id, tienda_id, cantidad)
-    VALUES (v_prod_id, v_tienda_dest, v_cant * v_factor)
-    ON CONFLICT (producto_id, tienda_id) 
-    DO UPDATE SET cantidad = stock.cantidad + (EXCLUDED.cantidad), updated_at = NOW();
-    
-    -- Actualizar costo/precio del producto si es inserción y costo > 0
-    IF TG_OP = 'INSERT' AND NEW.costo_unitario > 0 THEN
-      UPDATE public.productos 
-      SET ultimo_costo = NEW.costo_unitario, precio_venta_sugerido = NEW.precio_unitario
-      WHERE id = NEW.producto_id;
-    END IF;
-
-  ELSIF v_tipo = 'traslado' THEN
-    -- Origen
-    INSERT INTO public.stock (producto_id, tienda_id, cantidad)
-    VALUES (v_prod_id, v_tienda_orig, -v_cant * v_factor)
-    ON CONFLICT (producto_id, tienda_id) 
-    DO UPDATE SET cantidad = stock.cantidad - (EXCLUDED.cantidad), updated_at = NOW();
-    
-    -- Destino
-    INSERT INTO public.stock (producto_id, tienda_id, cantidad)
-    VALUES (v_prod_id, v_tienda_dest, v_cant * v_factor)
-    ON CONFLICT (producto_id, tienda_id) 
-    DO UPDATE SET cantidad = stock.cantidad + (EXCLUDED.cantidad), updated_at = NOW();
-  END IF;
-
-  IF TG_OP = 'INSERT' THEN
-    RETURN NEW;
-  ELSE
-    RETURN OLD;
-  END IF;
-END;
-$$ LANGUAGE plpgsql;
-
--- 2. Modificar el trigger para reaccionar ante inserciones y eliminaciones
-DROP TRIGGER IF EXISTS tr_actualizar_stock ON public.movimientos;
-CREATE TRIGGER tr_actualizar_stock
-AFTER INSERT OR DELETE ON public.movimientos
-FOR EACH ROW EXECUTE FUNCTION public.actualizar_stock_trigger();
+```
+1. CREAR_TABLAS_SUPABASE_FINAL.sql
+2. migrations/001_multi_empresa.sql
+3. migrations/002_rls_multi_empresa.sql
+4. migrations/003_empresa_telegram_token.sql
+5. migrations/004_nlu_model_consumo.sql
+6. migrations/005_trigger_null_guard.sql
+7. migrations/007_empresa_id_app_metadata.sql    ← saltar la 006 (superseded, insegura)
+8. migrations/008_productos_unique_por_empresa.sql  ← correr primero el precheck comentado al inicio
+9. migrations/009_telegram_updates_dedupe.sql
+10. migrations/010_recalcular_stock.sql
 ```
 
+## Paso 2 — Secretos de las Edge Functions
+
+Con la Supabase CLI (`supabase login` previo) o desde Dashboard → Edge Functions → Manage secrets:
+
+```bash
+supabase secrets set GROQ_API_KEY=gsk_...
+supabase secrets set TELEGRAM_BOT_TOKEN=123456:ABC...
+supabase secrets set TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)
+supabase secrets set SERVICE_ROLE_KEY=eyJ...    # Dashboard → Settings → API → service_role
+supabase secrets set RESEND_API_KEY=re_...
+supabase secrets set RESEND_FROM_EMAIL="Agent GMS <no-reply@tudominio.com>"
+# Solo si alguna empresa usará NLU de Anthropic:
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Notas importantes:
+
+- `TELEGRAM_WEBHOOK_SECRET` es **obligatorio** (el bot es fail-closed: sin secret rechaza todo). Guardar el valor — se vuelve a usar en el paso 4.
+- `SERVICE_ROLE_KEY` **no** se auto-inyecta con ese nombre — hay que setearlo a mano. `SUPABASE_URL` sí es automático.
+- Cómo obtener cada credencial: ver `GUIA-CREDENCIALES.md`.
+
+## Paso 3 — Desplegar las Edge Functions
+
+Desde la raíz del repositorio:
+
+```bash
+supabase functions deploy telegram-bot --no-verify-jwt
+supabase functions deploy onboarding   --no-verify-jwt
+```
+
+## Paso 4 — Registrar el webhook de Telegram
+
+El `secret_token` debe ser **idéntico** al `TELEGRAM_WEBHOOK_SECRET` del paso 2:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://<project-ref>.supabase.co/functions/v1/telegram-bot","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
+```
+
+Verificar:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
+```
+
+## Paso 5 — Frontend en Vercel
+
+```bash
+cd frontend
+npx vercel --prod
+```
+
+O conectar el repo en **Vercel Dashboard → Import Project**:
+
+- **Root Directory:** `frontend`
+- **Environment Variables:** `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Después, en **Supabase → Authentication → URL Configuration**, configurar Site URL y Redirect URLs con el dominio de Vercel.
+
+## Paso 6 — Prueba de humo
+
+1. Abrir el dashboard web → debe cargar sin errores.
+2. `/registro` → crear una empresa de prueba → verificar que llega el email (y que la contraseña temporal se muestra en pantalla).
+3. `/login` → entrar con esas credenciales.
+4. En Telegram: `/start <token>` → elegir sede.
+5. Enviar: *"Venta de 3 codos PVC a 5 soles"* → el bot debe responder con la transcripción (🎤), el resumen y botones **Deshacer**.
+6. Verificar el movimiento en el dashboard (tiempo real) y que `stock` bajó.
+7. Pulsar **Deshacer** → verificar que el movimiento desaparece y el stock se restaura.
+
 ---
 
-### Paso 2: Importar el Workflow en n8n
-1.  Abre el archivo [n8n_workflow_fixed.json](file:///c:/Users/User-pc/Desktop/PROYECTOS/AGENT%20GMS/n8n_workflow_fixed.json) en tu editor y copia todo su contenido.
-2.  Ve a tu panel de **n8n** ➔ **Workflows** ➔ **Add Workflow** (o abre uno vacío).
-3.  Presiona **`Ctrl + V`** (pegar) directamente en el lienzo. n8n importará todos los nodos y conexiones automáticamente.
-4.  Asegúrate de que tus credenciales estén enlazadas en los nodos correspondientes:
-    *   **Postgres nodes:** Enlaza la credencial `"Postgres account"` (con la URI de Supabase).
-    *   **Telegram Trigger y Telegram nodes:** Enlaza tu bot token en `"Telegram account"`.
-    *   **Groq nodes (Whisper y Llama 3):** Enlaza tu API key de Groq en `"Groq Header Auth"`.
+## Solución de problemas
 
----
-
-## 🧪 Plan de Verificación Manual (Pruébalo tú mismo)
-
-Sigue estos 5 sencillos pasos para ver la magia en acción:
-
-### 1. Preparar un producto de prueba
-Asegúrate de tener un producto registrado en Supabase para ver cómo se descuenta.
-Por ejemplo, si tienes el producto `"Tubo de PVC de 1/2"` en la tienda con ID `1` y cantidad de stock inicial `= 10`.
-
-### 2. Registrar el audio en Telegram
-Envía un mensaje de voz (o de texto) a tu bot de Telegram:
-> 🎙️ *"Venta de tres tubos de PVC de un medio"*
-
-### 3. Verificar el Auto-Commit instantáneo
-En menos de 2 segundos, el bot te enviará un mensaje confirmando:
-> ✅ **Movimiento registrado**
-> *   **Tipo:** VENTA
-> *   **Producto:** Tubo PVC 1/2
-> *   **Cantidad:** 3
->
-> ¿Deseas revertir este registro?
-> `[ ↩️ Deshacer Registro ]`
-
-### 4. Validar el stock en Supabase
-Revisa la tabla `stock` en Supabase. Deberías ver que el stock del producto disminuyó automáticamente a **`7`** gracias al trigger Postgres.
-
-### 5. Probar el Botón de Deshacer (Undo)
-En Telegram, pulsa el botón **`[ ↩️ Deshacer Registro ]`**.
-*   El bot te responderá: *"↩️ Registro revertido. El movimiento ha sido eliminado y el stock original ha sido restaurado con éxito."*
-*   Vuelve a revisar la tabla `stock` en Supabase. Verás que el stock del producto ha regresado automáticamente a **`10`** de manera consistente y sin errores.
-
-
-token de groq
-ROTA ESTA KEY EN console.groq.com — no incluir tokens reales en archivos de documentación
+| Síntoma | Causa probable | Solución |
+|---------|----------------|----------|
+| El bot no responde nada | `TELEGRAM_WEBHOOK_SECRET` no configurado o distinto del `secret_token` del webhook (fail-closed) | Re-setear el secret y re-registrar el webhook con el mismo valor |
+| El bot responde error interno | `SERVICE_ROLE_KEY` no seteado como secret | Setearlo manualmente (paso 2) |
+| Movimientos duplicados | Falta la migración 009 (dedupe) | Aplicar `009_telegram_updates_dedupe.sql` |
+| El stock no cuadra con los movimientos | Trigger alterado a mano en producción | Comparar `pg_proc.prosrc` de `actualizar_stock_trigger` contra `migrations/005`, re-aplicar la 005 y ejecutar `SELECT recalcular_stock();` |
+| Un admin ve datos de otra empresa | RLS leyendo `user_metadata` (migración 006 vieja) | Aplicar `007_empresa_id_app_metadata.sql` de inmediato |

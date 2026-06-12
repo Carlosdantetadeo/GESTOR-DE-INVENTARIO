@@ -1,5 +1,11 @@
 # Plan de Implementación: Optimización Zero-Typing Ferretería MVP
 
+> 📜 **Documento histórico (mayo 2026).** Refleja el plan del MVP original,
+> cuando la automatización corría en **n8n**. n8n fue reemplazado por Supabase
+> Edge Functions y el NLU es hoy multi-modelo por empresa. Para el estado
+> actual del sistema ver `MANUAL.md`, `MANUAL_TECNICO.md` y `CLAUDE.md`.
+> Se conserva solo como registro de las decisiones de diseño iniciales.
+
 Este plan establece las bases estratégicas, de UX y de arquitectura de datos para eliminar la fricción del operario y corregir problemas críticos de base de datos antes del lanzamiento.
 
 ---

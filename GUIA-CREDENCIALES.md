@@ -1,64 +1,96 @@
-# Guía de Obtención de Credenciales: Supabase y Groq (Ferretería Zero-Typing)
+# Guía de Obtención de Credenciales — Agent GMS
 
-Esta guía te explica paso a paso cómo obtener las credenciales necesarias para configurar tu servidor n8n con los servicios de **Supabase (PostgreSQL)** y **Groq (API de Inteligencia Artificial)**.
-
----
-
-## 💾 1. Credenciales de Supabase (Postgres)
-
-Para que n8n pueda leer y escribir en tu base de datos de Supabase, necesitas los datos de conexión PostgreSQL.
-
-### Paso 1.1: Acceder a los ajustes de la base de datos
-1. Inicia sesión en tu panel de [Supabase](https://supabase.com).
-2. Selecciona tu proyecto ferretero en la lista de proyectos.
-3. En el menú lateral izquierdo, haz clic en el ícono de **Settings** (el engranaje ⚙️) en la parte inferior.
-4. Dentro del menú de configuración del proyecto, haz clic en **Database** (Base de datos).
-
-### Paso 1.2: Copiar los datos de conexión (Connection Info)
-Desplázate hacia abajo hasta la sección **Connection info** (Información de conexión). Ahí encontrarás los siguientes datos individuales que deberás rellenar en n8n:
-
-*   **Host:** Por ejemplo, `db.xxxxxxxxxxxxxx.supabase.co`
-*   **Database name:** Por defecto es `postgres`.
-*   **Port:** Por defecto es `5432` o `6543` (se recomienda usar el puerto directo `5432` o el pooler `6543` según tu configuración. Generalmente para n8n, el puerto estándar directo es `5432`).
-*   **User:** Por defecto es `postgres`.
-*   **Password:** La contraseña que creaste al inicializar el proyecto en Supabase.
-    *   *Nota:* Si olvidaste tu contraseña, puedes hacer clic en **Reset database password** en esa misma pantalla para crear una nueva.
-*   **SSL:** Marca la opción de habilitar SSL (generalmente `SSL: Require` o `SSL: True` en n8n) para asegurar una conexión cifrada con Supabase.
-
-### Paso 1.3: Alternativa por URI de Conexión (Connection String)
-Si prefieres usar una URI completa:
-1. En la misma pantalla de **Database Settings**, busca la sección **Connection String**.
-2. Selecciona la pestaña **URI**.
-3. Copia la cadena que tiene el formato:
-   `postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxxxxxx.supabase.co:5432/postgres`
-4. Reemplaza `[YOUR-PASSWORD]` con la contraseña real de tu base de datos.
+> Última actualización: 2026-06-12
+>
+> Las versiones anteriores de esta guía explicaban cómo conectar **n8n** por
+> Postgres directo. n8n ya no existe en el proyecto: todas las credenciales se
+> configuran como **secretos de Supabase Edge Functions** (ver
+> `GUIA-DESPLIEGUE.md`, paso 2) o **variables de entorno de Vercel**.
 
 ---
 
-## ⚡ 2. Credenciales de Groq (API Key para Whisper y Llama 3)
+## 1. Supabase
 
-Usamos Groq por su velocidad extrema de respuesta (<2 segundos) tanto para la transcripción del audio como para la interpretación de Llama 3.
+Panel: https://supabase.com/dashboard → tu proyecto.
 
-### Paso 2.1: Obtener tu API Key en Groq
-1. Entra a la consola de desarrolladores de Groq: [console.groq.com](https://console.groq.com/).
-2. Regístrate o inicia sesión con tu cuenta.
-3. En el menú lateral izquierdo, haz clic en **API Keys** (Llaves de API).
-4. Haz clic en el botón **Create API Key** (Crear Llave de API).
-5. Dale un nombre identificable (ej. `n8n-ferreteria-mvp`).
-6. **Copia la API Key inmediatamente** (comienza con `gsk_...`) y guárdala en un lugar seguro. No podrás volver a verla una vez que cierres la ventana.
+| Credencial | Dónde está | Se usa en |
+|------------|-----------|-----------|
+| `SUPABASE_URL` (`https://<ref>.supabase.co`) | Settings → API → Project URL | Auto-inyectada en Edge Functions; `NEXT_PUBLIC_SUPABASE_URL` en Vercel |
+| Anon key (`anon public`) | Settings → API → Project API keys | `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel / `.env.local` |
+| Service role key (`service_role`) | Settings → API → Project API keys | Secret `SERVICE_ROLE_KEY` de Edge Functions (⚠️ setearlo a mano, no se auto-inyecta con ese nombre) |
 
-### Paso 2.2: Configurar la Credencial en n8n (Header Auth)
-Dado que estamos interactuando con la API de Groq mediante el nodo **HTTP Request** estándar de n8n, configuraremos una credencial de tipo **Header Auth** (Autenticación por Cabecera):
+> ⚠️ La **service role key bypasea toda RLS**. Nunca ponerla en el frontend, en
+> `.env.local` del frontend, ni commitearla. Solo vive como secret de Edge
+> Functions.
 
-1. En tu panel de n8n, ve a **Credentials** (Credenciales) ➔ **Add Credential** (Añadir Credencial).
-2. Busca e inserta **Header Auth** (o **Header de autenticación HTTP**).
-3. Configura la credencial con los siguientes campos exactos:
-    *   **Name (Nombre para ti en n8n):** `Groq Header Auth`
-    *   **Name (Nombre del Header):** `Authorization`
-    *   **Value (Valor del Header):** `Bearer <TU_API_KEY_DE_GROQ>`
-        *   *Ejemplo real:* Si tu API Key es `gsk_123456abc`, el valor debe ser exactamente:
-            `Bearer gsk_123456abc` (asegúrate de incluir la palabra `Bearer ` con un espacio antes de la llave).
+## 2. Groq (STT + NLU + Vision)
+
+1. Entrar a https://console.groq.com y crear cuenta o iniciar sesión.
+2. Menú **API Keys** → **Create API Key**.
+3. Nombre identificable (ej. `agent-gms-prod`) → copiar la key (`gsk_...`) inmediatamente — no se vuelve a mostrar.
+4. Setearla como secret: `supabase secrets set GROQ_API_KEY=gsk_...`
+
+> ⚠️ Una key de Groq estuvo commiteada en este repo (removida en `ebfe6a3`,
+> pero persiste en el historial de git). Si el repo se subió a algún remote,
+> **rotarla** en console.groq.com.
+
+## 3. Telegram
+
+### Bot token
+
+1. En Telegram, abrir **@BotFather**.
+2. `/newbot` (o `/mybots` → tu bot → API Token si ya existe).
+3. Copiar el token (`123456:ABC-...`).
+4. `supabase secrets set TELEGRAM_BOT_TOKEN=...`
+
+### Webhook secret
+
+No lo provee Telegram — lo generás vos:
+
+```bash
+openssl rand -hex 32
+```
+
+Setearlo **dos veces con el mismo valor**: como secret `TELEGRAM_WEBHOOK_SECRET` en Supabase y como `secret_token` al registrar el webhook (`setWebhook`). Si difieren o falta, el bot rechaza todos los mensajes (fail-closed).
+
+## 4. Resend (emails de bienvenida)
+
+1. Entrar a https://resend.com → **API Keys** → crear key (`re_...`).
+2. Verificar tu dominio en **Domains** (requerido para producción).
+3. Setear:
+   ```bash
+   supabase secrets set RESEND_API_KEY=re_...
+   supabase secrets set RESEND_FROM_EMAIL="Agent GMS <no-reply@tudominio.com>"
+   ```
+   El remitente debe pertenecer al dominio verificado.
+
+## 5. Anthropic (opcional — NLU Claude)
+
+Solo necesaria si alguna empresa configura `nlu_model` = `anthropic-haiku` o `anthropic-sonnet` en `/admin/config`:
+
+1. https://console.anthropic.com → **API Keys** → crear key (`sk-ant-...`).
+2. `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`
+
+## 6. Vercel (frontend)
+
+En **Vercel Dashboard → Project → Settings → Environment Variables**:
+
+| Variable | Valor |
+|----------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon key de Supabase |
+
+Para desarrollo local, las mismas dos variables en `frontend/.env.local` (no se commitea).
 
 ---
 
-¡Eso es todo! Con estos dos bloques de credenciales y tu token de Telegram, tu MVP de inventario funcionará de manera fluida y ultra veloz. 🚀
+## Resumen: dónde va cada credencial
+
+```
+Supabase Edge Functions (supabase secrets set):
+  GROQ_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
+  SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL, [ANTHROPIC_API_KEY]
+
+Vercel / frontend/.env.local:
+  NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+```

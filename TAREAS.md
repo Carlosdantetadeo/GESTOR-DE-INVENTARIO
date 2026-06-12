@@ -1,5 +1,10 @@
 # Tareas Completadas: Implementación de Inventario Zero-Typing Ferretería
 
+> 📜 **Documento histórico (mayo 2026).** Lista las tareas del MVP original
+> basado en **n8n**, que ya no existe en el proyecto (el archivo
+> `n8n_workflow_fixed.json` fue eliminado al migrar a Supabase Edge Functions).
+> Para el estado actual ver `MANUAL.md` sección 10.
+
 Organización del trabajo paso a paso para el MVP de inventario optimizado.
 
 ---
