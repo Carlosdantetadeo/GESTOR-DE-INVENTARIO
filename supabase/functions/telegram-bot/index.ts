@@ -507,7 +507,7 @@ async function handleTranscript(
   // Buscar usuario + modelo NLU de su empresa en una sola query
   const { data: usuario } = await supabase
     .from('usuarios')
-    .select('id, empresa_id, tienda_id, empresas(nlu_model, rubro)')
+    .select('id, empresa_id, tienda_id, rol, empresas(nlu_model, rubro)')
     .eq('telegram_id', telegramUserId)
     .maybeSingle() as { data: UsuarioConEmpresa | null }
 
@@ -524,6 +524,7 @@ async function handleTranscript(
   const empresaId = usuario.empresa_id
   const nluModel  = (usuario.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
   const rubro     = (usuario.empresas?.rubro ?? '').trim() || 'ferretería'
+  const esAdmin   = usuario.rol === 'admin'
 
   // Cargar catálogos filtrados por empresa
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
@@ -534,8 +535,36 @@ async function handleTranscript(
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
+  // Bloque de detección de reportes — SIEMPRE presente, también para vendedores.
+  // El gate de seguridad vive en el handler (rama esAdmin → "acceso denegado").
+  // Si el bloque fuera solo-admin, un vendedor que pide un reporte caería en el
+  // flujo de movimientos y recibiría "no entendí" en vez del aviso de permiso.
+  const reporteBloque = `
+PRIMERO decidí la INTENCIÓN del mensaje:
+
+A) CONSULTA / REPORTE — el mensaje PIDE información, no registra nada.
+   Son preguntas o pedidos: "¿cuánto vendí hoy?", "reporte de la semana",
+   "cómo van las ventas del mes", "ventas de la tienda Centro",
+   "muéstrame el stock de cemento", "¿cuánto stock hay de varilla?".
+   Respondé SOLO con este JSON (NADA de "movimientos"):
+   {
+     "tipo": "reporte",
+     "periodo": <"hoy"|"semana"|"mes">,   // si no se especifica, usá "hoy"
+     "tienda_nombre": <nombre de tienda mencionado tal cual, o null>,
+     "producto": <nombre de producto si pide stock de uno puntual, o null>
+   }
+
+B) REGISTRO — el mensaje DECLARA acciones ya hechas ("vendí 3 tubos",
+   "entraron 10 bolsas"). En ese caso usá el formato de "movimientos" de abajo.
+
+Distinción clave: las consultas son PREGUNTAS sobre datos existentes;
+los registros son AFIRMACIONES de algo que ya pasó. Ante la duda entre
+ambos, asumí REGISTRO.
+
+`
+
   const systemPrompt = `Eres el asistente de inventario de un negocio de ${rubro} en Perú.
-Extrae TODOS los productos mencionados y responde SOLO con JSON válido:
+${reporteBloque}Extrae TODOS los productos mencionados y responde SOLO con JSON válido:
 {
   "movimientos": [
     {
@@ -575,7 +604,22 @@ Reglas:
 - Los montos son POR UNIDAD. Si el operario dice un total ("3 tubos por 30 soles en total"),
   divide el total entre la cantidad.`
 
-  const { parsed: items, tokensIn, tokensOut } = await callNLU(nluModel, systemPrompt, transcript)
+  const { parsed: items, reporte, tokensIn, tokensOut } = await callNLU(nluModel, systemPrompt, transcript)
+
+  // Rama de reportes. El prompt detecta la intención para TODOS (así un vendedor
+  // recibe el aviso de permiso en vez de "no entendí"); el gate real es esAdmin.
+  if (reporte) {
+    logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'reporte').catch(console.error)
+    if (!esAdmin) {
+      await tg('sendMessage', {
+        chat_id: chatId,
+        text: '🔒 Los reportes están disponibles solo para administradores.',
+      })
+      return
+    }
+    await handleReporte(chatId, empresaId, reporte)
+    return
+  }
 
   if (!items || items.length === 0) {
     await tg('sendMessage', {
@@ -755,19 +799,186 @@ Reglas:
   })
 }
 
+// ─── Reportes (solo admins) ───────────────────────────────────────────────────
+
+// Inicio del período en hora Perú (UTC-5 fijo, sin DST). created_at se guarda en
+// UTC; si calculáramos "hoy" con la fecha UTC, entre las 19:00 y medianoche Perú
+// (00:00–05:00 UTC del día siguiente) el reporte mostraría datos del día equivocado.
+function inicioPeriodoPeru(periodo: 'hoy' | 'semana' | 'mes'): { desdeIso: string; titulo: string } {
+  const PERU_OFFSET_MS = 5 * 60 * 60 * 1000
+  const nowPeru = new Date(Date.now() - PERU_OFFSET_MS)   // componentes UTC == reloj de pared Perú
+  const y = nowPeru.getUTCFullYear()
+  const m = nowPeru.getUTCMonth()
+  const d = nowPeru.getUTCDate()
+  const diasAtras = periodo === 'hoy' ? 0 : periodo === 'semana' ? 6 : 29
+  // Medianoche Perú del día (hoy - diasAtras), reconvertida a UTC.
+  const desdeMs = Date.UTC(y, m, d - diasAtras, 0, 0, 0) + PERU_OFFSET_MS
+  const titulo = periodo === 'hoy' ? 'Hoy' : periodo === 'semana' ? 'Últimos 7 días' : 'Últimos 30 días'
+  return { desdeIso: new Date(desdeMs).toISOString(), titulo }
+}
+
+async function handleReporte(chatId: number, empresaId: string, rep: ParsedReporte) {
+  // ── Modo A: stock actual de un producto puntual (ignora período) ──
+  if (rep.producto) {
+    const { data: prods } = await supabase
+      .from('productos')
+      .select('id, nombre')
+      .eq('empresa_id', empresaId)               // regla #1: siempre por empresa
+      .ilike('nombre', `%${rep.producto}%`)      // regla #3: match parcial
+      .limit(20)
+
+    if (!prods || prods.length === 0) {
+      await tg('sendMessage', {
+        chat_id: chatId,
+        text: `🔍 No encontré ningún producto que coincida con *${mdSafe(rep.producto)}*.`,
+        parse_mode: 'Markdown',
+      })
+      return
+    }
+
+    const ids = prods.map(p => p.id)
+    const { data: stockRows } = await supabase
+      .from('stock')
+      .select('cantidad, producto_id, tiendas(nombre), productos!inner(empresa_id)')
+      .in('producto_id', ids)
+      .eq('productos.empresa_id', empresaId)      // regla #1 (defensa en profundidad)
+
+    const porProducto = new Map<number, Array<{ tienda: string; cantidad: number }>>()
+    for (const s of (stockRows ?? []) as Array<{ cantidad: number; producto_id: number; tiendas: { nombre: string } | null }>) {
+      const arr = porProducto.get(s.producto_id) ?? []
+      arr.push({ tienda: s.tiendas?.nombre ?? '—', cantidad: Number(s.cantidad ?? 0) })
+      porProducto.set(s.producto_id, arr)
+    }
+
+    const bloques = prods.map(p => {
+      const filas = porProducto.get(p.id) ?? []
+      const total = filas.reduce((acc, f) => acc + f.cantidad, 0)
+      const detalle = filas.length
+        ? filas.map(f => `   • ${mdSafe(f.tienda)}: *${f.cantidad}* u.`).join('\n')
+        : '   _(sin stock registrado)_'
+      return `📦 *${mdSafe(p.nombre)}* — total *${total}* u.\n${detalle}`
+    })
+
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: `📊 *Stock actual*\n\n${bloques.join('\n\n')}`,
+      parse_mode: 'Markdown',
+    })
+    return
+  }
+
+  // ── Modo B: reporte de ventas del período ──
+  const { desdeIso, titulo } = inicioPeriodoPeru(rep.periodo)
+
+  // Resolver sede por nombre parcial (regla #3) si se mencionó una.
+  let tiendaId: number | null = null
+  let tiendaNombre: string | null = null
+  if (rep.tienda_nombre) {
+    const { data: t } = await supabase
+      .from('tiendas')
+      .select('id, nombre')
+      .eq('empresa_id', empresaId)               // regla #1
+      .ilike('nombre', `%${rep.tienda_nombre}%`)
+      .limit(1)
+      .maybeSingle()
+    if (!t) {
+      await tg('sendMessage', {
+        chat_id: chatId,
+        text: `🔍 No encontré ninguna sede que coincida con *${mdSafe(rep.tienda_nombre)}*.`,
+        parse_mode: 'Markdown',
+      })
+      return
+    }
+    tiendaId = t.id
+    tiendaNombre = t.nombre
+  }
+
+  // Ventas del período. movimientos no tiene empresa_id → el scoping multi-tenant
+  // va por el join productos!inner(empresa_id) (regla #1). Top 5 es solo ventas
+  // (regla #5), por eso filtramos tipo = 'venta' acá mismo.
+  let q = supabase
+    .from('movimientos')
+    .select('cantidad, total, tienda_origen, productos!inner(nombre, empresa_id)')
+    .eq('tipo', 'venta')
+    .eq('productos.empresa_id', empresaId)
+    .gte('created_at', desdeIso)
+  if (tiendaId) q = q.eq('tienda_origen', tiendaId)
+  const { data: ventas } = await q as { data: Array<{ cantidad: number; total: number; productos: { nombre: string } | null }> | null }
+
+  // regla #4: sin datos → mensaje claro, no ceros.
+  if (!ventas || ventas.length === 0) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text:
+        `📊 No hay movimientos registrados para ese período ` +
+        `(_${titulo.toLowerCase()}_${tiendaNombre ? `, sede ${mdSafe(tiendaNombre)}` : ''}).`,
+      parse_mode: 'Markdown',
+    })
+    return
+  }
+
+  let totalVentas = 0
+  const porProd = new Map<string, { cantidad: number; monto: number }>()
+  for (const v of ventas) {
+    const monto = Number(v.total ?? 0)
+    totalVentas += monto
+    const nombre = v.productos?.nombre ?? '—'
+    const acc = porProd.get(nombre) ?? { cantidad: 0, monto: 0 }
+    acc.cantidad += Number(v.cantidad ?? 0)
+    acc.monto    += monto
+    porProd.set(nombre, acc)
+  }
+
+  const numVentas = ventas.length
+  const ticket    = totalVentas / numVentas
+  const top = [...porProd.entries()]
+    .sort((a, b) => b[1].monto - a[1].monto)
+    .slice(0, 5)
+    .map(([nombre, v], i) =>
+      `${i + 1}. ${mdSafe(nombre)} — *${v.cantidad}* u. · S/. ${v.monto.toFixed(2)}`)
+    .join('\n')
+
+  await tg('sendMessage', {
+    chat_id: chatId,
+    text:
+      `📊 *Reporte de ventas — ${titulo}*` +
+      (tiendaNombre ? `\n🏪 Sede: *${mdSafe(tiendaNombre)}*` : '') + `\n\n` +
+      `💰 Total vendido: *S/. ${totalVentas.toFixed(2)}*\n` +
+      `🧾 N° de ventas: *${numVentas}*\n` +
+      `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n\n` +
+      `🏆 *Top productos:*\n${top}`,
+    parse_mode: 'Markdown',
+  })
+}
+
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────
 
 async function callNLU(
   nluModel: string,
   systemPrompt: string,
   transcript: string,
-): Promise<{ parsed: ParsedMovimiento[] | null; tokensIn: number; tokensOut: number }> {
+): Promise<{ parsed: ParsedMovimiento[] | null; reporte: ParsedReporte | null; tokensIn: number; tokensOut: number }> {
 
-  function extractItems(raw: unknown): ParsedMovimiento[] | null {
-    if (!raw || typeof raw !== 'object') return null
+  // El NLU puede devolver un REPORTE (rama admin del prompt) o MOVIMIENTOS.
+  // Un reporte es un objeto PLANO con tipo === 'reporte'. Los movimientos vienen
+  // bajo la clave "movimientos" — o, en el peor caso, como un objeto suelto cuyo
+  // tipo es venta/ingreso/gasto/traslado, nunca 'reporte', así que no colisiona.
+  function classify(raw: unknown): { items: ParsedMovimiento[] | null; reporte: ParsedReporte | null } {
+    if (!raw || typeof raw !== 'object') return { items: null, reporte: null }
     const obj = raw as Record<string, unknown>
+    if (obj.tipo === 'reporte') {
+      const periodo = obj.periodo === 'semana' || obj.periodo === 'mes' ? obj.periodo : 'hoy'
+      return {
+        items: null,
+        reporte: {
+          periodo,
+          tienda_nombre: typeof obj.tienda_nombre === 'string' && obj.tienda_nombre.trim() ? obj.tienda_nombre.trim() : null,
+          producto:      typeof obj.producto      === 'string' && obj.producto.trim()      ? obj.producto.trim()      : null,
+        },
+      }
+    }
     const arr = Array.isArray(obj.movimientos) ? obj.movimientos : [obj]
-    return arr.length > 0 ? arr as ParsedMovimiento[] : null
+    return { items: arr.length > 0 ? arr as ParsedMovimiento[] : null, reporte: null }
   }
 
   // ── Groq ──
@@ -790,9 +1001,10 @@ async function callNLU(
     const tokensIn  = data.usage?.prompt_tokens     ?? 0
     const tokensOut = data.usage?.completion_tokens ?? 0
     try {
-      return { parsed: extractItems(JSON.parse(data.choices[0].message.content)), tokensIn, tokensOut }
+      const c = classify(JSON.parse(data.choices[0].message.content))
+      return { parsed: c.items, reporte: c.reporte, tokensIn, tokensOut }
     } catch {
-      return { parsed: null, tokensIn, tokensOut }
+      return { parsed: null, reporte: null, tokensIn, tokensOut }
     }
   }
 
@@ -816,13 +1028,14 @@ async function callNLU(
     const tokensIn  = data.usage?.input_tokens  ?? 0
     const tokensOut = data.usage?.output_tokens ?? 0
     try {
-      return { parsed: extractItems(JSON.parse(data.content[0].text)), tokensIn, tokensOut }
+      const c = classify(JSON.parse(data.content[0].text))
+      return { parsed: c.items, reporte: c.reporte, tokensIn, tokensOut }
     } catch {
-      return { parsed: null, tokensIn, tokensOut }
+      return { parsed: null, reporte: null, tokensIn, tokensOut }
     }
   }
 
-  return { parsed: null, tokensIn: 0, tokensOut: 0 }
+  return { parsed: null, reporte: null, tokensIn: 0, tokensOut: 0 }
 }
 
 // ─── Registro de consumo ──────────────────────────────────────────────────────
@@ -931,5 +1144,12 @@ interface UsuarioConEmpresa {
   id:         string
   empresa_id: string
   tienda_id:  number | null
+  rol:        string | null
   empresas:   { nlu_model: string; rubro?: string | null } | null
+}
+
+interface ParsedReporte {
+  periodo:       'hoy' | 'semana' | 'mes'
+  tienda_nombre: string | null
+  producto:      string | null
 }
