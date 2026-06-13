@@ -106,18 +106,18 @@ async function procesarUpdate(update: TelegramUpdate) {
       return
     }
 
-    if (update.callback_query?.data?.startsWith('fotook_')) {
-      await handleFotoConfirm(update.callback_query)
+    if (update.callback_query?.data?.startsWith('fotocompra_')) {
+      await handleFotoConfirm(update.callback_query, 'ingreso')
+      return
+    }
+
+    if (update.callback_query?.data?.startsWith('fotoventa_')) {
+      await handleFotoConfirm(update.callback_query, 'venta')
       return
     }
 
     if (update.callback_query?.data?.startsWith('fotono_')) {
       await handleFotoCancel(update.callback_query)
-      return
-    }
-
-    if (update.callback_query?.data?.startsWith('fototipo_')) {
-      await handleFotoTipo(update.callback_query)
       return
     }
 
@@ -845,55 +845,45 @@ async function insertarMovimientos(
 // Los productos nuevos recién se crean al confirmar (una foto cancelada no
 // ensucia el catálogo), porque insertarMovimientos hace el auto-create.
 
-// Invierte la dirección venta↔ingreso de TODOS los ítems de una foto. Una factura
-// es ambigua (¿la vendí o la compré?) y el NLU asume "venta"; este flip deja que
-// el operario la corrija a "compra" (ingreso) con un toque. El monto acompaña al
-// tipo: en venta vive en precio_unitario, en ingreso en costo_unitario (regla del
-// systemPrompt). gasto/traslado no se tocan (no son parte de la disyuntiva).
-function flipVentaIngreso(items: ParsedMovimiento[]): ParsedMovimiento[] {
-  const hayVenta = items.some(it => it.tipo === 'venta')
-  const destino  = hayVenta ? 'ingreso' : 'venta'
+// Fija la dirección de TODOS los ítems de una foto a venta o ingreso (compra).
+// Una factura es ambigua (¿la vendí o la compré?), así que NO asumimos: el
+// operario elige. El monto se reubica según el tipo elegido: en venta vive en
+// precio_unitario, en ingreso (compra) en costo_unitario (regla del systemPrompt).
+// gasto/traslado quedan intactos (no son parte de la disyuntiva compra/venta).
+function aplicarDireccion(items: ParsedMovimiento[], destino: 'venta' | 'ingreso'): ParsedMovimiento[] {
   return items.map(it => {
     if (it.tipo !== 'venta' && it.tipo !== 'ingreso') return it
-    const precio = Number(it.precio_unitario ?? 0)
-    const costo  = Number(it.costo_unitario  ?? 0)
+    const monto = Number(it.precio_unitario ?? 0) || Number(it.costo_unitario ?? 0)
     return destino === 'ingreso'
-      ? { ...it, tipo: 'ingreso', costo_unitario: precio || costo, precio_unitario: 0 }
-      : { ...it, tipo: 'venta',   precio_unitario: costo || precio, costo_unitario: 0 }
+      ? { ...it, tipo: 'ingreso', costo_unitario: monto, precio_unitario: 0 }
+      : { ...it, tipo: 'venta',   precio_unitario: monto, costo_unitario: 0 }
   })
 }
 
-// Arma texto + teclado de la confirmación de foto. Reutilizado por estacionarFoto
-// (primer envío) y handleFotoTipo (re-render tras invertir el tipo).
+// Arma texto + teclado de la confirmación de foto. Muestra los productos de
+// forma neutral (sin presumir tipo) y deja que el usuario elija Compra o Venta;
+// recién al tocar uno se fija la dirección y se registra.
 function construirPreviewFoto(pendId: number, items: ParsedMovimiento[], transcript: string) {
-  const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
   const lineas = items.map(it => {
-    const precio = Number(it.precio_unitario ?? 0)
-    const costo  = Number(it.costo_unitario  ?? 0)
-    const monto  = precio > 0 ? ` · S/. ${precio.toFixed(2)} c/u`
-                 : costo  > 0 ? ` · costo S/. ${costo.toFixed(2)} c/u` : ''
-    return `${emoji[it.tipo] ?? '✅'} *${capitalize(it.tipo ?? '—')}* — *${mdSafe(it.producto_nombre ?? '—')}* × ${it.cantidad ?? '?'}${monto}`
+    const monto = Number(it.precio_unitario ?? 0) || Number(it.costo_unitario ?? 0)
+    const montoTxt = monto > 0 ? ` · S/. ${monto.toFixed(2)} c/u` : ''
+    return `• *${mdSafe(it.producto_nombre ?? '—')}* × ${it.cantidad ?? '?'}${montoTxt}`
   })
-
-  // El toggle ofrece el tipo OPUESTO al actual: si lo entendió como venta,
-  // el botón propone marcarlo como compra (ingreso), y viceversa.
-  const hayVenta    = items.some(it => it.tipo === 'venta')
-  const toggleLabel = hayVenta ? '🔄 Es compra (ingreso)' : '🔄 Es una venta'
 
   return {
     text:
       `🖼️ *Revisá lo que entendí de la foto:*\n` +
       `🗒️ "${mdSafe(transcript)}"\n\n` +
       lineas.join('\n') +
-      `\n\n¿Confirmás el registro? Si la dirección está mal, tocá *"${toggleLabel.replace('🔄 ', '')}"*.`,
+      `\n\n¿Es una *compra* o una *venta*?`,
     parse_mode: 'Markdown' as const,
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '✅ Confirmar', callback_data: `fotook_${pendId}` },
-          { text: '❌ Cancelar',  callback_data: `fotono_${pendId}` },
+          { text: '📦 Compra', callback_data: `fotocompra_${pendId}` },
+          { text: '💰 Venta',  callback_data: `fotoventa_${pendId}` },
         ],
-        [{ text: toggleLabel, callback_data: `fototipo_${pendId}` }],
+        [{ text: '❌ Cancelar', callback_data: `fotono_${pendId}` }],
       ],
     },
   }
@@ -929,48 +919,14 @@ async function estacionarFoto(
   await tg('sendMessage', { chat_id: chatId, ...preview })
 }
 
-// Invierte venta↔ingreso de una foto pendiente y re-renderiza la confirmación.
-// Persiste el flip en foto_pendiente.movimientos para que Confirmar registre el
-// tipo corregido. Verifica pertenencia por telegram_id (no tocar fotos ajenas).
-async function handleFotoTipo(cb: CallbackQuery) {
+// El usuario eligió Compra o Venta sobre una foto pendiente. Fija esa dirección
+// en los ítems y registra. destino lo decide el prefijo del callback
+// (fotocompra_ → ingreso, fotoventa_ → venta).
+async function handleFotoConfirm(cb: CallbackQuery, destino: 'venta' | 'ingreso') {
   const chatId         = cb.message.chat.id
   const msgId          = cb.message.message_id
   const telegramUserId = cb.from.id
-  const pendId         = parseInt(cb.data.split('_')[1])   // fototipo_<id>
-
-  await tg('answerCallbackQuery', { callback_query_id: cb.id })
-
-  const { data: pend } = await supabase
-    .from('foto_pendiente')
-    .select('id, movimientos, transcripcion')
-    .eq('id', pendId)
-    .eq('telegram_id', telegramUserId)
-    .maybeSingle() as { data: { id: number; movimientos: ParsedMovimiento[]; transcripcion: string | null } | null }
-
-  if (!pend) {
-    await tg('editMessageText', {
-      chat_id: chatId, message_id: msgId,
-      text: '⚠️ Esta confirmación ya no está disponible.',
-    })
-    return
-  }
-
-  const flipped = flipVentaIngreso(pend.movimientos)
-  await supabase
-    .from('foto_pendiente')
-    .update({ movimientos: flipped })
-    .eq('id', pendId)
-    .eq('telegram_id', telegramUserId)
-
-  const preview = construirPreviewFoto(pendId, flipped, pend.transcripcion ?? '')
-  await tg('editMessageText', { chat_id: chatId, message_id: msgId, ...preview })
-}
-
-async function handleFotoConfirm(cb: CallbackQuery) {
-  const chatId         = cb.message.chat.id
-  const msgId          = cb.message.message_id
-  const telegramUserId = cb.from.id
-  const pendId         = parseInt(cb.data.split('_')[1])   // fotook_<id>
+  const pendId         = parseInt(cb.data.split('_')[1])   // fotocompra_<id> | fotoventa_<id>
 
   await tg('answerCallbackQuery', { callback_query_id: cb.id })
 
@@ -1018,7 +974,7 @@ async function handleFotoConfirm(cb: CallbackQuery) {
 
   await tg('editMessageText', {
     chat_id: chatId, message_id: msgId,
-    text: '✅ Confirmado — registrando...',
+    text: destino === 'ingreso' ? '📦 Compra confirmada — registrando...' : '💰 Venta confirmada — registrando...',
   })
 
   // insertarMovimientos manda su propio mensaje con el detalle + botones Deshacer.
@@ -1026,7 +982,7 @@ async function handleFotoConfirm(cb: CallbackQuery) {
     chatId,
     pend.empresa_id,
     usuario as { id: string; tienda_id: number | null },
-    pend.movimientos,
+    aplicarDireccion(pend.movimientos, destino),
     tiendas,
     productos,
     pend.transcripcion ?? '',
