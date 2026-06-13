@@ -53,19 +53,24 @@ Operator → Telegram voice/text/photo message
 
 ```
 Operator sends /start <token> in Telegram
-  → handleStart: looks up empresa by telegram_token OR telegram_token_admin,
-    shows sede buttons (greeting notes "administrador" when the admin token matched)
-  → Operator taps a sede button (callback_data: join_<token>_<tiendaId>)
-  → handleJoin: re-resolves empresa by either token, derives
-    rol = (telegram_token_admin === token ? 'admin' : 'vendedor'),
-    then INSERTs usuario (rol, tienda_id, empresa_id)
+  → handleStart: looks up empresa by telegram_token OR telegram_token_admin.
+    · admin token  → registers DIRECTLY as rol='admin' with tienda_id=null
+      (no sede prompt — an admin sees all sedes); upserts by telegram_id.
+    · operator token → shows sede buttons (callback_data: join_<token>_<tiendaId>)
+  → handleJoin (vendedor only): re-resolves empresa, INSERT/UPDATE usuario
+    (rol='vendedor', tienda_id, empresa_id) — upsert supports switching empresa.
   → Operator can now send voice/text/photo messages
 ```
 
+If `/start` is sent with a token for a DIFFERENT empresa than the one the user is
+already registered in, the user is re-bound to the new empresa (UPDATE), not
+blocked — only a duplicate within the SAME empresa is rejected.
+
 The admin token (`telegram_token_admin`, migration 014) is a second `/start` token
-that registers the user with `rol = 'admin'` — the gate for admin-only Telegram
-features (e.g. voice/text reports). It's emailed at onboarding and shown/rotatable
-from `/admin/usuarios`. Same sede-selection flow; only the resulting `rol` differs.
+that registers the user with `rol = 'admin'` (and `tienda_id = null`, all sedes) —
+the gate for admin-only Telegram features (e.g. voice/text reports). It's emailed
+at onboarding and shown/rotatable from `/admin/usuarios`. Unlike the operator
+token, it skips the sede selection entirely.
 
 ### Registration & Onboarding Flow (Admin)
 

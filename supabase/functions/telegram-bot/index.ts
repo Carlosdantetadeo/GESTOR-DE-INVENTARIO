@@ -211,7 +211,36 @@ async function handleStart(msg: TelegramMessage) {
   const esAdmin       = empresa.telegram_token_admin === token
   const cambioEmpresa = !!existente   // existe pero en otra empresa → re-vinculación
 
-  // Listar sedes de la empresa
+  // ADMIN: NO se le pide sede — un administrador ve TODAS las sedes. Se registra
+  // directo con tienda_id = null (los reportes filtran por empresa, no por sede).
+  // Solo el vendedor elige una sede (su stock vive en una tienda concreta).
+  if (esAdmin) {
+    const nombre = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ')
+    const datos  = { nombre, rol: 'admin', tienda_id: null, empresa_id: empresa.id }
+    const { error } = existente
+      ? await supabase.from('usuarios').update(datos).eq('id', existente.id)
+      : await supabase.from('usuarios').insert({ telegram_id: telegramUserId, ...datos })
+
+    if (error) {
+      console.error('[handleStart admin] upsert error:', error)
+      await tg('sendMessage', { chat_id: chatId, text: `❌ Error al registrar: ${error.message}` })
+      return
+    }
+
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text:
+        (cambioEmpresa ? `✅ *¡Empresa cambiada!*\n\n` : `✅ *¡Registrado como administrador!*\n\n`) +
+        `🏢 Empresa: *${empresa.nombre}*\n` +
+        `👤 Rol: *Administrador*\n` +
+        `🌐 Acceso: *todas las sedes*\n\n` +
+        `Podés pedir reportes por voz/texto y registrar movimientos.`,
+      parse_mode: 'Markdown',
+    })
+    return
+  }
+
+  // Listar sedes de la empresa (solo vendedores)
   const { data: tiendas } = await supabase
     .from('tiendas')
     .select('id, nombre')
@@ -239,8 +268,7 @@ async function handleStart(msg: TelegramMessage) {
       `👋 Hola *${msg.from?.first_name ?? 'operario'}*!\n\n` +
       (cambioEmpresa
         ? `Vas a *cambiar* a *${empresa.nombre}*`
-        : `Te vas a registrar en *${empresa.nombre}*`) +
-      (esAdmin ? ' como *administrador*' : '') + `.\n\n` +
+        : `Te vas a registrar en *${empresa.nombre}*`) + `.\n\n` +
       `📍 ¿En qué sede trabajás?`,
     parse_mode: 'Markdown',
     reply_markup: { inline_keyboard: buttons },
