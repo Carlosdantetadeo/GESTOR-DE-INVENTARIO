@@ -77,6 +77,7 @@ export async function getMovimientos(empresaId, filters = {}) {
       precio_unitario,
       total,
       transcripcion,
+      motivo,
       created_at,
       productos (id, nombre, categorias (id, nombre)),
       tienda_origen (id, nombre),
@@ -143,6 +144,25 @@ export async function getStock(empresaId, tiendaId = null) {
   }
 
   return data ?? []
+}
+
+/**
+ * Inserta los movimientos de ajuste de una sesión de conteo en un solo
+ * INSERT (atómico: o entran todos o ninguno). El trigger actualiza stock
+ * por cada fila. RLS (WITH CHECK sobre producto_id → productos.empresa_id)
+ * garantiza que solo se aceptan productos de la empresa del usuario.
+ */
+export async function createAjustes(rows) {
+  const { error } = await supabase
+    .from('movimientos')
+    .insert(rows)
+
+  if (error) {
+    console.error('Error creando ajustes:', error)
+    return { ok: false, message: error.message }
+  }
+
+  return { ok: true }
 }
 
 /**

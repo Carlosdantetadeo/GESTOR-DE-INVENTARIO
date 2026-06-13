@@ -94,7 +94,8 @@ export default function Movimientos() {
       Tienda: getTiendaNombre(item),
       Usuario: item.usuarios?.nombre || '—',
       Fecha: formatFecha(item.created_at),
-      Transcripcion: item.transcripcion || ''
+      Transcripcion: item.transcripcion || '',
+      Motivo: item.motivo || ''
     }))
     exportToExcel(rows, 'Movimientos', 'movimientos_gms.xlsx')
   }
@@ -156,6 +157,7 @@ export default function Movimientos() {
             <option value="ingreso">Ingreso (Stock)</option>
             <option value="gasto">Gasto (Egreso)</option>
             <option value="traslado">Traslado</option>
+            <option value="ajuste">Ajuste (Inventario)</option>
           </select>
           <select value={tienda} onChange={(e) => setTienda(e.target.value)} className="input-field" style={{ width: '160px' }}>
             <option value="all">Todas las Tiendas</option>
@@ -197,7 +199,14 @@ export default function Movimientos() {
                 </tr>
               ) : filteredData.map((item) => (
                 <tr key={item.id}>
-                  <td><span className={`badge badge-${item.tipo}`}>{item.tipo}</span></td>
+                  <td>
+                    <span className={`badge badge-${item.tipo}`}>{item.tipo}</span>
+                    {item.tipo === 'ajuste' && item.motivo && (
+                      <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', marginTop: '4px', maxWidth: '180px' }}>
+                        {item.motivo}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ fontWeight: 600 }}>{item.productos?.nombre || '—'}</td>
                   <td>{item.cantidad} und</td>
                   <td>S/ {Number(item.precio_unitario).toFixed(2)}</td>

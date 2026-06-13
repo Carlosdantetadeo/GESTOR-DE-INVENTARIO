@@ -10,6 +10,7 @@ import {
   BarChart3,
   Users,
   Settings,
+  ClipboardCheck,
   LogOut,
   Menu,
   X
@@ -22,6 +23,7 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [userInitials, setUserInitials] = useState('--')
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -29,6 +31,9 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
       const email = user.email ?? ''
       setUserEmail(email)
       setUserInitials(email.slice(0, 2).toUpperCase())
+      // El rol vive en app_metadata (nunca user_metadata, que es editable
+      // por el propio usuario) — mismo criterio que la migración 007.
+      setIsAdmin(user.app_metadata?.rol === 'admin')
     })
   }, [])
 
@@ -37,8 +42,14 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
     { name: 'Movimientos', path: '/movimientos', icon: ArrowLeftRight },
     { name: 'Inventario', path: '/inventario', icon: Package },
     { name: 'Reportes', path: '/reportes', icon: BarChart3 },
+  ]
+
+  const adminItems = [
     { name: 'Usuarios', path: '/admin/usuarios', icon: Users },
     { name: 'Configuración', path: '/admin/config', icon: Settings },
+    ...(isAdmin
+      ? [{ name: 'Ajuste de inventario', path: '/admin/ajuste', icon: ClipboardCheck }]
+      : []),
   ]
 
   const handleLogout = async () => {
@@ -47,6 +58,36 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
   }
 
   const closeMobile = () => setIsMobileOpen(false)
+
+  const renderNavItem = (item) => {
+    const isActive = pathname === item.path
+    const Icon = item.icon
+
+    return (
+      <Link
+        key={item.name}
+        href={item.path}
+        onClick={closeMobile}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '9px 12px',
+          borderRadius: 'var(--radius-md)',
+          textDecoration: 'none',
+          fontSize: '0.9rem',
+          fontWeight: isActive ? 600 : 400,
+          color: isActive ? 'hsl(var(--accent))' : 'hsl(var(--text-secondary))',
+          background: isActive ? 'hsl(var(--accent) / 0.08)' : 'transparent',
+          transition: 'var(--transition)',
+        }}
+        aria-current={isActive ? 'page' : undefined}
+      >
+        <Icon size={16} strokeWidth={isActive ? 2.5 : 1.75} aria-hidden="true" />
+        {item.name}
+      </Link>
+    )
+  }
 
   return (
     <>
@@ -138,35 +179,18 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
 
         {/* Nav */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }} role="navigation" aria-label="Navegación principal">
-          {menuItems.map((item) => {
-            const isActive = pathname === item.path
-            const Icon = item.icon
+          {menuItems.map(renderNavItem)}
 
-            return (
-              <Link
-                key={item.name}
-                href={item.path}
-                onClick={closeMobile}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '9px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  textDecoration: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: isActive ? 600 : 400,
-                  color: isActive ? 'hsl(var(--accent))' : 'hsl(var(--text-secondary))',
-                  background: isActive ? 'hsl(var(--accent) / 0.08)' : 'transparent',
-                  transition: 'var(--transition)',
-                }}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                <Icon size={16} strokeWidth={isActive ? 2.5 : 1.75} aria-hidden="true" />
-                {item.name}
-              </Link>
-            )
-          })}
+          <div style={{
+            margin: '14px 12px 4px',
+            fontSize: '0.65rem',
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            color: 'hsl(var(--text-muted))'
+          }}>
+            ADMINISTRACIÓN
+          </div>
+          {adminItems.map(renderNavItem)}
         </nav>
 
         {/* User */}

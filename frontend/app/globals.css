@@ -220,10 +220,12 @@ h3 { font-size: 1.1rem; font-weight: 600; }
   letter-spacing: 0.04em;
 }
 
+/* Paleta por tipo: venta rojo · ingreso verde · gasto gris ·
+   traslado amarillo · ajuste azul (cada tipo con color propio) */
 .badge-venta {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
 }
 
 .badge-ingreso {
@@ -233,15 +235,21 @@ h3 { font-size: 1.1rem; font-weight: 600; }
 }
 
 .badge-gasto {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
 }
 
 .badge-traslado {
-  background: #f0f9ff;
-  color: #0369a1;
-  border: 1px solid #bae6fd;
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.badge-ajuste {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }
 
 /* Inputs */
