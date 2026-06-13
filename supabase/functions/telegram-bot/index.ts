@@ -106,6 +106,21 @@ async function procesarUpdate(update: TelegramUpdate) {
       return
     }
 
+    if (update.callback_query?.data?.startsWith('fotook_')) {
+      await handleFotoConfirm(update.callback_query)
+      return
+    }
+
+    if (update.callback_query?.data?.startsWith('fotono_')) {
+      await handleFotoCancel(update.callback_query)
+      return
+    }
+
+    if (update.callback_query?.data?.startsWith('fototipo_')) {
+      await handleFotoTipo(update.callback_query)
+      return
+    }
+
     const msg = update.message
     if (!msg) return
 
@@ -494,7 +509,7 @@ Si no hay información de inventario, respondé solo: NO_INVENTARIO.`,
     return
   }
 
-  await handleTranscript(chatId, telegramUserId, descripcion)
+  await handleTranscript(chatId, telegramUserId, descripcion, true)   // 016: pide confirmación
 }
 
 // ─── NLU → INSERT → Confirmar ────────────────────────────────────────────────
@@ -503,6 +518,7 @@ async function handleTranscript(
   chatId: number,
   telegramUserId: number | undefined,
   transcript: string,
+  confirmar = false,   // true para fotos (016): estaciona y pide confirmación en vez de insertar
 ) {
   // Buscar usuario + modelo NLU de su empresa en una sola query
   const { data: usuario } = await supabase
@@ -632,6 +648,32 @@ Reglas:
     return
   }
 
+  logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'nlu').catch(console.error)
+
+  // Foto (016): no insertamos de inmediato — estacionamos en foto_pendiente y
+  // pedimos confirmación. Voz/texto siguen el camino directo de abajo.
+  if (confirmar) {
+    await estacionarFoto(chatId, telegramUserId, empresaId, items, tiendas, transcript)
+    return
+  }
+
+  await insertarMovimientos(chatId, empresaId, usuario, items, tiendas, productos, transcript)
+}
+
+// ─── Insert de movimientos ────────────────────────────────────────────────────
+// Compartido por el flujo voz/texto (inmediato) y la confirmación de foto (016,
+// diferido). Auto-crea productos que no estén en el catálogo, inserta los
+// movimientos y manda el mensaje con los botones de Deshacer.
+
+async function insertarMovimientos(
+  chatId: number,
+  empresaId: string,
+  usuario: { id: string; tienda_id: number | null },
+  items: ParsedMovimiento[],
+  tiendas: Array<{ id: number; nombre: string }> | null,
+  productos: Array<{ id: number; nombre: string }> | null,
+  transcript: string,
+) {
   const primeraT = tiendas?.[0]?.id ?? null
   const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
   const tipoRegistrado: Record<string, string> = {
@@ -763,8 +805,6 @@ Reglas:
     return
   }
 
-  logConsumo(empresaId, nluModel, tokensIn, tokensOut, 'nlu').catch(console.error)
-
   const encabezado = movimientos.length === 1
     ? `✅ *${tipoRegistrado[movimientos[0].tipo] ?? 'Movimiento registrado'}*`
     : `✅ *${movimientos.length} movimientos registrados*`
@@ -796,6 +836,220 @@ Reglas:
     reply_markup: {
       inline_keyboard: keyboard,
     },
+  })
+}
+
+// ─── Confirmación de fotos (016) ──────────────────────────────────────────────
+// Una foto no se inserta directo: se estaciona en foto_pendiente (JSONB) y se
+// pide confirmación. Confirmar → insertarMovimientos + borrar; Cancelar → borrar.
+// Los productos nuevos recién se crean al confirmar (una foto cancelada no
+// ensucia el catálogo), porque insertarMovimientos hace el auto-create.
+
+// Invierte la dirección venta↔ingreso de TODOS los ítems de una foto. Una factura
+// es ambigua (¿la vendí o la compré?) y el NLU asume "venta"; este flip deja que
+// el operario la corrija a "compra" (ingreso) con un toque. El monto acompaña al
+// tipo: en venta vive en precio_unitario, en ingreso en costo_unitario (regla del
+// systemPrompt). gasto/traslado no se tocan (no son parte de la disyuntiva).
+function flipVentaIngreso(items: ParsedMovimiento[]): ParsedMovimiento[] {
+  const hayVenta = items.some(it => it.tipo === 'venta')
+  const destino  = hayVenta ? 'ingreso' : 'venta'
+  return items.map(it => {
+    if (it.tipo !== 'venta' && it.tipo !== 'ingreso') return it
+    const precio = Number(it.precio_unitario ?? 0)
+    const costo  = Number(it.costo_unitario  ?? 0)
+    return destino === 'ingreso'
+      ? { ...it, tipo: 'ingreso', costo_unitario: precio || costo, precio_unitario: 0 }
+      : { ...it, tipo: 'venta',   precio_unitario: costo || precio, costo_unitario: 0 }
+  })
+}
+
+// Arma texto + teclado de la confirmación de foto. Reutilizado por estacionarFoto
+// (primer envío) y handleFotoTipo (re-render tras invertir el tipo).
+function construirPreviewFoto(pendId: number, items: ParsedMovimiento[], transcript: string) {
+  const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
+  const lineas = items.map(it => {
+    const precio = Number(it.precio_unitario ?? 0)
+    const costo  = Number(it.costo_unitario  ?? 0)
+    const monto  = precio > 0 ? ` · S/. ${precio.toFixed(2)} c/u`
+                 : costo  > 0 ? ` · costo S/. ${costo.toFixed(2)} c/u` : ''
+    return `${emoji[it.tipo] ?? '✅'} *${capitalize(it.tipo ?? '—')}* — *${mdSafe(it.producto_nombre ?? '—')}* × ${it.cantidad ?? '?'}${monto}`
+  })
+
+  // El toggle ofrece el tipo OPUESTO al actual: si lo entendió como venta,
+  // el botón propone marcarlo como compra (ingreso), y viceversa.
+  const hayVenta    = items.some(it => it.tipo === 'venta')
+  const toggleLabel = hayVenta ? '🔄 Es compra (ingreso)' : '🔄 Es una venta'
+
+  return {
+    text:
+      `🖼️ *Revisá lo que entendí de la foto:*\n` +
+      `🗒️ "${mdSafe(transcript)}"\n\n` +
+      lineas.join('\n') +
+      `\n\n¿Confirmás el registro? Si la dirección está mal, tocá *"${toggleLabel.replace('🔄 ', '')}"*.`,
+    parse_mode: 'Markdown' as const,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Confirmar', callback_data: `fotook_${pendId}` },
+          { text: '❌ Cancelar',  callback_data: `fotono_${pendId}` },
+        ],
+        [{ text: toggleLabel, callback_data: `fototipo_${pendId}` }],
+      ],
+    },
+  }
+}
+
+async function estacionarFoto(
+  chatId: number,
+  telegramUserId: number | undefined,
+  empresaId: string,
+  items: ParsedMovimiento[],
+  tiendas: Array<{ id: number; nombre: string }> | null,
+  transcript: string,
+) {
+  const { data: pend, error } = await supabase
+    .from('foto_pendiente')
+    .insert({
+      telegram_id:   telegramUserId,
+      empresa_id:    empresaId,
+      movimientos:   items,         // JSONB: el array crudo del NLU (producto_id puede ser null)
+      transcripcion: transcript,
+    })
+    .select('id')
+    .single()
+
+  if (error || !pend) {
+    console.error('[estacionarFoto] insert error:', error)
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No pude preparar la confirmación. Reenviá la foto.' })
+    return
+  }
+
+  // Vista previa de lo entendido (sin tienda: el default se resuelve al insertar).
+  const preview = construirPreviewFoto(pend.id, items, transcript)
+  await tg('sendMessage', { chat_id: chatId, ...preview })
+}
+
+// Invierte venta↔ingreso de una foto pendiente y re-renderiza la confirmación.
+// Persiste el flip en foto_pendiente.movimientos para que Confirmar registre el
+// tipo corregido. Verifica pertenencia por telegram_id (no tocar fotos ajenas).
+async function handleFotoTipo(cb: CallbackQuery) {
+  const chatId         = cb.message.chat.id
+  const msgId          = cb.message.message_id
+  const telegramUserId = cb.from.id
+  const pendId         = parseInt(cb.data.split('_')[1])   // fototipo_<id>
+
+  await tg('answerCallbackQuery', { callback_query_id: cb.id })
+
+  const { data: pend } = await supabase
+    .from('foto_pendiente')
+    .select('id, movimientos, transcripcion')
+    .eq('id', pendId)
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle() as { data: { id: number; movimientos: ParsedMovimiento[]; transcripcion: string | null } | null }
+
+  if (!pend) {
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: '⚠️ Esta confirmación ya no está disponible.',
+    })
+    return
+  }
+
+  const flipped = flipVentaIngreso(pend.movimientos)
+  await supabase
+    .from('foto_pendiente')
+    .update({ movimientos: flipped })
+    .eq('id', pendId)
+    .eq('telegram_id', telegramUserId)
+
+  const preview = construirPreviewFoto(pendId, flipped, pend.transcripcion ?? '')
+  await tg('editMessageText', { chat_id: chatId, message_id: msgId, ...preview })
+}
+
+async function handleFotoConfirm(cb: CallbackQuery) {
+  const chatId         = cb.message.chat.id
+  const msgId          = cb.message.message_id
+  const telegramUserId = cb.from.id
+  const pendId         = parseInt(cb.data.split('_')[1])   // fotook_<id>
+
+  await tg('answerCallbackQuery', { callback_query_id: cb.id })
+
+  // Borrar PRIMERO y verificar pertenencia en el mismo paso: si la fila ya no
+  // está (doble tap / ya cancelada), el delete no devuelve filas → no insertamos
+  // dos veces (evita stock duplicado). El filtro telegram_id impide que otro
+  // usuario confirme una foto ajena.
+  const { data: borradas } = await supabase
+    .from('foto_pendiente')
+    .delete()
+    .eq('id', pendId)
+    .eq('telegram_id', telegramUserId)
+    .select('id, empresa_id, movimientos, transcripcion')
+
+  const pend = borradas?.[0] as
+    { id: number; empresa_id: string; movimientos: ParsedMovimiento[]; transcripcion: string | null } | undefined
+
+  if (!pend) {
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: '⚠️ Esta confirmación ya no está disponible.',
+    })
+    return
+  }
+
+  // Re-resolver contexto para el insert (usuario + catálogos de su empresa).
+  const { data: usuario } = await supabase
+    .from('usuarios')
+    .select('id, tienda_id')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle()
+
+  if (!usuario) {
+    await tg('editMessageText', {
+      chat_id: chatId, message_id: msgId,
+      text: '⛔ Tu cuenta ya no está registrada en el sistema.',
+    })
+    return
+  }
+
+  const [{ data: productos }, { data: tiendas }] = await Promise.all([
+    supabase.from('productos').select('id, nombre').eq('empresa_id', pend.empresa_id).limit(200),
+    supabase.from('tiendas').select('id, nombre').eq('empresa_id', pend.empresa_id).eq('activa', true),
+  ])
+
+  await tg('editMessageText', {
+    chat_id: chatId, message_id: msgId,
+    text: '✅ Confirmado — registrando...',
+  })
+
+  // insertarMovimientos manda su propio mensaje con el detalle + botones Deshacer.
+  await insertarMovimientos(
+    chatId,
+    pend.empresa_id,
+    usuario as { id: string; tienda_id: number | null },
+    pend.movimientos,
+    tiendas,
+    productos,
+    pend.transcripcion ?? '',
+  )
+}
+
+async function handleFotoCancel(cb: CallbackQuery) {
+  const chatId         = cb.message.chat.id
+  const msgId          = cb.message.message_id
+  const telegramUserId = cb.from.id
+  const pendId         = parseInt(cb.data.split('_')[1])   // fotono_<id>
+
+  await tg('answerCallbackQuery', { callback_query_id: cb.id })
+
+  await supabase
+    .from('foto_pendiente')
+    .delete()
+    .eq('id', pendId)
+    .eq('telegram_id', telegramUserId)
+
+  await tg('editMessageText', {
+    chat_id: chatId, message_id: msgId,
+    text: '❌ Descartado. No se registró nada.',
   })
 }
 
