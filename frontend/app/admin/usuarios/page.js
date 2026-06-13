@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Copy, Check, Users, Send, MapPin } from 'lucide-react'
+import { Copy, Check, Users, Send, MapPin, ShieldCheck, RefreshCw } from 'lucide-react'
 
 function formatFecha(dateStr) {
   if (!dateStr) return '—'
@@ -12,10 +12,12 @@ function formatFecha(dateStr) {
 }
 
 export default function UsuariosPage() {
-  const [empresa,   setEmpresa]   = useState(null)   // { nombre, telegram_token }
+  const [empresa,   setEmpresa]   = useState(null)   // { nombre, telegram_token, telegram_token_admin }
+  const [empresaId, setEmpresaId] = useState(null)
   const [operarios, setOperarios] = useState([])
   const [loading,   setLoading]   = useState(true)
-  const [copied,    setCopied]    = useState(null)   // 'token' | 'comando'
+  const [copied,    setCopied]    = useState(null)   // 'token' | 'comando' | 'token_admin' | 'comando_admin'
+  const [rotating,  setRotating]  = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -24,10 +26,11 @@ export default function UsuariosPage() {
 
       const empId = user.app_metadata?.empresa_id
       if (!empId) { setLoading(false); return }
+      setEmpresaId(empId)
 
       // RLS limita ambas queries a la empresa del admin
       const [{ data: emp }, { data: usrs }] = await Promise.all([
-        supabase.from('empresas').select('nombre, telegram_token').eq('id', empId).single(),
+        supabase.from('empresas').select('nombre, telegram_token, telegram_token_admin').eq('id', empId).single(),
         supabase
           .from('usuarios')
           .select('id, nombre, rol, created_at, tiendas (nombre)')
@@ -49,6 +52,24 @@ export default function UsuariosPage() {
     } catch { /* clipboard no disponible */ }
   }
 
+  // Rota el token admin: genera uno nuevo e invalida el anterior. RLS permite
+  // el UPDATE solo sobre la empresa del admin autenticado (misma política que
+  // usa /admin/config para nlu_model).
+  const rotarTokenAdmin = async () => {
+    if (!empresaId || rotating) return
+    if (!confirm('¿Generar un token admin nuevo? El token actual dejará de funcionar para vincular nuevos administradores.')) return
+    setRotating(true)
+    const nuevo = crypto.randomUUID()
+    const { error } = await supabase
+      .from('empresas')
+      .update({ telegram_token_admin: nuevo })
+      .eq('id', empresaId)
+    if (!error) {
+      setEmpresa(prev => ({ ...prev, telegram_token_admin: nuevo }))
+    }
+    setRotating(false)
+  }
+
   if (loading) {
     return (
       <div style={styles.wrapper}>
@@ -57,8 +78,10 @@ export default function UsuariosPage() {
     )
   }
 
-  const token   = empresa?.telegram_token ?? ''
-  const comando = `/start ${token}`
+  const token        = empresa?.telegram_token ?? ''
+  const comando      = `/start ${token}`
+  const tokenAdmin   = empresa?.telegram_token_admin ?? ''
+  const comandoAdmin = `/start ${tokenAdmin}`
 
   return (
     <div style={styles.wrapper}>
@@ -105,6 +128,56 @@ export default function UsuariosPage() {
                 style={styles.linkBtn}
               >
                 {copied === 'token' ? 'copiado ✓' : 'copiar'}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Token de administrador */}
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+            <ShieldCheck size={15} color="hsl(var(--accent))" />
+            <div style={styles.sectionLabel}>Token de administrador</div>
+          </div>
+
+          <div style={styles.card}>
+            <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', margin: 0 }}>
+              Enviá <strong>vos</strong> este comando al bot para vincular tu Telegram con rol
+              de administrador (acceso a reportes por voz/texto). Es distinto del de los
+              empleados — <strong>no lo compartas</strong> con el equipo.
+            </p>
+
+            <div style={styles.tokenRow}>
+              <code style={styles.tokenCode}>{comandoAdmin}</code>
+              <button
+                onClick={() => copy(comandoAdmin, 'comando_admin')}
+                className="btn btn-primary"
+                style={styles.copyBtn}
+                aria-label="Copiar comando admin"
+              >
+                {copied === 'comando_admin'
+                  ? <><Check size={14} /> Copiado</>
+                  : <><Copy size={14} /> Copiar comando</>}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: 'hsl(var(--text-muted))', flexWrap: 'wrap' }}>
+              <Send size={13} />
+              Solo el token:
+              <code style={{ ...styles.codeInline }}>{tokenAdmin}</code>
+              <button
+                onClick={() => copy(tokenAdmin, 'token_admin')}
+                style={styles.linkBtn}
+              >
+                {copied === 'token_admin' ? 'copiado ✓' : 'copiar'}
+              </button>
+              <button
+                onClick={rotarTokenAdmin}
+                disabled={rotating}
+                style={{ ...styles.linkBtn, display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}
+              >
+                <RefreshCw size={12} />
+                {rotating ? 'generando…' : 'generar nuevo'}
               </button>
             </div>
           </div>

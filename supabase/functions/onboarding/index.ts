@@ -62,16 +62,18 @@ Deno.serve(async (req) => {
 
   // ── PASO 1: Crear empresa con telegram_token único ─────────────────────────
 
-  const telegram_token = crypto.randomUUID()
+  const telegram_token       = crypto.randomUUID()
+  const telegram_token_admin = crypto.randomUUID()  // migración 014
 
   const { data: empresa, error: empErr } = await supabase
     .from('empresas')
     .insert({
       nombre:          empresa_nombre.trim(),
       rubro:           (rubro ?? '').trim() || 'ferretería',  // migración 013
-      telegram_token,  // columna agregada en migración 003
+      telegram_token,        // columna agregada en migración 003
+      telegram_token_admin,  // columna agregada en migración 014
     })
-    .select('id, nombre, telegram_token')
+    .select('id, nombre, telegram_token, telegram_token_admin')
     .single()
 
   if (empErr || !empresa) {
@@ -124,11 +126,12 @@ Deno.serve(async (req) => {
 
   try {
     const emailSent = await sendOnboardingEmail({
-      to:              admin_email.trim(),
-      empresa_nombre:  empresa.nombre,
-      telegram_token:  empresa.telegram_token,
-      temp_password:   tempPassword,
-      sedes:           sedesValidas,
+      to:                   admin_email.trim(),
+      empresa_nombre:       empresa.nombre,
+      telegram_token:       empresa.telegram_token,
+      telegram_token_admin: empresa.telegram_token_admin,
+      temp_password:        tempPassword,
+      sedes:                sedesValidas,
     })
     if (!emailSent) {
       console.error('[onboarding] email no enviado — verificar RESEND_API_KEY y dominio')
@@ -144,11 +147,12 @@ Deno.serve(async (req) => {
 // ─── Email de bienvenida via Resend ───────────────────────────────────────────
 
 async function sendOnboardingEmail(opts: {
-  to:             string
-  empresa_nombre: string
-  telegram_token: string
-  temp_password:  string
-  sedes:          string[]
+  to:                   string
+  empresa_nombre:       string
+  telegram_token:       string
+  telegram_token_admin: string
+  temp_password:        string
+  sedes:                string[]
 }): Promise<boolean> {
   const resendKey  = Deno.env.get('RESEND_API_KEY')
   const fromEmail  = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Agent GMS <onboarding@agentgms.com>'
@@ -181,6 +185,14 @@ CONECTAR EMPLEADOS AL BOT DE TELEGRAM:
   Luego el bot les pedirá que elijan su tienda.
 
   Guardá este token en un lugar seguro — es único para tu empresa.
+
+CONECTARTE VOS COMO ADMINISTRADOR:
+  Para vincular tu propio Telegram con rol de administrador (acceso a
+  reportes por voz/texto), enviá al bot:
+
+      /start ${opts.telegram_token_admin}
+
+  Este token ADMIN es distinto del de los empleados — no lo compartas.
 
 ---
 Agent GMS · Sistema de inventario por voz

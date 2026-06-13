@@ -174,11 +174,11 @@ async function handleStart(msg: TelegramMessage) {
     return
   }
 
-  // Buscar empresa por token
+  // Buscar empresa por token — puede ser el de operario o el de admin (014)
   const { data: empresa } = await supabase
     .from('empresas')
-    .select('id, nombre')
-    .eq('telegram_token', token)
+    .select('id, nombre, telegram_token, telegram_token_admin')
+    .or(`telegram_token.eq.${token},telegram_token_admin.eq.${token}`)
     .eq('activa', true)
     .maybeSingle()
 
@@ -189,6 +189,8 @@ async function handleStart(msg: TelegramMessage) {
     })
     return
   }
+
+  const esAdmin = empresa.telegram_token_admin === token
 
   // Listar sedes de la empresa
   const { data: tiendas } = await supabase
@@ -216,7 +218,8 @@ async function handleStart(msg: TelegramMessage) {
     chat_id: chatId,
     text:
       `👋 Hola *${msg.from?.first_name ?? 'operario'}*!\n\n` +
-      `Te vas a registrar en *${empresa.nombre}*.\n\n` +
+      `Te vas a registrar en *${empresa.nombre}*` +
+      (esAdmin ? ' como *administrador*' : '') + `.\n\n` +
       `📍 ¿En qué sede trabajás?`,
     parse_mode: 'Markdown',
     reply_markup: { inline_keyboard: buttons },
@@ -235,11 +238,11 @@ async function handleJoin(cb: CallbackQuery) {
 
   await tg('answerCallbackQuery', { callback_query_id: cb.id })
 
-  // Verificar token
+  // Verificar token — operario o admin (014). El rol se deriva del que coincidió.
   const { data: empresa } = await supabase
     .from('empresas')
-    .select('id, nombre')
-    .eq('telegram_token', token)
+    .select('id, nombre, telegram_token, telegram_token_admin')
+    .or(`telegram_token.eq.${token},telegram_token_admin.eq.${token}`)
     .eq('activa', true)
     .maybeSingle()
 
@@ -250,6 +253,8 @@ async function handleJoin(cb: CallbackQuery) {
     })
     return
   }
+
+  const rol = empresa.telegram_token_admin === token ? 'admin' : 'vendedor'
 
   // Evitar doble registro
   const { data: existente } = await supabase
@@ -288,7 +293,7 @@ async function handleJoin(cb: CallbackQuery) {
   const { error } = await supabase.from('usuarios').insert({
     telegram_id: telegramUserId,
     nombre,
-    rol:        'vendedor',
+    rol,
     tienda_id:  tiendaId,
     empresa_id: empresa.id,
   })
@@ -307,7 +312,8 @@ async function handleJoin(cb: CallbackQuery) {
     text:
       `✅ *¡Registrado exitosamente!*\n\n` +
       `🏢 Empresa: *${empresa.nombre}*\n` +
-      `📍 Sede: *${tienda?.nombre}*\n\n` +
+      `📍 Sede: *${tienda?.nombre}*\n` +
+      `👤 Rol: *${rol === 'admin' ? 'Administrador' : 'Operario'}*\n\n` +
       `Ya podés enviar notas de voz para registrar movimientos.\n` +
       `Decí algo como: _"Vendí 3 tubos PVC"_`,
     parse_mode: 'Markdown',
