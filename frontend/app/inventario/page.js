@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Download, Search, AlertTriangle, Coins, Layers } from 'lucide-react'
-import { getStock, getTiendas, getEmpresaId } from '../../lib/queries'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Download, Search, AlertTriangle, Coins, Layers, Pencil } from 'lucide-react'
+import { getStock, getTiendas, getEmpresaId, updateProducto } from '../../lib/queries'
 import { exportToExcel } from '../../lib/export'
 
 // Pivot flat stock rows into one row per product with per-tienda quantities
@@ -24,6 +24,7 @@ function pivotStock(stockRows) {
         categoria: prod.categorias?.nombre || '—',
         costo: Number(prod.ultimo_costo) || 0,
         sugerido: Number(prod.precio_venta_sugerido) || 0,
+        stockMinimo: prod.stock_minimo ?? 5,
         stocks: {}
       }
     }
@@ -46,6 +47,11 @@ export default function Inventario() {
   const [search, setSearch] = useState('')
   const [categoria, setCategoria] = useState('all')
   const [tiendaFiltro, setTiendaFiltro] = useState('all')
+
+  // Inline edit de stock_minimo (base para editar más campos de producto)
+  const [editingId, setEditingId] = useState(null)
+  const [editValue, setEditValue] = useState('')
+  const skipSaveRef = useRef(false)   // Escape cancela sin que el blur guarde
 
   useEffect(() => {
     getEmpresaId().then(setEmpresaId)
@@ -89,8 +95,28 @@ export default function Inventario() {
   }, 0)
 
   const alertasCount = filteredProductos.filter(prod =>
-    Object.values(prod.stocks).some(s => s < 5)
+    Object.values(prod.stocks).some(s => s < prod.stockMinimo)
   ).length
+
+  const startEdit = (prod) => {
+    setEditingId(prod.id)
+    setEditValue(String(prod.stockMinimo))
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditValue('')
+  }
+
+  const saveEdit = async (prod) => {
+    const val = parseInt(editValue, 10)
+    cancelEdit()
+    if (Number.isNaN(val) || val < 0 || val === prod.stockMinimo) return
+    const ok = await updateProducto(prod.id, { stock_minimo: val })
+    if (ok) {
+      setProductos(prev => prev.map(p => p.id === prod.id ? { ...p, stockMinimo: val } : p))
+    }
+  }
 
   const handleExportExcel = () => {
     const rows = filteredProductos.map(prod => {
@@ -102,6 +128,7 @@ export default function Inventario() {
         base[`Stock ${t.nombre}`] = getTiendaStock(prod, t.id)
       })
       base['Stock Total'] = getTotalStock(prod)
+      base['Stock Minimo'] = prod.stockMinimo
       base['Costo Unitario'] = prod.costo
       base['Precio Sugerido'] = prod.sugerido
       base['Valorizacion Stock'] = getTotalStock(prod) * prod.costo
@@ -199,6 +226,7 @@ export default function Inventario() {
                 <th>Categoría</th>
                 {pivotTiendas.map(t => <th key={t.id}>{t.nombre}</th>)}
                 <th>Stock Total</th>
+                <th>Stock Mín.</th>
                 <th>Costo Unit.</th>
                 <th>Sugerido</th>
                 <th>Valor Stock</th>
@@ -207,13 +235,13 @@ export default function Inventario() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
+                  <td colSpan={7 + pivotTiendas.length} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
                     Cargando inventario...
                   </td>
                 </tr>
               ) : filteredProductos.length === 0 ? (
                 <tr>
-                  <td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
+                  <td colSpan={7 + pivotTiendas.length} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
                     No se encontraron productos con los filtros actuales.
                   </td>
                 </tr>
@@ -231,7 +259,7 @@ export default function Inventario() {
                     </td>
                     {pivotTiendas.map(t => {
                       const qty = getTiendaStock(prod, t.id)
-                      const low = qty < 5
+                      const low = qty < prod.stockMinimo
                       return (
                         <td key={t.id} style={{ color: low ? 'hsl(var(--color-gasto))' : 'inherit', fontWeight: low ? 700 : 'normal' }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -243,6 +271,41 @@ export default function Inventario() {
                     })}
                     <td style={{ fontWeight: 700, color: totalStock < 10 ? 'hsl(var(--color-traslado))' : 'inherit' }}>
                       {totalStock} und
+                    </td>
+                    <td>
+                      {editingId === prod.id ? (
+                        <input
+                          type="number"
+                          min="0"
+                          autoFocus
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => {
+                            if (skipSaveRef.current) { skipSaveRef.current = false; return }
+                            saveEdit(prod)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.target.blur()
+                            if (e.key === 'Escape') { skipSaveRef.current = true; cancelEdit() }
+                          }}
+                          className="input-field"
+                          style={{ width: '76px', padding: '4px 8px', fontSize: '0.85rem' }}
+                          aria-label={`Stock mínimo de ${prod.nombre}`}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => startEdit(prod)}
+                          title="Editar stock mínimo"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'inherit', font: 'inherit', padding: '4px 0'
+                          }}
+                        >
+                          {prod.stockMinimo}
+                          <Pencil size={12} style={{ color: 'hsl(var(--text-muted))' }} />
+                        </button>
+                      )}
                     </td>
                     <td>S/ {prod.costo.toFixed(2)}</td>
                     <td>S/ {prod.sugerido.toFixed(2)}</td>

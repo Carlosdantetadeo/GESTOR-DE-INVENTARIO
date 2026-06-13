@@ -7,7 +7,9 @@ import {
   RefreshCw,
   Activity,
   Package,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle,
+  XCircle
 } from 'lucide-react'
 import { getDashboardKPIs, getMovimientos, getTiendas, getStock, getEmpresaId } from '../lib/queries'
 import { useRealtimeMovimientos } from '../lib/realtime'
@@ -63,9 +65,10 @@ export default function Dashboard() {
     setKpis(kpisData)
     setMovimientos(movsData)
 
-    // Derive low-stock alerts (cantidad < 5), worst first
+    // Alertas: cantidad bajo el stock_minimo del producto (el negativo
+    // siempre califica). Peores primero.
     const alertas = stockData
-      .filter(s => s.cantidad < 5)
+      .filter(s => s.cantidad < (s.productos?.stock_minimo ?? 5))
       .sort((a, b) => a.cantidad - b.cantidad)
       .slice(0, 4)
     setAlertasStock(alertas)
@@ -249,26 +252,38 @@ export default function Dashboard() {
             <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.85rem' }}>Cargando...</p>
           ) : alertasStock.length === 0 ? (
             <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.85rem' }}>Sin alertas críticas.</p>
-          ) : alertasStock.map(s => (
-            <div key={s.id} style={{
-              padding: '12px',
-              background: s.cantidad <= 2 ? 'rgba(244, 63, 94, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-              border: `1px solid ${s.cantidad <= 2 ? 'rgba(244, 63, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`,
-              borderRadius: 'var(--radius-sm)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{s.productos?.nombre || '—'}</span>
-                <span style={{
-                  fontSize: '0.8rem',
-                  color: s.cantidad <= 2 ? 'hsl(var(--color-gasto))' : 'hsl(var(--color-traslado))',
-                  fontWeight: 700
-                }}>{s.cantidad} und</span>
+          ) : alertasStock.map(s => {
+            // Negativo: el ledger registró más salidas que entradas — es una
+            // inconsistencia a revisar, no solo un quiebre de stock.
+            const negativo = s.cantidad < 0
+            const critico = negativo || s.cantidad <= 2
+            return (
+              <div key={s.id} style={{
+                padding: '12px',
+                background: critico ? 'rgba(244, 63, 94, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                border: `1px solid ${critico ? 'rgba(244, 63, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`,
+                borderRadius: 'var(--radius-sm)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {negativo
+                      ? <XCircle size={14} style={{ color: 'hsl(var(--color-gasto))', flexShrink: 0 }} aria-label="Stock negativo" />
+                      : <AlertTriangle size={14} style={{ color: 'hsl(var(--color-traslado))', flexShrink: 0 }} aria-label="Stock bajo" />}
+                    {s.productos?.nombre || '—'}
+                  </span>
+                  <span style={{
+                    fontSize: '0.8rem',
+                    color: critico ? 'hsl(var(--color-gasto))' : 'hsl(var(--color-traslado))',
+                    fontWeight: 700
+                  }}>{s.cantidad} und</span>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))' }}>
+                  {s.tiendas?.nombre || '—'}
+                  {negativo && ' · Stock negativo — revisar movimientos'}
+                </p>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))' }}>
-                {s.tiendas?.nombre || '—'}
-              </p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

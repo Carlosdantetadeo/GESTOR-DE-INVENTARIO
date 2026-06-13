@@ -128,6 +128,7 @@ export async function getStock(empresaId, tiendaId = null) {
         nombre,
         ultimo_costo,
         precio_venta_sugerido,
+        stock_minimo,
         categorias (id, nombre)
       )
     `)
@@ -163,6 +164,25 @@ export async function createAjustes(rows) {
   }
 
   return { ok: true }
+}
+
+/**
+ * Actualiza campos de un producto (ej: stock_minimo desde el inline edit
+ * de inventario). RLS garantiza que solo afecta productos de la empresa
+ * del usuario autenticado.
+ */
+export async function updateProducto(productoId, fields) {
+  const { error } = await supabase
+    .from('productos')
+    .update(fields)
+    .eq('id', productoId)
+
+  if (error) {
+    console.error('Error updating producto:', error)
+    return false
+  }
+
+  return true
 }
 
 /**
