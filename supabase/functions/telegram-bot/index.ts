@@ -514,18 +514,27 @@ async function handlePhoto(message: TelegramMessage) {
     body: JSON.stringify({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       temperature: 0,
+      max_tokens: 1024,
       messages: [{
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
           {
             type: 'text',
-            text: `Eres el asistente de inventario de un negocio de ${rubro}.
-Analizá esta imagen e identificá cualquier movimiento de inventario visible:
-facturas, remitos, pizarras, anotaciones, etiquetas de productos, o stock.
-Describí en una sola oración en español qué movimiento ves, mencionando:
-producto, cantidad, tipo (venta/ingreso/gasto/traslado) y tienda si es visible.
-Si no hay información de inventario, respondé solo: NO_INVENTARIO.`,
+            text: `Eres un asistente de inventario de un negocio de ${rubro}. La imagen puede ser una factura, boleta, remito, ticket o nota — muchas veces en papel AUTOCOPIADO o TÉRMICO: tenue, de bajo contraste o con tinta clara. Leela con MUCHO cuidado, dígito por dígito, aunque cueste.
+
+Transcribí TODOS los renglones de productos que veas, UNO POR LÍNEA, con este formato exacto:
+- <cantidad> x <descripción del producto tal cual figura> — <precio>
+
+Reglas:
+- Incluí CADA ítem, no resumas ni agrupes renglones.
+- <cantidad>: el número de unidades de ese renglón.
+- <precio>: el importe del renglón. Si es por unidad escribí "S/. X c/u"; si es el importe total del renglón escribí "S/. X total". Si no se distingue, poné el número tal cual.
+- Respetá las cantidades y montos EXACTOS que leés; NO inventes ni redondees. Si un dígito es ilegible, poné "?" en su lugar (ej: "S/. 1?.50").
+- Si ves un TOTAL general de la factura, agregalo al final como "TOTAL: S/. X".
+- Respondé SOLO las líneas, sin comentarios ni explicaciones.
+
+Si la imagen no tiene ninguna información de inventario (productos/cantidades), respondé solo: NO_INVENTARIO.`,
           },
         ],
       }],
