@@ -119,6 +119,12 @@ Schema defined in `CREAR_TABLAS_SUPABASE_FINAL.sql`. Apply migrations in order v
 
 > ⚠️ Production once ran a hand-edited trigger variant whose `ON CONFLICT` used `cantidad - EXCLUDED.cantidad` for ventas (double negation → sales ADDED stock). If stock ever disagrees with the ledger again, first compare `pg_proc.prosrc` for `actualizar_stock_trigger` against `migrations/005`, re-apply 005, then `SELECT recalcular_stock();`.
 
+**Feature log (cambios sin migración).** Continúan la numeración de las migraciones, pero son solo código (sin cambio de esquema):
+
+| # | Feature | Estado |
+|---|---------|--------|
+| 015 | Reportes por voz y texto para admin (Telegram) | deployado, validación Telegram pendiente |
+
 Key tables:
 - `empresas` — multi-tenant root; `telegram_token` links operators (rol `vendedor`); `telegram_token_admin` links admins (rol `admin`); `nlu_model` sets per-tenant AI model; `rubro` is the business vertical used in AI prompts and PDF headers
 - `tiendas` → `empresa_id`
@@ -137,7 +143,7 @@ Located in `supabase/functions/`:
 
 | Function | Trigger | What it does |
 |----------|---------|-------------|
-| `telegram-bot` | Telegram webhook POST | Handles `/start <token>`, `join_` callbacks, voice (Groq Whisper STT), text, and photo (Groq Vision). NLU model is per-empresa. Auto-creates missing products in catalog. Inserts movimientos and logs AI usage to `consumo_ia`. |
+| `telegram-bot` | Telegram webhook POST | Handles `/start <token>`, `join_` callbacks, voice (Groq Whisper STT), text, and photo (Groq Vision). NLU model is per-empresa. Auto-creates missing products in catalog. Inserts movimientos and logs AI usage to `consumo_ia`. **Admin reports** (015): the NLU also classifies report intent (`{tipo:'reporte', periodo, tienda_nombre, producto}`); `handleReporte` answers sales reports (hoy/semana/mes in Peru time UTC-5, top-5 by ventas) or current stock for a product — gated to `rol = 'admin'` (vendedores get an access-denied notice). |
 | `onboarding` | POST from `/registro` page | Creates empresa + tiendas + Supabase Auth user + sends welcome email via Resend |
 
 Both deployed with `--no-verify-jwt` (public endpoints).
