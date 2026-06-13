@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Download, Search, AlertTriangle, Coins, Layers, Pencil } from 'lucide-react'
-import { getStock, getTiendas, getEmpresaId, updateProducto } from '../../lib/queries'
+import { Download, Search, AlertTriangle, Coins, Layers, Pencil, Plus, X } from 'lucide-react'
+import { getStock, getTiendas, getEmpresaId, updateProducto, getCategorias, createProducto } from '../../lib/queries'
 import { exportToExcel } from '../../lib/export'
+
+const NUEVO_PRODUCTO_VACIO = { nombre: '', categoria: '', costo: '', precio: '', stockMinimo: '5' }
 
 // Pivot flat stock rows into one row per product with per-tienda quantities
 function pivotStock(stockRows) {
@@ -53,9 +55,21 @@ export default function Inventario() {
   const [editValue, setEditValue] = useState('')
   const skipSaveRef = useRef(false)   // Escape cancela sin que el blur guarde
 
+  // Alta manual de producto (modal)
+  const [categoriasDB, setCategoriasDB] = useState([])
+  const [showNuevo, setShowNuevo] = useState(false)
+  const [nuevo, setNuevo] = useState(NUEVO_PRODUCTO_VACIO)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [okMsg, setOkMsg] = useState('')
+
   useEffect(() => {
     getEmpresaId().then(setEmpresaId)
   }, [])
+
+  useEffect(() => {
+    if (empresaId) getCategorias(empresaId).then(setCategoriasDB)
+  }, [empresaId])
 
   const loadStock = useCallback(async () => {
     if (!empresaId) return
@@ -118,6 +132,44 @@ export default function Inventario() {
     }
   }
 
+  const openNuevo = () => {
+    setNuevo(NUEVO_PRODUCTO_VACIO)
+    setFormError('')
+    setOkMsg('')
+    setShowNuevo(true)
+  }
+
+  const submitNuevo = async (e) => {
+    e.preventDefault()
+    setFormError('')
+    const nombre = nuevo.nombre.trim()
+    if (!nombre) { setFormError('El nombre es obligatorio.'); return }
+
+    const costo = nuevo.costo === '' ? 0 : Number(nuevo.costo)
+    const precio = nuevo.precio === '' ? 0 : Number(nuevo.precio)
+    const stockMinimo = nuevo.stockMinimo === '' ? 5 : parseInt(nuevo.stockMinimo, 10)
+    if (costo < 0 || precio < 0 || Number.isNaN(costo) || Number.isNaN(precio)) {
+      setFormError('Costo y precio deben ser números válidos.'); return
+    }
+    if (Number.isNaN(stockMinimo) || stockMinimo < 0) {
+      setFormError('El stock mínimo debe ser un número válido.'); return
+    }
+
+    setSaving(true)
+    const res = await createProducto(empresaId, {
+      nombre, categoria: nuevo.categoria, costo, precio, stockMinimo,
+    })
+    setSaving(false)
+
+    if (!res.ok) { setFormError(res.message); return }
+
+    setShowNuevo(false)
+    setOkMsg(`"${nombre}" agregado al catálogo. Aparecerá en la tabla cuando registre su primer movimiento.`)
+    // Refrescar categorías (pudo crearse una nueva) y stock.
+    getCategorias(empresaId).then(setCategoriasDB)
+    loadStock()
+  }
+
   const handleExportExcel = () => {
     const rows = filteredProductos.map(prod => {
       const base = {
@@ -148,11 +200,30 @@ export default function Inventario() {
             Valorización de mercancía en almacenes y monitoreo de quiebres de stock.
           </p>
         </div>
-        <button onClick={handleExportExcel} className="btn btn-primary" disabled={loading}>
-          <Download size={16} />
-          Exportar Inventario (.xlsx)
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={openNuevo} className="btn btn-primary">
+            <Plus size={16} />
+            Nuevo Producto
+          </button>
+          <button onClick={handleExportExcel} className="btn btn-secondary" disabled={loading}>
+            <Download size={16} />
+            Exportar (.xlsx)
+          </button>
+        </div>
       </div>
+
+      {okMsg && (
+        <div className="glass-card" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+          padding: '14px 20px', borderLeft: '4px solid hsl(var(--color-ingreso))',
+        }}>
+          <span style={{ fontSize: '0.9rem', color: 'hsl(var(--color-ingreso))' }}>✅ {okMsg}</span>
+          <button onClick={() => setOkMsg('')} aria-label="Cerrar aviso"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))', display: 'flex' }}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
@@ -319,6 +390,109 @@ export default function Inventario() {
           </table>
         </div>
       </div>
+
+      {/* Modal: alta manual de producto */}
+      {showNuevo && (
+        <div
+          onClick={() => !saving && setShowNuevo(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1100,
+            background: 'hsl(0 0% 0% / 0.55)', backdropFilter: 'blur(2px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+          }}
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={submitNuevo}
+            className="glass-card"
+            style={{ width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '18px' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.3rem' }}>Nuevo Producto</h2>
+              <button type="button" onClick={() => setShowNuevo(false)} aria-label="Cerrar"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))', display: 'flex' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))', marginTop: '-8px' }}>
+              Precargá tu catálogo para que el bot reconozca el producto desde el primer mensaje.
+            </p>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+              Nombre *
+              <input
+                autoFocus
+                type="text"
+                value={nuevo.nombre}
+                onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })}
+                placeholder="Ej: Cemento Sol 42.5kg"
+                className="input-field"
+              />
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+              Categoría
+              <input
+                type="text"
+                list="categorias-list"
+                value={nuevo.categoria}
+                onChange={(e) => setNuevo({ ...nuevo, categoria: e.target.value })}
+                placeholder="General"
+                className="input-field"
+              />
+              <datalist id="categorias-list">
+                {categoriasDB.map(c => <option key={c.id} value={c.nombre} />)}
+              </datalist>
+            </label>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                Costo (S/)
+                <input
+                  type="number" min="0" step="0.01"
+                  value={nuevo.costo}
+                  onChange={(e) => setNuevo({ ...nuevo, costo: e.target.value })}
+                  placeholder="0.00"
+                  className="input-field"
+                />
+              </label>
+              <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                Precio venta (S/)
+                <input
+                  type="number" min="0" step="0.01"
+                  value={nuevo.precio}
+                  onChange={(e) => setNuevo({ ...nuevo, precio: e.target.value })}
+                  placeholder="0.00"
+                  className="input-field"
+                />
+              </label>
+              <label style={{ width: '90px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                Stock mín.
+                <input
+                  type="number" min="0"
+                  value={nuevo.stockMinimo}
+                  onChange={(e) => setNuevo({ ...nuevo, stockMinimo: e.target.value })}
+                  className="input-field"
+                />
+              </label>
+            </div>
+
+            {formError && (
+              <span style={{ fontSize: '0.82rem', color: 'hsl(var(--color-gasto))' }}>⚠️ {formError}</span>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
+              <button type="button" onClick={() => setShowNuevo(false)} className="btn btn-secondary" disabled={saving}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Guardando…' : 'Guardar producto'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

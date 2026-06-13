@@ -202,6 +202,80 @@ export async function updateProducto(productoId, fields) {
 }
 
 /**
+ * Categorías de la empresa (para el datalist del alta de producto).
+ * empresa_id está en la tabla directamente → filtro SQL explícito.
+ */
+export async function getCategorias(empresaId) {
+  const { data, error } = await supabase
+    .from('categorias')
+    .select('id, nombre')
+    .eq('empresa_id', empresaId)
+    .order('nombre')
+
+  if (error) {
+    console.error('Error fetching categorias:', error)
+    return []
+  }
+
+  return data ?? []
+}
+
+/**
+ * Alta manual de un producto. Resuelve (o crea) la categoría por nombre — mismo
+ * patrón que el bot al auto-crear productos: categoría "General" por defecto.
+ * RLS (WITH CHECK sobre empresa_id) garantiza que solo se inserta en la empresa
+ * del admin autenticado. El choque con el unique (empresa_id, LOWER(nombre)) se
+ * traduce a un mensaje amable.
+ */
+export async function createProducto(empresaId, { nombre, categoria, costo, precio, stockMinimo }) {
+  const catName = (categoria || '').trim() || 'General'
+
+  // Resolver o crear la categoría por nombre (case-insensitive).
+  let categoriaId = null
+  const { data: catExistente } = await supabase
+    .from('categorias')
+    .select('id')
+    .eq('empresa_id', empresaId)
+    .ilike('nombre', catName)
+    .maybeSingle()
+  if (catExistente) {
+    categoriaId = catExistente.id
+  } else {
+    const { data: catNueva, error: catErr } = await supabase
+      .from('categorias')
+      .insert({ nombre: catName, empresa_id: empresaId })
+      .select('id')
+      .single()
+    if (catErr) {
+      console.error('Error creando categoría:', catErr)
+      return { ok: false, message: 'No se pudo crear la categoría.' }
+    }
+    categoriaId = catNueva?.id ?? null
+  }
+
+  const { data, error } = await supabase
+    .from('productos')
+    .insert({
+      nombre:                nombre.trim(),
+      empresa_id:            empresaId,
+      categoria_id:          categoriaId,
+      ultimo_costo:          costo ?? 0,
+      precio_venta_sugerido: precio ?? 0,
+      stock_minimo:          stockMinimo ?? 5,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('Error creando producto:', error)
+    const dup = error.code === '23505'
+    return { ok: false, message: dup ? 'Ya existe un producto con ese nombre en tu catálogo.' : error.message }
+  }
+
+  return { ok: true, id: data.id }
+}
+
+/**
  * Tiendas activas de la empresa.
  * empresa_id está en la tabla directamente → filtro SQL explícito.
  */
