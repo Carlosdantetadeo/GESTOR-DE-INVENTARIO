@@ -167,29 +167,9 @@ async function handleStart(msg: TelegramMessage) {
     return
   }
 
-  // ¿Ya está registrado?
-  const { data: existente } = await supabase
-    .from('usuarios')
-    .select('id, nombre, empresa_id, tienda_id, empresas(nombre), tiendas(nombre)')
-    .eq('telegram_id', telegramUserId)
-    .maybeSingle()
-
-  if (existente) {
-    const empNombre    = (existente.empresas  as any)?.nombre ?? '—'
-    const tiendaNombre = (existente.tiendas   as any)?.nombre ?? 'Sin asignar'
-    await tg('sendMessage', {
-      chat_id: chatId,
-      text:
-        `✅ Ya estás registrado.\n\n` +
-        `🏢 Empresa: *${empNombre}*\n` +
-        `📍 Sede: *${tiendaNombre}*\n\n` +
-        `Podés enviar notas de voz para registrar movimientos.`,
-      parse_mode: 'Markdown',
-    })
-    return
-  }
-
-  // Buscar empresa por token — puede ser el de operario o el de admin (014)
+  // Buscar empresa por token — puede ser el de operario o el de admin (014).
+  // Se resuelve ANTES del chequeo de "ya registrado" para poder comparar: un
+  // token de OTRA empresa debe permitir cambiar (re-vincular), no bloquear.
   const { data: empresa } = await supabase
     .from('empresas')
     .select('id, nombre, telegram_token, telegram_token_admin')
@@ -205,7 +185,31 @@ async function handleStart(msg: TelegramMessage) {
     return
   }
 
-  const esAdmin = empresa.telegram_token_admin === token
+  // ¿Ya está registrado?
+  const { data: existente } = await supabase
+    .from('usuarios')
+    .select('id, nombre, empresa_id, tienda_id, tiendas(nombre)')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle()
+
+  // Ya registrado EN ESTA MISMA empresa → nada que hacer. Si el token es de otra
+  // empresa, NO retornamos: caemos al flujo de sedes para re-vincular (switch).
+  if (existente && existente.empresa_id === empresa.id) {
+    const tiendaNombre = (existente.tiendas as any)?.nombre ?? 'Sin asignar'
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text:
+        `✅ Ya estás registrado.\n\n` +
+        `🏢 Empresa: *${empresa.nombre}*\n` +
+        `📍 Sede: *${tiendaNombre}*\n\n` +
+        `Podés enviar notas de voz para registrar movimientos.`,
+      parse_mode: 'Markdown',
+    })
+    return
+  }
+
+  const esAdmin       = empresa.telegram_token_admin === token
+  const cambioEmpresa = !!existente   // existe pero en otra empresa → re-vinculación
 
   // Listar sedes de la empresa
   const { data: tiendas } = await supabase
@@ -233,7 +237,9 @@ async function handleStart(msg: TelegramMessage) {
     chat_id: chatId,
     text:
       `👋 Hola *${msg.from?.first_name ?? 'operario'}*!\n\n` +
-      `Te vas a registrar en *${empresa.nombre}*` +
+      (cambioEmpresa
+        ? `Vas a *cambiar* a *${empresa.nombre}*`
+        : `Te vas a registrar en *${empresa.nombre}*`) +
       (esAdmin ? ' como *administrador*' : '') + `.\n\n` +
       `📍 ¿En qué sede trabajás?`,
     parse_mode: 'Markdown',
@@ -271,17 +277,19 @@ async function handleJoin(cb: CallbackQuery) {
 
   const rol = empresa.telegram_token_admin === token ? 'admin' : 'vendedor'
 
-  // Evitar doble registro
+  // ¿Existe ya una cuenta para este telegram_id? Si está en ESTA empresa es un
+  // doble tap (no hacemos nada); si está en OTRA, es un cambio de empresa y la
+  // re-vinculamos (UPDATE). Si no existe, la creamos (INSERT) más abajo.
   const { data: existente } = await supabase
     .from('usuarios')
-    .select('id')
+    .select('id, empresa_id')
     .eq('telegram_id', telegramUserId)
     .maybeSingle()
 
-  if (existente) {
+  if (existente && existente.empresa_id === empresa.id) {
     await tg('editMessageText', {
       chat_id: chatId, message_id: msgId,
-      text: '⚠️ Ya tenés una cuenta registrada en este sistema.',
+      text: '⚠️ Ya tenés una cuenta registrada en esta empresa.',
     })
     return
   }
@@ -303,18 +311,15 @@ async function handleJoin(cb: CallbackQuery) {
     return
   }
 
-  // Insertar en usuarios
+  // Re-vincular (cambio de empresa) o alta nueva. Keyed por telegram_id.
   const nombre = [cb.from.first_name, cb.from.last_name].filter(Boolean).join(' ')
-  const { error } = await supabase.from('usuarios').insert({
-    telegram_id: telegramUserId,
-    nombre,
-    rol,
-    tienda_id:  tiendaId,
-    empresa_id: empresa.id,
-  })
+  const datos  = { nombre, rol, tienda_id: tiendaId, empresa_id: empresa.id }
+  const { error } = existente
+    ? await supabase.from('usuarios').update(datos).eq('id', existente.id)
+    : await supabase.from('usuarios').insert({ telegram_id: telegramUserId, ...datos })
 
   if (error) {
-    console.error('[handleJoin] insert error:', error)
+    console.error('[handleJoin] upsert error:', error)
     await tg('editMessageText', {
       chat_id: chatId, message_id: msgId,
       text: `❌ Error al registrar: ${error.message}`,
@@ -325,7 +330,7 @@ async function handleJoin(cb: CallbackQuery) {
   await tg('editMessageText', {
     chat_id: chatId, message_id: msgId,
     text:
-      `✅ *¡Registrado exitosamente!*\n\n` +
+      (existente ? `✅ *¡Empresa cambiada!*\n\n` : `✅ *¡Registrado exitosamente!*\n\n`) +
       `🏢 Empresa: *${empresa.nombre}*\n` +
       `📍 Sede: *${tienda?.nombre}*\n` +
       `👤 Rol: *${rol === 'admin' ? 'Administrador' : 'Operario'}*\n\n` +
