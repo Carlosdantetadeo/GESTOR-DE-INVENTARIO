@@ -192,9 +192,14 @@ async function handleStart(msg: TelegramMessage) {
     .eq('telegram_id', telegramUserId)
     .maybeSingle()
 
-  // Ya registrado EN ESTA MISMA empresa → nada que hacer. Si el token es de otra
-  // empresa, NO retornamos: caemos al flujo de sedes para re-vincular (switch).
-  if (existente && existente.empresa_id === empresa.id) {
+  const esAdmin       = empresa.telegram_token_admin === token
+  const cambioEmpresa = !!existente   // existe pero en otra empresa → re-vinculación
+
+  // Vendedor ya registrado EN ESTA MISMA empresa → nada que hacer. (Para admin NO
+  // cortamos: dejamos que la rama admin de abajo re-aplique rol/tienda_id=null,
+  // así un admin que quedó atado a una sede se corrige reenviando /start.)
+  // Si el token es de otra empresa tampoco cortamos: caemos a re-vincular (switch).
+  if (existente && existente.empresa_id === empresa.id && !esAdmin) {
     const tiendaNombre = (existente.tiendas as any)?.nombre ?? 'Sin asignar'
     await tg('sendMessage', {
       chat_id: chatId,
@@ -207,9 +212,6 @@ async function handleStart(msg: TelegramMessage) {
     })
     return
   }
-
-  const esAdmin       = empresa.telegram_token_admin === token
-  const cambioEmpresa = !!existente   // existe pero en otra empresa → re-vinculación
 
   // ADMIN: NO se le pide sede — un administrador ve TODAS las sedes. Se registra
   // directo con tienda_id = null (los reportes filtran por empresa, no por sede).
