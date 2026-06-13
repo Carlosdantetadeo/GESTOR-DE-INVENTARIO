@@ -64,7 +64,7 @@ Operator sends /start <token> in Telegram
 ```
 New customer → /registro page
   → POST to Supabase Edge Function: onboarding
-      → INSERT INTO empresas (nombre, telegram_token = crypto.randomUUID())
+      → INSERT INTO empresas (nombre, rubro, telegram_token = crypto.randomUUID())
       → INSERT INTO tiendas × N (empresa_id)
       → supabase.auth.admin.createUser (email_confirm: true,
                                         app_metadata: { empresa_id, rol: 'admin' })
@@ -105,11 +105,12 @@ Schema defined in `CREAR_TABLAS_SUPABASE_FINAL.sql`. Apply migrations in order v
 | `migrations/010_recalcular_stock.sql` | `recalcular_stock()` maintenance function: rebuilds `stock` from the `movimientos` ledger (EXECUTE revoked from anon/authenticated). Run after any stock drift. |
 | `migrations/011_stock_minimo.sql` | Adds `stock_minimo INTEGER NOT NULL DEFAULT 5` to `productos` — per-product low-stock alert threshold, editable inline from `/inventario`; dashboard alerts compare against it and flag negative stock separately |
 | `migrations/012_tipo_ajuste.sql` | Adds `tipo = 'ajuste'` (signed `cantidad` = real count minus system stock, on `tienda_origen`) with mandatory `motivo`; adds `cantidad > 0` CHECK for classic types (run the cantidad precheck commented at the top first); trigger function canonical source moves from 005 to this file |
+| `migrations/013_empresa_rubro.sql` | Adds `rubro TEXT NOT NULL DEFAULT 'ferretería'` to `empresas` — business vertical interpolated into the bot's vision/NLU prompts and shown in PDF export headers; captured at `/registro`, editable from `/admin/config` |
 
 > ⚠️ Production once ran a hand-edited trigger variant whose `ON CONFLICT` used `cantidad - EXCLUDED.cantidad` for ventas (double negation → sales ADDED stock). If stock ever disagrees with the ledger again, first compare `pg_proc.prosrc` for `actualizar_stock_trigger` against `migrations/005`, re-apply 005, then `SELECT recalcular_stock();`.
 
 Key tables:
-- `empresas` — multi-tenant root; `telegram_token` links operators; `nlu_model` sets per-tenant AI model
+- `empresas` — multi-tenant root; `telegram_token` links operators; `nlu_model` sets per-tenant AI model; `rubro` is the business vertical used in AI prompts and PDF headers
 - `tiendas` → `empresa_id`
 - `productos`, `categorias`, `usuarios` → `empresa_id`
 - `movimientos` — append-only log; `tipo` ∈ `{venta, ingreso, gasto, traslado}`; `total` is a generated stored column (`cantidad * precio_unitario`)
@@ -140,7 +141,7 @@ Both deployed with `--no-verify-jwt` (public endpoints).
   - `anthropic-haiku` → `claude-haiku-4-5-20251001`
   - `anthropic-sonnet` → `claude-sonnet-4-6`
 
-NLU receives a product + store catalog and returns a JSON array of movimientos. Products not found in the catalog are auto-created with `categoria = 'General'`.
+NLU receives a product + store catalog and returns a JSON array of movimientos. Products not found in the catalog are auto-created with `categoria = 'General'`. Both the vision and NLU prompts interpolate `empresas.rubro` ("ferretería", "abarrotes", "plásticos", …) so the system is not tied to any vertical.
 
 ## Environment Variables
 

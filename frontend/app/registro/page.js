@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Building2, Mail, MapPin, Package, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
+import { Building2, Mail, MapPin, Package, Tag, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
 
 // URL hardcodeada — no depende del env var que tiene /rest/v1 de más
 const EDGE_URL = 'https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/onboarding'
@@ -10,6 +10,7 @@ const MAX_SEDES = 20
 
 export default function Registro() {
   const [empresa, setEmpresa] = useState('')
+  const [rubro, setRubro]     = useState('')
   const [email, setEmail]     = useState('')
   const [sedes, setSedes]     = useState([''])
   const [loading,   setLoading]   = useState(false)
@@ -52,6 +53,7 @@ export default function Registro() {
         },
         body: JSON.stringify({
           empresa_nombre: empresa.trim(),
+          rubro:          rubro.trim(),
           admin_email:    email.trim(),
           sedes:          sedesValidas,
         }),
@@ -146,6 +148,21 @@ export default function Registro() {
                   value={empresa}
                   onChange={(e) => setEmpresa(e.target.value)}
                   placeholder="Ej: Ferretería Los Andes"
+                  className="input-field"
+                  style={{ paddingLeft: '38px' }}
+                />
+              </div>
+            </Field>
+
+            <Field label="Rubro del negocio">
+              <div style={{ position: 'relative' }}>
+                <Tag size={15} style={styles.fieldIcon} />
+                <input
+                  type="text"
+                  required
+                  value={rubro}
+                  onChange={(e) => setRubro(e.target.value)}
+                  placeholder="Ej: ferretería, abarrotes, plásticos"
                   className="input-field"
                   style={{ paddingLeft: '38px' }}
                 />

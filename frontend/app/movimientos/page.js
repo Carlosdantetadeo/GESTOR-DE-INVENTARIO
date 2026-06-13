@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Download, FileText, Search, Undo2, CheckCircle, AlertCircle } from 'lucide-react'
-import { getMovimientos, getTiendas, deleteMovimiento, getEmpresaId } from '../../lib/queries'
+import { getMovimientos, getTiendas, deleteMovimiento, getEmpresaId, getEmpresa } from '../../lib/queries'
 import { exportToExcel, exportToPDF } from '../../lib/export'
 
 function formatFecha(dateStr) {
@@ -21,6 +21,7 @@ function getTiendaNombre(mov) {
 
 export default function Movimientos() {
   const [empresaId, setEmpresaId] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
   const [tiendas, setTiendas] = useState([])
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -46,6 +47,7 @@ export default function Movimientos() {
   useEffect(() => {
     if (!empresaId) return
     getTiendas(empresaId).then(setTiendas)
+    getEmpresa(empresaId).then(setEmpresa)
   }, [empresaId])
 
   const loadMovimientos = useCallback(async () => {
@@ -111,7 +113,7 @@ export default function Movimientos() {
       getTiendaNombre(item),
       formatFecha(item.created_at)
     ])
-    exportToPDF('REPORTE DETALLADO DE INGRESOS Y EGRESOS', headers, rows, 'reporte_movimientos.pdf', 'Ferretería GMS')
+    exportToPDF('REPORTE DETALLADO DE INGRESOS Y EGRESOS', headers, rows, 'reporte_movimientos.pdf', empresa?.nombre || 'Empresa', empresa?.rubro || '')
   }
 
   return (

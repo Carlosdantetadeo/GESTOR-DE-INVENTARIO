@@ -43,6 +43,10 @@ export default function ConfigPage() {
   const [empresaId,    setEmpresaId]    = useState(null)
   const [saving,       setSaving]       = useState(false)
   const [saved,        setSaved]        = useState(false)
+  const [rubro,        setRubro]        = useState('')
+  const [rubroActual,  setRubroActual]  = useState('')
+  const [savingRubro,  setSavingRubro]  = useState(false)
+  const [savedRubro,   setSavedRubro]   = useState(false)
   const [consumo,      setConsumo]      = useState([])
   const [loading,      setLoading]      = useState(true)
 
@@ -55,7 +59,7 @@ export default function ConfigPage() {
       setEmpresaId(empId)
 
       const [{ data: empresa }, { data: rows }] = await Promise.all([
-        supabase.from('empresas').select('nlu_model').eq('id', empId).single(),
+        supabase.from('empresas').select('nlu_model, rubro').eq('id', empId).single(),
         supabase
           .from('consumo_ia')
           .select('modelo, tokens_entrada, tokens_salida, costo_usd')
@@ -67,6 +71,11 @@ export default function ConfigPage() {
       if (empresa?.nlu_model) {
         setCurrentModel(empresa.nlu_model)
         setSelected(empresa.nlu_model)
+      }
+
+      if (empresa?.rubro) {
+        setRubro(empresa.rubro)
+        setRubroActual(empresa.rubro)
       }
 
       if (rows?.length) {
@@ -98,6 +107,20 @@ export default function ConfigPage() {
     }
   }
 
+  const handleSaveRubro = async () => {
+    const nuevo = rubro.trim()
+    if (!nuevo || nuevo === rubroActual || !empresaId) return
+    setSavingRubro(true)
+    const { error } = await supabase
+      .from('empresas').update({ rubro: nuevo }).eq('id', empresaId)
+    setSavingRubro(false)
+    if (!error) {
+      setRubroActual(nuevo)
+      setSavedRubro(true)
+      setTimeout(() => setSavedRubro(false), 3000)
+    }
+  }
+
   if (loading) {
     return (
       <div style={styles.wrapper}>
@@ -120,6 +143,39 @@ export default function ConfigPage() {
             Elegí el modelo de IA que procesa los mensajes de tus operarios en Telegram
           </p>
         </div>
+
+        {/* Rubro del negocio */}
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={styles.sectionLabel}>Rubro del negocio</div>
+          <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
+            Personaliza la interpretación de IA del bot de Telegram y el encabezado de los PDF
+            (ej: ferretería, abarrotes, plásticos)
+          </p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={rubro}
+              onChange={(e) => setRubro(e.target.value)}
+              placeholder="Ej: ferretería"
+              className="input-field"
+              style={{ maxWidth: '280px' }}
+            />
+            <button
+              onClick={handleSaveRubro}
+              disabled={savingRubro || !rubro.trim() || rubro.trim() === rubroActual}
+              className="btn btn-primary"
+              style={{
+                padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '8px',
+                opacity: !rubro.trim() || rubro.trim() === rubroActual ? 0.5 : 1,
+              }}
+            >
+              {savingRubro ? 'Guardando...' : savedRubro
+                ? <><Check size={14} /> Guardado</>
+                : <><Save size={14} /> Guardar rubro</>
+              }
+            </button>
+          </div>
+        </section>
 
         {/* Selector de modelo */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

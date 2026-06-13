@@ -15,20 +15,23 @@ export function exportToExcel(data, sheetName = 'Reporte', fileName = 'reporte.x
 /**
  * Exportar reporte en PDF con diseño profesional
  */
-export function exportToPDF(title, headers, rows, filename = 'reporte.pdf', empresaNombre = 'Empresa') {
+export function exportToPDF(title, headers, rows, filename = 'reporte.pdf', empresaNombre = 'Empresa', rubro = '') {
   const doc = new jsPDF()
-  
+
   // Header Corporativo
   doc.setFillColor(13, 148, 136) // Teal color
   doc.rect(0, 0, 210, 40, 'F')
-  
+
   doc.setFont('Helvetica', 'bold')
   doc.setFontSize(22)
   doc.setTextColor(255, 255, 255)
   doc.text(empresaNombre.toUpperCase(), 15, 25)
-  
+
   doc.setFontSize(10)
-  doc.text('REPORTE OFICIAL DE INVENTARIO Y MOVIMIENTOS', 15, 33)
+  doc.text(
+    `${rubro ? rubro.toUpperCase() + ' · ' : ''}REPORTE OFICIAL DE INVENTARIO Y MOVIMIENTOS`,
+    15, 33
+  )
   
   // Título del reporte
   doc.setFontSize(14)

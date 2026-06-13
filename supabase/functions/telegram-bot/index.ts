@@ -443,6 +443,15 @@ async function handlePhoto(message: TelegramMessage) {
 
   await tg('sendMessage', { chat_id: chatId, text: '🔍 Analizando imagen...' })
 
+  // El rubro de la empresa del operario personaliza el prompt de visión.
+  // Si el usuario no está registrado, handleTranscript lo rechaza después.
+  const { data: usuarioFoto } = await supabase
+    .from('usuarios')
+    .select('empresas(rubro)')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle()
+  const rubro = ((usuarioFoto?.empresas as { rubro?: string } | null)?.rubro ?? '').trim() || 'ferretería'
+
   const visionResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
@@ -455,7 +464,7 @@ async function handlePhoto(message: TelegramMessage) {
           { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
           {
             type: 'text',
-            text: `Eres el asistente de inventario de una ferretería.
+            text: `Eres el asistente de inventario de un negocio de ${rubro}.
 Analizá esta imagen e identificá cualquier movimiento de inventario visible:
 facturas, remitos, pizarras, anotaciones, etiquetas de productos, o stock.
 Describí en una sola oración en español qué movimiento ves, mencionando:
@@ -492,7 +501,7 @@ async function handleTranscript(
   // Buscar usuario + modelo NLU de su empresa en una sola query
   const { data: usuario } = await supabase
     .from('usuarios')
-    .select('id, empresa_id, tienda_id, empresas(nlu_model)')
+    .select('id, empresa_id, tienda_id, empresas(nlu_model, rubro)')
     .eq('telegram_id', telegramUserId)
     .maybeSingle() as { data: UsuarioConEmpresa | null }
 
@@ -508,6 +517,7 @@ async function handleTranscript(
 
   const empresaId = usuario.empresa_id
   const nluModel  = (usuario.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
+  const rubro     = (usuario.empresas?.rubro ?? '').trim() || 'ferretería'
 
   // Cargar catálogos filtrados por empresa
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
@@ -518,7 +528,7 @@ async function handleTranscript(
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
-  const systemPrompt = `Eres el asistente de inventario de una ferretería peruana.
+  const systemPrompt = `Eres el asistente de inventario de un negocio de ${rubro} en Perú.
 Extrae TODOS los productos mencionados y responde SOLO con JSON válido:
 {
   "movimientos": [
@@ -915,5 +925,5 @@ interface UsuarioConEmpresa {
   id:         string
   empresa_id: string
   tienda_id:  number | null
-  empresas:   { nlu_model: string } | null
+  empresas:   { nlu_model: string; rubro?: string | null } | null
 }

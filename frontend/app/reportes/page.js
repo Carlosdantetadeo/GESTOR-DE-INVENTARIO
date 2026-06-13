@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart3, FileSpreadsheet, FileText, TrendingUp, Package, ArrowLeftRight } from 'lucide-react'
-import { getMovimientos, getStock, getTiendas, getEmpresaId } from '../../lib/queries'
+import { getMovimientos, getStock, getTiendas, getEmpresaId, getEmpresa } from '../../lib/queries'
 import { exportToPDF, exportToExcel } from '../../lib/export'
 
 function getTiendaNombre(mov) {
@@ -27,6 +27,7 @@ const REPORTES_DISPONIBLES = [
 
 export default function Reportes() {
   const [empresaId, setEmpresaId] = useState(null)
+  const [empresa, setEmpresa] = useState(null)
   const [tiendas, setTiendas] = useState([])
   const [tienda, setTienda] = useState('all')
   const [fecha, setFecha] = useState('today')
@@ -35,7 +36,10 @@ export default function Reportes() {
   useEffect(() => {
     getEmpresaId().then(id => {
       setEmpresaId(id)
-      if (id) getTiendas(id).then(setTiendas)
+      if (id) {
+        getTiendas(id).then(setTiendas)
+        getEmpresa(id).then(setEmpresa)
+      }
     })
   }, [])
 
@@ -100,7 +104,7 @@ export default function Reportes() {
               `S/ ${(total * p.costo).toFixed(2)}`
             ]
           })
-          exportToPDF(`VALORIZACIÓN DE ALMACÉN — ${rangeLabel}`, headers, rows, 'reporte_inventario.pdf', 'Ferretería GMS')
+          exportToPDF(`VALORIZACIÓN DE ALMACÉN — ${rangeLabel}`, headers, rows, 'reporte_inventario.pdf', empresa?.nombre || 'Empresa', empresa?.rubro || '')
         }
 
       } else {
@@ -139,7 +143,7 @@ export default function Reportes() {
             formatFecha(m.created_at)
           ])
           const filename = reporteId === 'ventas' ? 'reporte_ventas.pdf' : 'reporte_movimientos.pdf'
-          exportToPDF(titulo, headers, rows, filename, 'Ferretería GMS')
+          exportToPDF(titulo, headers, rows, filename, empresa?.nombre || 'Empresa', empresa?.rubro || '')
         }
       }
     } finally {

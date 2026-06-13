@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     return json({ error: 'Body inválido' }, 400)
   }
 
-  const { empresa_nombre, admin_email, sedes } = body
+  const { empresa_nombre, rubro, admin_email, sedes } = body
 
   // Validación básica
   if (!empresa_nombre?.trim()) return json({ error: 'Nombre de empresa requerido' }, 400)
@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
     .from('empresas')
     .insert({
       nombre:          empresa_nombre.trim(),
+      rubro:           (rubro ?? '').trim() || 'ferretería',  // migración 013
       telegram_token,  // columna agregada en migración 003
     })
     .select('id, nombre, telegram_token')
@@ -220,6 +221,7 @@ function json(body: unknown, status = 200) {
 
 interface OnboardingRequest {
   empresa_nombre: string
+  rubro?:         string
   admin_email:    string
   sedes:          string[]
 }

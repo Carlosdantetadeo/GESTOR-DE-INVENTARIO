@@ -7,6 +7,22 @@ export async function getEmpresaId() {
   return user.app_metadata?.empresa_id ?? null
 }
 
+/** Nombre y rubro de la empresa (encabezados de PDF). RLS limita a la propia. */
+export async function getEmpresa(empresaId) {
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('nombre, rubro')
+    .eq('id', empresaId)
+    .single()
+
+  if (error) {
+    console.error('Error fetching empresa:', error)
+    return null
+  }
+
+  return data
+}
+
 export async function deleteMovimiento(id) {
   const { error } = await supabase.from('movimientos').delete().eq('id', id)
   return !error
