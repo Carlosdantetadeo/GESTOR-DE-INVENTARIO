@@ -1,281 +1,205 @@
 # Guía de Flujos — Agent GMS (bot de Telegram)
 
-> Documento de lectura para **evaluar** los flujos actuales tal como están en
-> `supabase/functions/telegram-bot/index.ts` (estado: rama `feat/017-edicion-foto`).
-> No es el código; es el mapa de qué pasa en cada caso, paso a paso, para
-> detectar dónde están los problemas.
+> Mapa de los flujos del bot tal como quedan tras el **sprint 018 (UX unificada)**.
+> Fuente: `supabase/functions/telegram-bot/index.ts` + `tarjeta.ts` y la migración
+> `migrations/018_ux_unificada.sql`. Reemplaza el flujo de foto 016/017.
 
 ---
 
 ## 0. Puerta de entrada (todo update pasa por acá)
 
-Cada vez que Telegram manda algo (mensaje o tap de botón) entra por el webhook:
+1. **Solo POST.** Otro método → `200 ok`.
+2. **Seguridad (fail-closed).** Header `X-Telegram-Bot-Api-Secret-Token` == `TELEGRAM_WEBHOOK_SECRET`, si no → `401`.
+3. **Anti-duplicado.** `update_id` en `telegram_updates` (reintento → descarta).
+4. **200 inmediato + trabajo en background** (`waitUntil`): STT/NLU/auto-confirm corren por detrás.
 
-1. **Solo POST.** Cualquier otro método → `200 ok` y nada más.
-2. **Seguridad (fail-closed).** Se exige el header `X-Telegram-Bot-Api-Secret-Token`
-   igual a `TELEGRAM_WEBHOOK_SECRET`. Si no coincide (o el secret no está
-   configurado) → `401`. Sin esto, el bot **rechaza todo**.
-3. **Anti-duplicado.** Inserta `update_id` en `telegram_updates`. Si ya existía
-   (Telegram reintentó) → `200` y se descarta. Esto evita registrar dos veces.
-4. **Respuesta inmediata + trabajo en background.** Responde `200` enseguida y
-   procesa STT/NLU por detrás (`waitUntil`), para que Telegram no reintente
-   mientras la IA tarda.
-
-Luego, según lo que llegó, se rutea a UN handler (el primero que matchea gana):
+Ruteo (el primero que matchea gana):
 
 | Llega… | Va a… |
 |--------|-------|
-| Tap botón `undo_…` | Deshacer |
-| Tap botón `join_…` | Elegir sede al registrarse |
-| Tap botón `fotocompra_…` / `fotoventa_…` | Foto: fijar Compra/Venta |
-| Tap botón `fotoedit_…` | Foto: editar un producto |
-| Tap botón `fotook_…` | Foto: confirmar y registrar |
-| Tap botón `fotono_…` | Foto: eliminar todo / cancelar |
-| Texto `/start …` | Registro |
-| Nota de voz | Voz → transcribir → registrar |
-| Texto normal | (si hay edición de foto en curso → corrección) si no → registrar |
-| Foto | Foto → leer → preguntar Compra/Venta |
-
-> ⚠️ **Punto de evaluación:** el orden importa. El texto normal SIEMPRE pasa
-> primero por "¿hay una edición de foto pendiente?". Si quedó una edición
-> colgada, el siguiente texto del operario se interpreta como corrección, no
-> como movimiento nuevo. (Ver Flujo 5, sección "Gotchas".)
+| Tap `confirmar:<id>` / `corregir:<id>` / `cancelar:<id>` | Tarjeta: confirmar / editar / cancelar |
+| Tap `fototipo:compra:<id>` / `fototipo:venta:<id>` | Foto: fija tipo → Vision → tarjeta |
+| Tap `adminmodo:…` / `adminsede:…` | Admin: elige modo / sede |
+| Tap `undo_…` | Deshacer (ventana 5 min) |
+| Tap `join_…` | Operario elige sede al registrarse |
+| Texto `/start <token>` | Registro |
+| Texto exacto `/cancelar` o "cancelar" | **/cancelar universal** (prioridad alta) |
+| Nota de voz | STT → (¿/cancelar? ¿edición? ) → registro |
+| Texto normal | (¿edición en curso? → corrección) si no → registro |
+| Foto | Pregunta Compra/Venta (Vision NO se llama todavía) |
 
 ---
 
 ## 1. Registro de operario — `/start <token>`
 
 ```
-Operario escribe: /start <token>
-  │
-  ├─ Sin token → instrucciones de cómo registrarse. Fin.
-  │
-  ├─ Busca empresa por telegram_token O telegram_token_admin
-  │     └─ No existe / empresa inactiva → "Token inválido". Fin.
-  │
-  ├─ ¿El token es el de ADMIN?
-  │     SÍ → registra DIRECTO como rol=admin, tienda_id=null (ve todas las sedes).
-  │          No pregunta sede. Fin.
-  │
-  └─ Token de OPERARIO (vendedor):
-        ├─ ¿Ya registrado en ESTA misma empresa? → "Ya estás registrado". Fin.
-        ├─ ¿Registrado en OTRA empresa? → permite cambiar (re-vinculación).
-        └─ Muestra botones con las sedes → (sigue en Flujo 2)
+/start <token>
+  ├─ token de OPERARIO → botones de sede → handleJoin → rol=vendedor, tienda fija
+  └─ token de ADMIN    → pregunta el MODO (ver Flujo 7)
 ```
-
-**Casos especiales que ya están contemplados:**
-- `/start` con token de otra empresa → **re-vincula** (no bloquea).
-- Admin que quedó atado a una sede por error → reenvía `/start` con token admin
-  y se corrige a `tienda_id=null`.
+Re-vinculación: un token de otra empresa cambia de empresa (no bloquea).
 
 ---
 
-## 2. Elegir sede — tap en un botón de sede (`join_…`)
+## 2. Tarjeta de revisión unificada (núcleo de 018)
+
+Voz, texto y foto convergen en **la misma tarjeta** antes de registrar:
 
 ```
-Operario toca el botón de su sede
-  │
-  ├─ Re-valida el token (pudo expirar) → si no, "Token expirado". Fin.
-  ├─ Deriva rol (admin o vendedor) según qué token coincidió.
-  ├─ ¿Ya estaba en esta empresa? → "Ya tenés cuenta acá". Fin.
-  ├─ Valida que la sede pertenezca a la empresa del token (seguridad).
-  └─ Crea (INSERT) o re-vincula (UPDATE) el usuario → "¡Registrado!". Fin.
+🧾 Revisa el registro
+
+Tipo: Venta (salida)
+─────────
+1. Tubo PVC 1" — 5 × S/2.50 = S/12.50
+2. Codo PVC 1" — 10 × S/0.80 = S/8.00
+─────────
+Total: S/ 20.50
+
+⏱ Registrando en 5s… toca Corregir si algo está mal.   ← solo voz/texto auto-confirm
+
+[ ✏️ Corregir ] [ ✅ Confirmar ] [ ❌ Cancelar ]
 ```
 
-A partir de acá el operario ya puede mandar voz / texto / foto.
+- Construida por `construirTarjeta()` (módulo `tarjeta.ts`, con tests unitarios).
+- El pendiente vive en `movimiento_pendiente` hasta confirmar o cancelar.
+- `callback_data`: `corregir:<uuid>` / `confirmar:<uuid>` / `cancelar:<uuid>`.
 
 ---
 
-## 3. Nota de VOZ
+## 3. Voz y texto → tarjeta (con auto-confirmación)
 
 ```
-Llega audio
-  ├─ Descarga el audio de Telegram
-  ├─ Groq Whisper (whisper-large-v3-turbo) → texto transcrito
-  └─ Pasa el texto al motor común (Flujo 6, modo "registrar directo")
+Voz: descarga audio → Groq Whisper → texto   |   Texto: directo
+  ├─ ¿texto == "cancelar"? → /cancelar universal (Flujo 6)
+  ├─ ¿hay edición de foto/registro en curso? (voz) → "estás en edición"
+  └─ NLU → intención:
+       · reporte → Flujo 8
+       · registro:
+           – admin en modo consulta → rechazado (Flujo 7)
+           – si no, se crea movimiento_pendiente + tarjeta
 ```
 
-La voz **registra de inmediato** (no pide confirmación). Es el camino rápido.
+**Auto-confirmación (decisiones #2 y #3):**
+- Si el NLU marca `tipo_explicito: true` (hay verbo claro: vendí, compré, llegó…)
+  **y** `confianza ≥ 0.7` → la tarjeta muestra cuenta regresiva y a los **5s** se
+  registra sola (vía `waitUntil`), salvo que se toque Corregir/Cancelar antes.
+- Sin verbo explícito o con baja confianza → **sin** countdown: exige tap en Confirmar.
+- **La transcripción nunca se ecoa al chat** (queda solo en backend, para auditar).
 
 ---
 
-## 4. TEXTO normal
-
-```
-Llega texto (no empieza con /)
-  ├─ ¿El operario tiene una edición de foto en curso?
-  │     SÍ → el texto es la corrección de ese producto (Flujo 5). Fin.
-  └─ NO → pasa el texto al motor común (Flujo 6, modo "registrar directo")
-```
-
-El texto, igual que la voz, **registra de inmediato**.
-
----
-
-## 5. FOTO (factura / boleta / remito) — flujo NUEVO (016 + 017)
-
-Este es el flujo que más cambió y el que conviene mirar con lupa.
-
-### 5.1 Llega la foto
+## 4. Foto → tipo upfront → Vision → tarjeta
 
 ```
 Llega foto
-  ├─ Descarga la imagen
-  ├─ Groq Vision (llama-4-scout) → transcribe los renglones (prosa, línea por línea)
-  │     └─ Si no hay info de inventario → "No encontré productos". Fin.
-  └─ Pasa esa prosa al motor común (Flujo 6, modo "confirmar")
-        └─ En modo confirmar NO inserta: estaciona en `foto_pendiente`
-           y muestra el PREVIEW.
+  ├─ ¿edición en curso? → "estás en edición"
+  ├─ admin modo consulta → rechazado
+  └─ guarda solo el file_id en movimiento_pendiente (channel=foto, tipo=null)
+     y manda: "📷 Foto recibida. ¿Es Compra o Venta?"  [📦 Compra][💰 Venta][❌ Cancelar]
+        └─ Tap Compra/Venta (fototipo:):
+             · recién acá se descarga la imagen y se llama a Groq Vision
+               (el prompt sabe si es compra o venta)
+             · NLU estructura los ítems
+             · se reemplaza el mensaje por la TARJETA unificada (sin countdown)
+             · el tipo queda BLOQUEADO: si se equivocó, Cancelar y reenviar
 ```
 
-### 5.2 Preview — el operario elige dirección
-
-```
-Mensaje PREVIEW:
-   🖼️ "Revisá lo que entendí de la foto"
-   🗒️ <transcripción de la imagen>
-   • Producto × cantidad · precio
-   ¿Es una compra o una venta?
-
-   [📦 Compra]  [💰 Venta]
-   [❌ Cancelar]
-```
-
-- `❌ Cancelar` → borra la foto pendiente. Nada se registra. Fin.
-- `📦 Compra` / `💰 Venta` → fija la dirección en los ítems (compra = ingreso,
-  venta = venta), **lo guarda** y pasa al DETALLE editable. **Todavía no registra.**
-
-> Idempotente: el operario puede cambiar de opinión y tocar el otro botón.
-
-### 5.3 Detalle editable (017) — el corazón del cambio
-
-```
-Mensaje DETALLE (reemplaza al preview):
-   📦 Compra — revisá el detalle:
-
-   1. Producto A
-      Cantidad: 5
-      Precio unitario: S/. 2.00
-      Total: S/. 10.00
-   2. Producto B
-      ...
-   💵 Total: S/. ...
-
-   [✏️ Editar Producto A]
-   [✏️ Editar Producto B]
-   [✅ Confirmar y registrar]
-   [🗑️ Eliminar todo]
-```
-
-Tres acciones posibles:
-
-- **`✏️ Editar <producto>`** → el bot pide por mensaje:
-  `nombre, cantidad, precio` (ej: `Tubo PVC 1", 6, 2.50`).
-  El **siguiente texto** del operario corrige ESE producto, refresca el detalle
-  (totales y botones) y confirma "✅ Actualizado → …".
-- **`✅ Confirmar y registrar`** → recién acá se insertan en `movimientos`
-  (auto-crea productos nuevos, actualiza stock por trigger) y manda el mensaje
-  final con botones de **Deshacer**.
-- **`🗑️ Eliminar todo`** → borra la foto pendiente. Nada se registra. Fin.
-
-**Por qué editar ANTES de registrar:** `movimientos` es un ledger append-only y
-el stock se mantiene por trigger en INSERT/DELETE (no en UPDATE). Editar antes de
-confirmar evita tocar el stock dos veces.
-
-### 5.4 Gotchas de la foto (PUNTOS DE EVALUACIÓN)
-
-1. **Edición colgada.** Si el operario toca `✏️ Editar` y luego NO manda la
-   corrección (se va, manda una voz, otra foto…), queda `editando_index` seteado.
-   Su próximo **texto** se tomará como corrección, no como movimiento nuevo.
-   Salidas: tocar otra opción del detalle (Confirmar / Eliminar todo) o tocar
-   Editar en otro producto. **No hay un "cancelar edición" explícito.**
-2. **Sin "Confirmar" la foto no se registra nunca.** El paso extra (Compra/Venta
-   → Confirmar) son **dos taps** antes de que entre al inventario. Evaluar si es
-   la fricción deseada.
-3. **Foto vieja con botones viejos.** Una foto estacionada antes de un deploy
-   conserva los botones del flujo anterior; hay que mandar una foto nueva.
-4. **Editar cambia el nombre →** el producto se re-resuelve/crea al confirmar
-   (se desvincula del `producto_id` que había adivinado la IA).
-5. **Múltiples fotos pendientes a la vez.** La corrección de texto agarra la más
-   reciente que tenga edición en curso; con varias fotos abiertas puede confundir.
+**Por qué:** no se gasta Vision en fotos canceladas (decisión #4).
 
 ---
 
-## 6. Motor común NLU (lo comparten voz, texto y foto)
+## 5. Modo edición por ítem ([Corregir])
 
 ```
-Texto/prosa entra
-  ├─ Busca al usuario por telegram_id + el modelo NLU de su empresa
-  │     └─ No registrado → "Tu cuenta no está registrada". Fin.
-  ├─ Carga catálogo de productos y tiendas de la empresa
-  ├─ Llama al NLU (groq-llama / anthropic-haiku / anthropic-sonnet) que decide:
-  │
-  │   A) ¿Es un REPORTE? (pregunta: "¿cuánto vendí hoy?", "stock de cemento")
-  │        → Flujo 7 (solo admins; vendedor recibe aviso de permiso)
-  │
-  │   B) ¿Es un REGISTRO? (afirmación: "vendí 3 tubos")
-  │        → arma lista de movimientos
-  │
-  ├─ ¿Modo "confirmar" (foto)? → estaciona en foto_pendiente + preview (Flujo 5)
-  └─ ¿Modo "directo" (voz/texto)? → inserta movimientos ya (abajo)
+Tap [✏️ Corregir]
+  → "¿Qué ítem querés corregir? Enviá el número (1, 2, 3…) o /cancelar."  [❌ Cancelar]
+  → el operario envía un número (texto)
+       · fuera de rango → "Número fuera de rango…"
+       · válido → "Ítem N actual: …  Enviá: nombre, cantidad, precio"
+  → el operario envía "nombre, cantidad, precio"
+       · no parsea → "No entendí. Enviá: nombre, cantidad, precio…"
+       · OK → actualiza ese ítem, recalcula total, vuelve a la TARJETA completa
 ```
 
-**Al insertar (`insertarMovimientos`):**
-- Auto-crea productos que no estén en el catálogo (categoría "General").
-- Resuelve la tienda por defecto (la del operario; ingreso/traslado tienen reglas).
-- Inserta en `movimientos` → el trigger actualiza `stock`.
-- Manda confirmación con un botón **Deshacer** por producto (+ "Deshacer todo"
-  si hay varios y la lista de ids entra en el límite de 64 bytes de Telegram).
-
-> ⚠️ **Punto de evaluación:** ante la duda entre reporte y registro, el NLU
-> asume REGISTRO. Una pregunta mal redactada puede registrar un movimiento.
+- Entrar en edición **cancela la auto-confirmación**.
+- Durante la edición, **una voz o foto no se interpreta** como nuevo registro:
+  "Estás en modo edición… Terminá o /cancelar."
 
 ---
 
-## 7. REPORTES (solo admin) — por voz o texto
+## 6. `/cancelar` universal (decisión #7)
+
+Comando de escape desde cualquier estado de espera. Dispara por:
+- Texto exacto `/cancelar` o `cancelar` (case-insensitive, tolera puntuación).
+- Nota de voz cuya transcripción normalizada sea "cancelar".
+
+Acción: marca `cancelled` **todos** los pendientes activos del operario y responde
+"✅ Cancelado. Estás en estado neutro."
+
+---
+
+## 7. Admin — modo al registrarse (decisión #8)
+
+```
+/start <token_admin>  (nuevo o re-vínculo)
+  → "¿Qué modo de admin usarás?"
+       [📊 Solo consulta]   → rol=admin, tienda_id=null, modo_admin=consulta
+       [📦 Con sede asignada] → elige sede → modo_admin=con_sede, tienda_id=<sede>
+```
+
+- **Modo consulta**: ve reportes consolidados, **no registra**. Si intenta registrar
+  (voz/texto/foto) → "Tu cuenta está en modo consulta…".
+- **Con sede**: registra movimientos y ve reportes.
+- Reenviar `/start <token_admin>` vuelve a preguntar el modo (actualiza).
+
+---
+
+## 8. Reportes (decisión #9: vendedor también)
 
 ```
 NLU detecta intención de reporte
-  ├─ ¿El usuario es admin? NO → "Los reportes son solo para administradores". Fin.
-  └─ SÍ:
-       ├─ ¿Pidió stock de un producto puntual? → muestra stock actual por sede.
-       └─ Si no, reporte de ventas del período (hoy / semana / mes, hora Perú):
-            total, ticket promedio y top-5 productos por venta
-            (opcionalmente filtrado por sede).
+  ├─ vendedor → SIEMPRE scoped a SU sede (ignora override del NLU, sin avisar la restricción)
+  └─ admin    → consolidado por defecto; respeta sede mencionada por el NLU
 ```
+Modos: **stock** de un producto puntual, o **ventas** del período (hoy/semana/mes,
+hora Perú), con total, ticket promedio y top-5.
+
+Al final del reporte se anexa un **deep-link al dashboard** — *dormido* hasta que
+`DASHBOARD_BASE_URL` esté seteado (si está vacío, el link no se incluye).
 
 ---
 
-## 8. DESHACER (`undo_…`) — disponible tras registrar
+## 9. Confirmar y Deshacer
 
 ```
-Operario toca "↩️ Deshacer"
-  ├─ Verifica que los movimientos sean de SU empresa (seguridad)
-  ├─ DELETE de esos movimientos → el trigger revierte el stock
-  └─ Edita el mensaje: "↩️ Registro(s) revertido(s)"
+Tap [✅ Confirmar] (o auto-confirm a 5s)
+  → mapea tipo (compra→ingreso) y registra en movimientos (auto-crea productos)
+  → trigger actualiza stock
+  → mensaje final con botones [↩️ Deshacer]
 ```
 
-Aplica a lo registrado por voz, texto y **foto confirmada** (no a la foto en
-preview/detalle: ahí se usa "Eliminar todo").
+**Deshacer (decisión #10):**
+- Dentro de **5 minutos** → borra los movimientos, el trigger revierte el stock.
+- Pasados 5 min → "Ventana de reversión vencida. Pedile al admin que lo revierta
+  desde el dashboard." (infra: tabla `auditoria_reversiones` + RPC
+  `revertir_movimiento_admin`, que usará el dashboard, no el bot).
 
 ---
 
-## Resumen de "momentos de confirmación" por canal
+## Resumen de confirmación por canal
 
-| Canal | ¿Pide confirmación antes de registrar? | ¿Cómo se corrige? |
-|-------|----------------------------------------|-------------------|
-| Voz   | No, registra directo                   | Botón Deshacer |
-| Texto | No, registra directo                   | Botón Deshacer |
-| Foto  | Sí: Compra/Venta → (editar) → Confirmar | Editar en el detalle, o Deshacer ya registrado |
+| Canal | ¿Auto-confirma? | Corrección antes de registrar | Tras registrar |
+|-------|-----------------|-------------------------------|----------------|
+| Voz   | Sí, a 5s, si verbo explícito + confianza alta | [Corregir] / [Cancelar] | [Deshacer] 5 min |
+| Texto | Igual que voz | [Corregir] / [Cancelar] | [Deshacer] 5 min |
+| Foto  | No (siempre tap [Confirmar]) | [Corregir] / [Cancelar] | [Deshacer] 5 min |
 
 ---
 
 ## Dónde mirar si algo falla
 
-- **El bot no responde a nada** → revisar `TELEGRAM_WEBHOOK_SECRET` (paso 0.2).
-- **Registra dos veces** → revisar `telegram_updates` / trigger de stock.
-- **Foto no registra** → ¿llegaron a tocar "✅ Confirmar"? ¿se aplicó la
-  migración 017? (columnas `editando_index`, `detalle_message_id`).
-- **Un texto se "comió" como corrección** → había una edición de foto colgada
-  (gotcha 5.4.1).
+- **Bot mudo** → `TELEGRAM_WEBHOOK_SECRET` (paso 0.2).
+- **No se registra una foto** → ¿se tocó [Confirmar]? ¿se aplicó migración 018?
+- **Un texto se "comió" como corrección** → había una edición en curso (Flujo 5).
+- **Auto-confirm no dispara** → el NLU no marcó `tipo_explicito`/confianza alta (Flujo 3).
 - **Stock no cuadra con el ledger** → `SELECT recalcular_stock();` (ver CLAUDE.md).
