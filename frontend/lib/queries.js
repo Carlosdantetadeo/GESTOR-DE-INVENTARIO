@@ -221,48 +221,60 @@ export async function getCategorias(empresaId) {
 }
 
 /**
- * Alta manual de un producto. Resuelve (o crea) la categoría por nombre — mismo
- * patrón que el bot al auto-crear productos: categoría "General" por defecto.
- * RLS (WITH CHECK sobre empresa_id) garantiza que solo se inserta en la empresa
- * del admin autenticado. El choque con el unique (empresa_id, LOWER(nombre)) se
- * traduce a un mensaje amable.
+ * Resuelve (o crea) una categoría por nombre dentro de una empresa, case-insensitive.
+ * Mismo patrón que usa el bot al auto-crear productos. Cadena vacía → 'General'.
+ * Devuelve el id de categoría o null si no se pudo crear.
  */
-export async function createProducto(empresaId, { nombre, categoria, costo, precio, stockMinimo }) {
+async function resolveCategoriaId(empresaId, categoria) {
   const catName = (categoria || '').trim() || 'General'
-
-  // Resolver o crear la categoría por nombre (case-insensitive).
-  let categoriaId = null
   const { data: catExistente } = await supabase
     .from('categorias')
     .select('id')
     .eq('empresa_id', empresaId)
     .ilike('nombre', catName)
     .maybeSingle()
-  if (catExistente) {
-    categoriaId = catExistente.id
-  } else {
-    const { data: catNueva, error: catErr } = await supabase
-      .from('categorias')
-      .insert({ nombre: catName, empresa_id: empresaId })
-      .select('id')
-      .single()
-    if (catErr) {
-      console.error('Error creando categoría:', catErr)
-      return { ok: false, message: 'No se pudo crear la categoría.' }
-    }
-    categoriaId = catNueva?.id ?? null
+  if (catExistente) return catExistente.id
+
+  const { data: catNueva, error: catErr } = await supabase
+    .from('categorias')
+    .insert({ nombre: catName, empresa_id: empresaId })
+    .select('id')
+    .single()
+  if (catErr) {
+    console.error('Error creando categoría:', catErr)
+    return null
   }
+  return catNueva?.id ?? null
+}
+
+/**
+ * Alta manual de un producto. Resuelve (o crea) la categoría por nombre — mismo
+ * patrón que el bot al auto-crear productos: categoría "General" por defecto.
+ * RLS (WITH CHECK sobre empresa_id) garantiza que solo se inserta en la empresa
+ * del admin autenticado. El choque con el unique (empresa_id, LOWER(nombre)) se
+ * traduce a un mensaje amable.
+ *
+ * `unidad` y `precioReferencial` son del catálogo (sprint 020) y opcionales:
+ * solo se escriben si vienen definidos, para no pisar el flujo de inventario.
+ */
+export async function createProducto(empresaId, { nombre, categoria, costo, precio, stockMinimo, unidad, precioReferencial }) {
+  const categoriaId = await resolveCategoriaId(empresaId, categoria)
+  if (categoriaId === null) return { ok: false, message: 'No se pudo crear la categoría.' }
+
+  const fila = {
+    nombre:                nombre.trim(),
+    empresa_id:            empresaId,
+    categoria_id:          categoriaId,
+    ultimo_costo:          costo ?? 0,
+    precio_venta_sugerido: precio ?? 0,
+    stock_minimo:          stockMinimo ?? 5,
+  }
+  if (unidad !== undefined)           fila.unidad = (unidad || 'und')
+  if (precioReferencial !== undefined) fila.precio_referencial = precioReferencial
 
   const { data, error } = await supabase
     .from('productos')
-    .insert({
-      nombre:                nombre.trim(),
-      empresa_id:            empresaId,
-      categoria_id:          categoriaId,
-      ultimo_costo:          costo ?? 0,
-      precio_venta_sugerido: precio ?? 0,
-      stock_minimo:          stockMinimo ?? 5,
-    })
+    .insert(fila)
     .select('id')
     .single()
 
@@ -273,6 +285,124 @@ export async function createProducto(empresaId, { nombre, categoria, costo, prec
   }
 
   return { ok: true, id: data.id }
+}
+
+/**
+ * Catálogo de productos de la empresa con su stock total agregado (todas las
+ * tiendas). RLS limita a la empresa del usuario. El stock se suma en memoria
+ * a partir de la tabla `stock`.
+ */
+export async function getCatalogo(empresaId) {
+  const [{ data: prods, error: pErr }, { data: stockRows }] = await Promise.all([
+    supabase
+      .from('productos')
+      .select('id, nombre, unidad, precio_referencial, categorias (nombre)')
+      .order('nombre'),
+    supabase.from('stock').select('producto_id, cantidad'),
+  ])
+
+  if (pErr) {
+    console.error('Error fetching catálogo:', pErr)
+    return []
+  }
+
+  const stockPorProducto = {}
+  ;(stockRows ?? []).forEach(s => {
+    stockPorProducto[s.producto_id] = (stockPorProducto[s.producto_id] ?? 0) + (s.cantidad ?? 0)
+  })
+
+  return (prods ?? []).map(p => ({
+    id:                p.id,
+    nombre:            p.nombre,
+    categoria:         p.categorias?.nombre || 'General',
+    unidad:            p.unidad || 'und',
+    precioReferencial: p.precio_referencial,
+    stockTotal:        stockPorProducto[p.id] ?? 0,
+  }))
+}
+
+/**
+ * Edita los campos de catálogo de un producto (nombre, categoría por nombre,
+ * unidad, precio referencial). RLS garantiza que solo afecta la empresa propia.
+ */
+export async function updateProductoCatalogo(empresaId, productoId, { nombre, categoria, unidad, precioReferencial }) {
+  const fila = {}
+  if (nombre !== undefined) fila.nombre = nombre.trim()
+  if (unidad !== undefined) fila.unidad = unidad || 'und'
+  if (precioReferencial !== undefined) fila.precio_referencial = precioReferencial
+  if (categoria !== undefined) {
+    const categoriaId = await resolveCategoriaId(empresaId, categoria)
+    if (categoriaId === null) return { ok: false, message: 'No se pudo resolver la categoría.' }
+    fila.categoria_id = categoriaId
+  }
+
+  const { error } = await supabase.from('productos').update(fila).eq('id', productoId)
+  if (error) {
+    console.error('Error actualizando producto:', error)
+    const dup = error.code === '23505'
+    return { ok: false, message: dup ? 'Ya existe un producto con ese nombre.' : error.message }
+  }
+  return { ok: true }
+}
+
+/**
+ * Elimina un producto del catálogo. Si tiene movimientos o stock asociados, la
+ * FK lo impide (23503) y se devuelve un mensaje amable en vez de un error crudo.
+ */
+export async function deleteProducto(productoId) {
+  const { error } = await supabase.from('productos').delete().eq('id', productoId)
+  if (error) {
+    console.error('Error eliminando producto:', error)
+    const enUso = error.code === '23503'
+    return { ok: false, message: enUso
+      ? 'No se puede eliminar: el producto tiene movimientos o stock registrados.'
+      : error.message }
+  }
+  return { ok: true }
+}
+
+/**
+ * Importa filas de catálogo (de un Excel/CSV ya parseado). Cada fila:
+ *   { nombre, categoria?, unidad?, precioReferencial? }
+ * Upsert por (empresa_id, LOWER(nombre)): si el producto ya existe, actualiza
+ * precio referencial / categoría / unidad; si no, lo crea. No duplica.
+ * Devuelve { importados, actualizados, errores }.
+ */
+export async function importProductosCatalogo(empresaId, filas) {
+  // Mapa de nombres existentes (lower) → id, para decidir insert vs update.
+  const { data: existentes } = await supabase
+    .from('productos')
+    .select('id, nombre')
+  const porNombre = {}
+  ;(existentes ?? []).forEach(p => { porNombre[p.nombre.trim().toLowerCase()] = p.id })
+
+  let importados = 0, actualizados = 0, errores = 0
+
+  for (const fila of filas) {
+    const nombre = (fila.nombre || '').trim()
+    if (!nombre) { errores++; continue }
+    const existenteId = porNombre[nombre.toLowerCase()]
+
+    if (existenteId) {
+      const res = await updateProductoCatalogo(empresaId, existenteId, {
+        categoria:         fila.categoria,
+        unidad:            fila.unidad,
+        precioReferencial: fila.precioReferencial,
+      })
+      if (res.ok) actualizados++; else errores++
+    } else {
+      const res = await createProducto(empresaId, {
+        nombre,
+        categoria:         fila.categoria,
+        unidad:            fila.unidad,
+        precioReferencial: fila.precioReferencial,
+      })
+      if (res.ok) { importados++; porNombre[nombre.toLowerCase()] = res.id }
+      else errores++
+    }
+  }
+
+  return { importados, actualizados, errores }
 }
 
 /**
