@@ -23,10 +23,6 @@ const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
 const DASHBOARD_BASE_URL = Deno.env.get('DASHBOARD_BASE_URL') ?? ''
 const JWT_SECRET         = Deno.env.get('JWT_SECRET') ?? ''
 
-// Auto-confirmación de voz/texto (018, decisión #2): 5s con cuenta regresiva.
-const AUTO_CONFIRM_SEGUNDOS = 5
-// Umbral de confianza del NLU bajo el cual NO se auto-confirma (decisión #3).
-const CONFIANZA_MINIMA_AUTO = 0.7
 // Ventana de auto-reversión del vendedor (018, decisión #10).
 const UNDO_VENTANA_MS = 5 * 60 * 1000
 
@@ -688,23 +684,19 @@ async function procesarRegistro(
     return
   }
 
-  // Auto-confirmación (decisiones #2 y #3): solo voz/texto, con verbo explícito y
-  // confianza alta. Sin eso, la tarjeta espera tap explícito.
-  const autoConfirm = nlu.tipo_explicito && nlu.tipo !== null && nlu.confianza >= CONFIANZA_MINIMA_AUTO
-  const autoConfirmAt = autoConfirm ? new Date(Date.now() + AUTO_CONFIRM_SEGUNDOS * 1000).toISOString() : null
-
+  // La tarjeta SIEMPRE espera tap explícito en [✅ Confirmar] (voz, texto y foto).
+  // No hay auto-confirmación.
   const total = nlu.items.reduce((s, it) => s + it.cantidad * it.precio, 0)
   const { data: pend } = await supabase
     .from('movimiento_pendiente')
     .insert({
-      empresa_id:      empresaId,
-      telegram_id:     telegramUserId,
+      empresa_id:    empresaId,
+      telegram_id:   telegramUserId,
       channel,
-      tipo:            nlu.tipo,
-      items:           nlu.items,
+      tipo:          nlu.tipo,
+      items:         nlu.items,
       total,
-      transcripcion:   transcript,
-      auto_confirm_at: autoConfirmAt,
+      transcripcion: transcript,
     })
     .select('*')
     .single() as { data: MovPendiente | null }
@@ -714,27 +706,24 @@ async function procesarRegistro(
     return
   }
 
-  await enviarTarjeta(chatId, pend, autoConfirm ? { countdownSegundos: AUTO_CONFIRM_SEGUNDOS } : {})
-
-  if (autoConfirm) {
-    programarAutoConfirm(chatId, pend.id, telegramUserId)
-  }
+  await enviarTarjeta(chatId, pend, {})
 }
 
 // ─── Insert de movimientos ────────────────────────────────────────────────────
-// Inserción final, llamada por confirmarPendiente (voz/texto/foto) al confirmar
-// la tarjeta. Auto-crea productos que no estén en el catálogo, inserta los
-// movimientos y manda el mensaje con los botones de Deshacer (ventana 5 min).
+// Inserción final, llamada por confirmarPendiente al confirmar la tarjeta.
+// Auto-crea productos que no estén en el catálogo, inserta los movimientos y
+// DEVUELVE el texto + teclado de Deshacer (NO manda mensaje: el caller edita la
+// tarjeta existente, sin mensaje nuevo). Devuelve null si no se registró nada.
+type ResultadoInsert = { text: string; keyboard: Array<Array<{ text: string; callback_data: string }>> }
 
 async function insertarMovimientos(
-  chatId: number,
   empresaId: string,
   usuario: { id: string; tienda_id: number | null },
   items: ParsedMovimiento[],
   tiendas: Array<{ id: number; nombre: string }> | null,
   productos: Array<{ id: number; nombre: string }> | null,
   transcript: string,
-) {
+): Promise<ResultadoInsert | null> {
   const primeraT = tiendas?.[0]?.id ?? null
   const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
   const tipoRegistrado: Record<string, string> = {
@@ -857,14 +846,7 @@ async function insertarMovimientos(
     )
   }
 
-  if (movimientos.length === 0) {
-    await tg('sendMessage', {
-      chat_id: chatId,
-      text: `❓ No pude identificar productos en: _"${transcript}"_\n\nMencioná el nombre del producto claramente.`,
-      parse_mode: 'Markdown',
-    })
-    return
-  }
+  if (movimientos.length === 0) return null
 
   const encabezado = movimientos.length === 1
     ? `✅ *${tipoRegistrado[movimientos[0].tipo] ?? 'Movimiento registrado'}*`
@@ -876,28 +858,23 @@ async function insertarMovimientos(
     callback_data: `undo_${m.id}`,
   }]))
   // FIX (B2): callback_data tiene un límite duro de 64 bytes en Telegram.
-  // Si la lista de ids no entra, Telegram rechaza el sendMessage COMPLETO y
-  // el operario se queda sin confirmación ni botones. En ese caso se omite
-  // solo el botón "Deshacer todo" (los individuales siempre caben).
+  // Si la lista de ids no entra, se omite solo el botón "Deshacer todo".
   const undoTodo = `undo_${movimientos.map(m => m.id).join(',')}`
   const keyboard = movimientos.length > 1 && undoTodo.length <= 64
     ? [...botonesIndividuales, [{ text: '↩️ Deshacer todo', callback_data: undoTodo }]]
     : botonesIndividuales
 
   // Decisión #2: NO se ecoa la transcripción al chat (queda solo en backend).
-  await tg('sendMessage', {
-    chat_id: chatId,
+  // Fix 2: devolvemos el contenido; el caller EDITA la tarjeta (sin mensaje nuevo).
+  return {
     text:
       `${encabezado}\n\n` +
       lineas.join('\n\n') +
       (totalGeneral > 0 ? `\n\n💵 *Total: S/. ${totalGeneral.toFixed(2)}*` : '') +
       (omitidos > 0 ? `\n\n⚠️ _${omitidos} producto(s) no se registraron._` : '') +
       `\n\n_Tenés 5 minutos para deshacer._`,
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: keyboard,
-    },
-  })
+    keyboard,
+  }
 }
 
 // ─── Tarjeta de revisión unificada (018) ─────────────────────────────────────
@@ -1108,8 +1085,9 @@ function mapTipoLedger(tipo: MovPendiente['tipo']): 'venta' | 'ingreso' | 'trasl
 }
 
 // Reclama el pendiente de forma atómica (cancelled=true devuelve fila SOLO si
-// seguía activo → evita doble registro entre auto-confirm y tap) y registra.
-async function confirmarPendiente(chatId: number, pendId: string, telegramId: number | undefined): Promise<boolean> {
+// seguía activo → evita doble registro ante doble tap), registra, y EDITA la
+// tarjeta (msgId) con el resultado — sin mandar mensaje nuevo (Fix 2).
+async function confirmarPendiente(chatId: number, msgId: number, pendId: string, telegramId: number | undefined) {
   const { data: claim } = await supabase
     .from('movimiento_pendiente')
     .update({ cancelled: true })
@@ -1118,11 +1096,17 @@ async function confirmarPendiente(chatId: number, pendId: string, telegramId: nu
     .eq('cancelled', false)
     .select('*')
   const pend = claim?.[0] as MovPendiente | undefined
-  if (!pend || !pend.tipo || (pend.items ?? []).length === 0) return false
+  if (!pend || !pend.tipo || (pend.items ?? []).length === 0) {
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '⚠️ Esta revisión ya no está disponible.' })
+    return
+  }
 
   const { data: usuario } = await supabase
     .from('usuarios').select('id, tienda_id').eq('telegram_id', telegramId).maybeSingle()
-  if (!usuario) return false
+  if (!usuario) {
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '⛔ Tu cuenta ya no está registrada en el sistema.' })
+    return
+  }
 
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
     supabase.from('productos').select('id, nombre').eq('empresa_id', pend.empresa_id).limit(200),
@@ -1141,30 +1125,24 @@ async function confirmarPendiente(chatId: number, pendId: string, telegramId: nu
     costo_unitario:    ledgerTipo === 'ingreso' ? it.precio : 0,
   }))
 
-  await insertarMovimientos(
-    chatId, pend.empresa_id,
+  const resultado = await insertarMovimientos(
+    pend.empresa_id,
     usuario as { id: string; tienda_id: number | null },
     items, tiendas, productos,
     pend.transcripcion ?? '',
   )
-  return true
-}
 
-// Agenda la auto-confirmación a los 5s (decisión #2) con waitUntil. Antes de
-// confirmar verifica que el pendiente siga vivo y sin edición.
-function programarAutoConfirm(chatId: number, pendId: string, telegramId: number | undefined) {
-  const tarea = (async () => {
-    await new Promise(r => setTimeout(r, AUTO_CONFIRM_SEGUNDOS * 1000))
-    const { data } = await supabase
-      .from('movimiento_pendiente')
-      .select('cancelled, editing_state')
-      .eq('id', pendId)
-      .maybeSingle()
-    if (!data || data.cancelled || data.editing_state) return   // cancelado o en edición → abortar
-    await confirmarPendiente(chatId, pendId, telegramId)
-  })()
-  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(tarea)
-  else tarea.catch(console.error)
+  if (!resultado) {
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No pude registrar los productos. Reintentá.' })
+    return
+  }
+
+  await tg('editMessageText', {
+    chat_id: chatId, message_id: msgId,
+    text: resultado.text,
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: resultado.keyboard },
+  })
 }
 
 async function handleConfirmarCb(cb: CallbackQuery) {
@@ -1174,11 +1152,7 @@ async function handleConfirmarCb(cb: CallbackQuery) {
   const pendId     = cb.data.split(':')[1]
   await tg('answerCallbackQuery', { callback_query_id: cb.id })
 
-  const ok = await confirmarPendiente(chatId, pendId, telegramId)
-  await tg('editMessageText', {
-    chat_id: chatId, message_id: msgId,
-    text: ok ? '✅ Registrado.' : '⚠️ Esta revisión ya no está disponible.',
-  })
+  await confirmarPendiente(chatId, msgId, pendId, telegramId)
 }
 
 async function handleCorregirCb(cb: CallbackQuery) {
