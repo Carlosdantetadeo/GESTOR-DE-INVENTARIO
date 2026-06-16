@@ -136,6 +136,12 @@ async function procesarUpdate(update: TelegramUpdate) {
       return
     }
 
+    // /deshacer (texto): revierte la última registración (reemplaza al botón).
+    if (msg.text && esComandoDeshacer(msg.text)) {
+      await handleDeshacerCmd(msg.chat.id, msg.from?.id)
+      return
+    }
+
     if (msg.voice) {
       await handleVoice(msg)
       return
@@ -712,10 +718,8 @@ async function procesarRegistro(
 // ─── Insert de movimientos ────────────────────────────────────────────────────
 // Inserción final, llamada por confirmarPendiente al confirmar la tarjeta.
 // Auto-crea productos que no estén en el catálogo, inserta los movimientos y
-// DEVUELVE el texto + teclado de Deshacer (NO manda mensaje: el caller edita la
-// tarjeta existente, sin mensaje nuevo). Devuelve null si no se registró nada.
-type ResultadoInsert = { text: string; keyboard: Array<Array<{ text: string; callback_data: string }>> }
-
+// DEVUELVE los ids insertados (señal de éxito; el caller arma/edita el mensaje).
+// NO manda mensaje. Devuelve null si no se registró nada.
 async function insertarMovimientos(
   empresaId: string,
   usuario: { id: string; tienda_id: number | null },
@@ -723,7 +727,7 @@ async function insertarMovimientos(
   tiendas: Array<{ id: number; nombre: string }> | null,
   productos: Array<{ id: number; nombre: string }> | null,
   transcript: string,
-): Promise<ResultadoInsert | null> {
+): Promise<string[] | null> {
   const primeraT = tiendas?.[0]?.id ?? null
   const emoji: Record<string, string> = { venta: '💰', ingreso: '📦', gasto: '🔧', traslado: '🔄' }
   const tipoRegistrado: Record<string, string> = {
@@ -847,34 +851,7 @@ async function insertarMovimientos(
   }
 
   if (movimientos.length === 0) return null
-
-  const encabezado = movimientos.length === 1
-    ? `✅ *${tipoRegistrado[movimientos[0].tipo] ?? 'Movimiento registrado'}*`
-    : `✅ *${movimientos.length} movimientos registrados*`
-
-  // Botones: uno por producto + "Deshacer todo" si hay más de uno
-  const botonesIndividuales = movimientos.map(m => ([{
-    text:          `↩️ ${m.nombre.length > 25 ? m.nombre.slice(0, 23) + '…' : m.nombre}`,
-    callback_data: `undo_${m.id}`,
-  }]))
-  // FIX (B2): callback_data tiene un límite duro de 64 bytes en Telegram.
-  // Si la lista de ids no entra, se omite solo el botón "Deshacer todo".
-  const undoTodo = `undo_${movimientos.map(m => m.id).join(',')}`
-  const keyboard = movimientos.length > 1 && undoTodo.length <= 64
-    ? [...botonesIndividuales, [{ text: '↩️ Deshacer todo', callback_data: undoTodo }]]
-    : botonesIndividuales
-
-  // Decisión #2: NO se ecoa la transcripción al chat (queda solo en backend).
-  // Fix 2: devolvemos el contenido; el caller EDITA la tarjeta (sin mensaje nuevo).
-  return {
-    text:
-      `${encabezado}\n\n` +
-      lineas.join('\n\n') +
-      (totalGeneral > 0 ? `\n\n💵 *Total: S/. ${totalGeneral.toFixed(2)}*` : '') +
-      (omitidos > 0 ? `\n\n⚠️ _${omitidos} producto(s) no se registraron._` : '') +
-      `\n\n_Tenés 5 minutos para deshacer._`,
-    keyboard,
-  }
+  return movimientos.map(m => m.id)
 }
 
 // ─── Tarjeta de revisión unificada (018) ─────────────────────────────────────
@@ -952,6 +929,65 @@ async function handleCancelarUniversal(chatId: number, telegramId: number | unde
     .eq('telegram_id', telegramId)
     .eq('cancelled', false)
   await tg('sendMessage', { chat_id: chatId, text: '✅ Cancelado. Estás en estado neutro.' })
+}
+
+// /deshacer (texto): reemplaza al botón de Deshacer. Revierte la ÚLTIMA
+// registración del operario dentro de la ventana de 5 min (decisión #10).
+function esComandoDeshacer(text: string): boolean {
+  const n = normalizar(text).replace(/[.!¡¿?]+$/g, '').trim()
+  return n === '/deshacer' || n === 'deshacer'
+}
+
+async function handleDeshacerCmd(chatId: number, telegramId: number | undefined) {
+  if (!telegramId) return
+
+  const { data: usuario } = await supabase
+    .from('usuarios').select('id, empresa_id').eq('telegram_id', telegramId).maybeSingle()
+  if (!usuario) {
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu cuenta de Telegram no está registrada en el sistema.' })
+    return
+  }
+
+  // Movimientos del operario (scoped a su empresa vía productos), más nuevos primero.
+  const { data: movs } = await supabase
+    .from('movimientos')
+    .select('id, created_at, productos!inner(empresa_id)')
+    .eq('usuario_id', usuario.id)
+    .eq('productos.empresa_id', usuario.empresa_id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (!movs || movs.length === 0) {
+    await tg('sendMessage', { chat_id: chatId, text: 'No tenés registros para deshacer.' })
+    return
+  }
+
+  // Decisión #10: ventana de 5 min. Si el último ya la excedió, lo revierte el admin.
+  const latest = new Date(movs[0].created_at as string).getTime()
+  if (Date.now() - latest > UNDO_VENTANA_MS) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '⏱ Ventana de reversión vencida (5 min). Pedile al admin que lo revierta desde el dashboard.',
+    })
+    return
+  }
+
+  // Lote = el cluster más reciente (creado dentro de 3s del más nuevo): exactamente
+  // los movimientos de la última confirmación (se insertan juntos en <1s).
+  const idsLote = movs
+    .filter(m => latest - new Date(m.created_at as string).getTime() <= 3000)
+    .map(m => m.id)
+
+  const { error } = await supabase.from('movimientos').delete().in('id', idsLote)
+  if (error) {
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No se pudo revertir el registro.' })
+    return
+  }
+
+  await tg('sendMessage', {
+    chat_id: chatId,
+    text: `↩️ ${idsLote.length === 1 ? 'Registro revertido' : `${idsLote.length} registros revertidos`}. El stock fue restaurado.`,
+  })
 }
 
 // Router de texto entrante (no /comando): edición en curso → corrección; si no → registro.
@@ -1125,25 +1161,24 @@ async function confirmarPendiente(chatId: number, msgId: number, pendId: string,
     costo_unitario:    ledgerTipo === 'ingreso' ? it.precio : 0,
   }))
 
-  const resultado = await insertarMovimientos(
+  const ids = await insertarMovimientos(
     pend.empresa_id,
     usuario as { id: string; tienda_id: number | null },
     items, tiendas, productos,
     pend.transcripcion ?? '',
   )
 
-  if (!resultado) {
+  if (!ids) {
     await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No pude registrar los productos. Reintentá.' })
     return
   }
 
-  // Fix 2: editamos la MISMA tarjeta (card_message_id == msgId, la del botón)
-  // mostrando solo "✅ Registrado" + Deshacer. Sin mensaje nuevo bajo ningún caso.
+  // Editamos la MISMA tarjeta mostrando SOLO "✅ Registrado", sin teclado ni
+  // mensaje nuevo. Para deshacer, el operario escribe /deshacer en el chat.
   await tg('editMessageText', {
     chat_id: chatId, message_id: pend.card_message_id ?? msgId,
     text: '✅ *Registrado*',
     parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: resultado.keyboard },
   })
 }
 

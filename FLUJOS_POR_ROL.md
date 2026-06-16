@@ -81,10 +81,12 @@ Canal: **solo Telegram**.
 - **Acción:** en medio de una edición → vuelve a la tarjeta sin descartar; en estado neutro →
   marca `cancelled` todos los pendientes → "✅ Cancelado. Estás en estado neutro."
 
-## A7. Confirmar → Deshacer (ventana 5 min) — decisión #10
-- **Confirmar** (tap o auto): mapea `compra→ingreso`, registra en `movimientos`
-  (auto-crea productos), el trigger actualiza stock, y manda el detalle con `[↩️ Deshacer]`.
-- **Deshacer dentro de 5 min** → revierte (trigger con factor -1).
+## A7. Confirmar → `/deshacer` (ventana 5 min) — decisión #10
+- **Confirmar** (tap `[✅ Confirmar]`): mapea `compra→ingreso`, registra en
+  `movimientos` (auto-crea productos), el trigger actualiza stock, y la tarjeta se
+  edita a **"✅ Registrado"** (sin botones).
+- **Deshacer:** el operario escribe **`/deshacer`** → revierte su última
+  registración (el último lote) dentro de **5 min** (trigger con factor -1).
 - **Pasados 5 min** → "Ventana de reversión vencida. Pedile al admin que lo
   revierta desde el dashboard."
 

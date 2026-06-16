@@ -20,10 +20,12 @@ Ruteo (el primero que matchea gana):
 | Tap `confirmar:<id>` / `corregir:<id>` / `cancelar:<id>` | Tarjeta: confirmar / editar / cancelar |
 | Tap `fototipo:compra:<id>` / `fototipo:venta:<id>` | Foto: fija tipo → Vision → tarjeta |
 | Tap `adminmodo:…` / `adminsede:…` | Admin: elige modo / sede |
-| Tap `undo_…` | Deshacer (ventana 5 min) |
+| Tap `editfield:…` / `editcancel:…` | Edición por campo / cancelar edición |
+| Tap `undo_…` | Deshacer **legacy** (mensajes viejos con botón; se mantiene) |
 | Tap `join_…` | Operario elige sede al registrarse |
 | Texto `/start <token>` | Registro |
 | Texto exacto `/cancelar` o "cancelar" | **/cancelar universal** (prioridad alta) |
+| Texto exacto `/deshacer` o "deshacer" | **/deshacer** — revierte la última registración (5 min) |
 | Nota de voz | STT → (¿/cancelar? ¿edición? ) → registro |
 | Texto normal | (¿edición en curso? → corrección) si no → registro |
 | Foto | Pregunta Compra/Venta (Vision NO se llama todavía) |
@@ -176,15 +178,18 @@ Al final del reporte se anexa un **deep-link al dashboard** — *dormido* hasta 
 Tap [✅ Confirmar]
   → mapea tipo (compra→ingreso) y registra en movimientos (auto-crea productos)
   → trigger actualiza stock
-  → la MISMA tarjeta se edita al detalle final con botones [↩️ Deshacer]
-    (no se manda un mensaje nuevo)
+  → la MISMA tarjeta se edita a "✅ Registrado" (sin botones, sin mensaje nuevo)
 ```
 
-**Deshacer (decisión #10):**
-- Dentro de **5 minutos** → borra los movimientos, el trigger revierte el stock.
+**Deshacer con `/deshacer` (decisión #10):** ya NO hay botón. El operario escribe
+`/deshacer` en el chat y se revierte su **última registración** (el último lote).
+- Dentro de **5 minutos** → borra esos movimientos, el trigger revierte el stock
+  ("↩️ Registro(s) revertido(s). El stock fue restaurado.").
 - Pasados 5 min → "Ventana de reversión vencida. Pedile al admin que lo revierta
   desde el dashboard." (infra: tabla `auditoria_reversiones` + RPC
   `revertir_movimiento_admin`, que usará el dashboard, no el bot).
+- El lote es el cluster más reciente de movimientos del operario (creados juntos
+  en <3s al confirmar).
 
 ---
 
@@ -195,9 +200,9 @@ Los tres canales son iguales: **siempre** esperan tap explícito en `[✅ Confir
 
 | Canal | Registra | Corrección antes de registrar | Tras registrar |
 |-------|----------|-------------------------------|----------------|
-| Voz   | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | [Deshacer] 5 min |
-| Texto | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | [Deshacer] 5 min |
-| Foto  | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | [Deshacer] 5 min |
+| Voz   | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | `/deshacer` (5 min) |
+| Texto | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | `/deshacer` (5 min) |
+| Foto  | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | `/deshacer` (5 min) |
 
 ---
 
