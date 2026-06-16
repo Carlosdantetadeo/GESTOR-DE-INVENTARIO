@@ -35,16 +35,15 @@ Canal: **solo Telegram**.
 - **Casos borde:** token inválido → aviso; ya registrado en esta empresa → no repite;
   token de otra empresa → re-vincula (cambia de empresa).
 
-## A2. Registrar por VOZ → tarjeta + auto-confirmación
+## A2. Registrar por VOZ → tarjeta
 - **Disparador:** nota de voz.
 - **Pasos:**
   1. Groq Whisper transcribe (la transcripción **no** se muestra en el chat).
-  2. El NLU clasifica intención y devuelve `{tipo, tipo_explicito, confianza, items}`.
+  2. El NLU clasifica intención y devuelve `{tipo, items, …}`.
   3. Se crea `movimiento_pendiente` y se muestra la **tarjeta de revisión**
      (tipo, ítems, total) con `[✏️ Corregir] [✅ Confirmar] [❌ Cancelar]`.
-  4. **Auto-confirm:** si hay verbo explícito (`tipo_explicito`) y `confianza ≥ 0.7`,
-     la tarjeta muestra cuenta regresiva y se registra sola a los **5s** (`waitUntil`),
-     salvo que se toque Corregir/Cancelar antes. Sin eso → exige tap en Confirmar.
+  4. **Espera tap explícito en `[✅ Confirmar]`** — no hay auto-confirmación; nada
+     se registra hasta el tap.
 - **Gating:** ninguno (el vendedor registra).
 - **Casos borde:** "cancelar" por voz → /cancelar (A6); voz durante una edición →
   "estás en modo edición".
@@ -73,7 +72,7 @@ Canal: **solo Telegram**.
   2. Muestra "Ítem N: … ¿Qué corregís?" con `[📝 Nombre] [🔢 Cantidad] [💲 Precio] [❌ Cancelar]`.
   3. Toca un campo → "<Campo> actual: <valor> — Enviá el nuevo valor:".
   4. Envía **solo el dato** → valida ese campo, recalcula total, **vuelve a la tarjeta**.
-- Cada paso **edita el mismo mensaje**. Entrar en edición **cancela la auto-confirmación**.
+- Cada paso **edita el mismo mensaje**.
 - **Casos borde:** valor inválido → "Valor inválido para <Campo>…"; texto en el paso de
   campo → "Tocá un campo…". `[❌ Cancelar]` / `/cancelar` → vuelve a la tarjeta **sin descartar**.
 
@@ -179,17 +178,16 @@ Solo POST · header secret fail-closed (401) · anti-duplicado por `update_id` �
 200 inmediato + background (`waitUntil`).
 
 ## C2. NLU (contrato 018)
-Devuelve `{intent, tipo, tipo_explicito, confianza, items}` (o `{intent:reporte,…}`).
-- `tipo_explicito` true solo con verbo claro (vendí, compré, ingresó, llegó, salió,
-  despaché, recibí) → gobierna la auto-confirmación.
-- Parser **tolerante** a respuestas viejas (sin `tipo_explicito` → false; `movimientos`
-  → se mapea a `items`).
+Devuelve `{intent, tipo, items, …}` (o `{intent:reporte,…}`). Mantiene
+`tipo_explicito`/`confianza` por compatibilidad, pero **ya no gobiernan nada**
+(la auto-confirmación se eliminó; siempre se espera tap).
+- Parser **tolerante** a respuestas viejas (`movimientos` → se mapea a `items`).
 
 ## C3. Pendiente (`movimiento_pendiente`)
 Una fila por registro en revisión: `channel`, `tipo`, `items` (JSONB), `total`,
-`card_message_id`, `editing_state`, `auto_confirm_at`, `file_id`, `transcripcion`,
+`card_message_id`, `editing_state`, `editing_field`, `file_id`, `transcripcion`,
 `cancelled`. La confirmación reclama la fila atómicamente (evita doble registro
-entre auto-confirm y tap).
+ante doble tap). (La columna `auto_confirm_at` quedó pero ya no se usa.)
 
 ## C4. Matriz de gating por rol
 

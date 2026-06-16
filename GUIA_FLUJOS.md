@@ -11,7 +11,7 @@
 1. **Solo POST.** Otro método → `200 ok`.
 2. **Seguridad (fail-closed).** Header `X-Telegram-Bot-Api-Secret-Token` == `TELEGRAM_WEBHOOK_SECRET`, si no → `401`.
 3. **Anti-duplicado.** `update_id` en `telegram_updates` (reintento → descarta).
-4. **200 inmediato + trabajo en background** (`waitUntil`): STT/NLU/auto-confirm corren por detrás.
+4. **200 inmediato + trabajo en background** (`waitUntil`): STT + NLU corren por detrás.
 
 Ruteo (el primero que matchea gana):
 
@@ -55,8 +55,6 @@ Tipo: Venta (salida)
 ─────────
 Total: S/ 20.50
 
-⏱ Registrando en 5s… toca Corregir si algo está mal.   ← solo voz/texto auto-confirm
-
 [ ✏️ Corregir ] [ ✅ Confirmar ] [ ❌ Cancelar ]
 ```
 
@@ -66,7 +64,7 @@ Total: S/ 20.50
 
 ---
 
-## 3. Voz y texto → tarjeta (con auto-confirmación)
+## 3. Voz y texto → tarjeta
 
 ```
 Voz: descarga audio → Groq Whisper → texto   |   Texto: directo
@@ -79,11 +77,8 @@ Voz: descarga audio → Groq Whisper → texto   |   Texto: directo
            – si no, se crea movimiento_pendiente + tarjeta
 ```
 
-**Auto-confirmación (decisiones #2 y #3):**
-- Si el NLU marca `tipo_explicito: true` (hay verbo claro: vendí, compré, llegó…)
-  **y** `confianza ≥ 0.7` → la tarjeta muestra cuenta regresiva y a los **5s** se
-  registra sola (vía `waitUntil`), salvo que se toque Corregir/Cancelar antes.
-- Sin verbo explícito o con baja confianza → **sin** countdown: exige tap en Confirmar.
+- La tarjeta **siempre espera tap explícito en `[✅ Confirmar]`** (igual que foto).
+  **No hay auto-confirmación** — nada se registra hasta el tap.
 - **La transcripción nunca se ecoa al chat** (queda solo en backend, para auditar).
 
 ---
@@ -124,7 +119,6 @@ Tap [✏️ Corregir]
 Estados: `asking_item_number → asking_field → asking_value` (+ `editing_field`).
 Cada paso **edita el mismo mensaje** (cero mensajes nuevos).
 
-- Entrar en edición **cancela la auto-confirmación**.
 - `/cancelar` (o `[❌ Cancelar]`) **durante la edición vuelve a la tarjeta sin cambios**
   (NO descarta el registro; ver Flujo 6).
 - Durante la edición, **una voz o foto no se interpreta** como nuevo registro:
@@ -179,10 +173,11 @@ Al final del reporte se anexa un **deep-link al dashboard** — *dormido* hasta 
 ## 9. Confirmar y Deshacer
 
 ```
-Tap [✅ Confirmar] (o auto-confirm a 5s)
+Tap [✅ Confirmar]
   → mapea tipo (compra→ingreso) y registra en movimientos (auto-crea productos)
   → trigger actualiza stock
-  → mensaje final con botones [↩️ Deshacer]
+  → la MISMA tarjeta se edita al detalle final con botones [↩️ Deshacer]
+    (no se manda un mensaje nuevo)
 ```
 
 **Deshacer (decisión #10):**
@@ -195,11 +190,14 @@ Tap [✅ Confirmar] (o auto-confirm a 5s)
 
 ## Resumen de confirmación por canal
 
-| Canal | ¿Auto-confirma? | Corrección antes de registrar | Tras registrar |
-|-------|-----------------|-------------------------------|----------------|
-| Voz   | Sí, a 5s, si verbo explícito + confianza alta | [Corregir] / [Cancelar] | [Deshacer] 5 min |
-| Texto | Igual que voz | [Corregir] / [Cancelar] | [Deshacer] 5 min |
-| Foto  | No (siempre tap [Confirmar]) | [Corregir] / [Cancelar] | [Deshacer] 5 min |
+Los tres canales son iguales: **siempre** esperan tap explícito en `[✅ Confirmar]`
+(no hay auto-confirmación).
+
+| Canal | Registra | Corrección antes de registrar | Tras registrar |
+|-------|----------|-------------------------------|----------------|
+| Voz   | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | [Deshacer] 5 min |
+| Texto | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | [Deshacer] 5 min |
+| Foto  | Solo con tap `[✅ Confirmar]` | [Corregir] / [Cancelar] | [Deshacer] 5 min |
 
 ---
 
@@ -208,5 +206,5 @@ Tap [✅ Confirmar] (o auto-confirm a 5s)
 - **Bot mudo** → `TELEGRAM_WEBHOOK_SECRET` (paso 0.2).
 - **No se registra una foto** → ¿se tocó [Confirmar]? ¿se aplicó migración 018?
 - **Un texto se "comió" como corrección** → había una edición en curso (Flujo 5).
-- **Auto-confirm no dispara** → el NLU no marcó `tipo_explicito`/confianza alta (Flujo 3).
+- **Nada se registra** → la tarjeta espera tap en `[✅ Confirmar]` (no auto-confirma).
 - **Stock no cuadra con el ledger** → `SELECT recalcular_stock();` (ver CLAUDE.md).

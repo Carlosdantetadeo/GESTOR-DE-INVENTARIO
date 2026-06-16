@@ -78,7 +78,7 @@ supabase functions deploy telegram-bot --no-verify-jwt
 
 Probar con un operario real, en producción, antes de cerrar:
 
-- [ ] Un registro por **voz** (con verbo: debe auto-confirmar a 5s).
+- [ ] Un registro por **voz** (tarjeta → tap `[✅ Confirmar]`; no auto-confirma).
 - [ ] Un registro por **texto**.
 - [ ] Un registro por **foto** (pregunta Compra/Venta → tarjeta → Confirmar).
 - [ ] Un **Deshacer** dentro de los 5 min.
