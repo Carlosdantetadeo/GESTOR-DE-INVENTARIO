@@ -1,9 +1,28 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
+import { verifySession, SESSION_COOKIE } from './lib/superadmin/session'
 
 const PUBLIC_PATHS = ['/login', '/registro']
 
 export async function middleware(request) {
+  const earlyPath = request.nextUrl.pathname
+
+  // ── Panel superadmin ─────────────────────────────────────────────────────
+  // Sesión propia (cookie firmada), independiente del auth de Supabase.
+  // Las API de superadmin verifican la cookie por su cuenta.
+  if (earlyPath.startsWith('/api/superadmin')) {
+    return NextResponse.next()
+  }
+  if (earlyPath.startsWith('/superadmin')) {
+    if (earlyPath === '/superadmin/login') return NextResponse.next()
+    const token = request.cookies.get(SESSION_COOKIE)?.value
+    const payload = await verifySession(token, process.env.SUPERADMIN_SECRET)
+    if (!payload) {
+      return NextResponse.redirect(new URL('/superadmin/login', request.url))
+    }
+    return NextResponse.next()
+  }
+
   // Preparar la respuesta base; puede ser modificada para refrescar cookies de sesión
   let response = NextResponse.next({ request })
 
