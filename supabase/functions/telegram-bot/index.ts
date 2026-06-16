@@ -1137,9 +1137,11 @@ async function confirmarPendiente(chatId: number, msgId: number, pendId: string,
     return
   }
 
+  // Fix 2: editamos la MISMA tarjeta (card_message_id == msgId, la del botón)
+  // mostrando solo "✅ Registrado" + Deshacer. Sin mensaje nuevo bajo ningún caso.
   await tg('editMessageText', {
-    chat_id: chatId, message_id: msgId,
-    text: resultado.text,
+    chat_id: chatId, message_id: pend.card_message_id ?? msgId,
+    text: '✅ *Registrado*',
     parse_mode: 'Markdown',
     reply_markup: { inline_keyboard: resultado.keyboard },
   })
