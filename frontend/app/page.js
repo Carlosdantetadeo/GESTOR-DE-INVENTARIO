@@ -1,15 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
   Activity,
   Package,
-  AlertCircle,
-  AlertTriangle,
-  XCircle
+  AlertTriangle
 } from 'lucide-react'
 import { getDashboardKPIs, getMovimientos, getTiendas, getStock, getEmpresaId } from '../lib/queries'
 import { useRealtimeMovimientos } from '../lib/realtime'
@@ -38,7 +37,7 @@ export default function Dashboard() {
   const [range, setRange] = useState('today')
   const [movimientos, setMovimientos] = useState([])
   const [kpis, setKpis] = useState({ ventas: 0, ingresos: 0, gastos: 0, totalMovimientos: 0 })
-  const [alertasStock, setAlertasStock] = useState([])
+  const [sinStockCount, setSinStockCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
 
@@ -65,13 +64,15 @@ export default function Dashboard() {
     setKpis(kpisData)
     setMovimientos(movsData)
 
-    // Alertas: cantidad bajo el stock_minimo del producto (el negativo
-    // siempre califica). Peores primero.
-    const alertas = stockData
-      .filter(s => s.cantidad < (s.productos?.stock_minimo ?? 5))
-      .sort((a, b) => a.cantidad - b.cantidad)
-      .slice(0, 4)
-    setAlertasStock(alertas)
+    // Productos sin stock: total ≤ 0 agregando todas las tiendas del alcance.
+    // Es el dato del indicador simple (lenguaje no técnico, sin tabla).
+    const totalPorProducto = {}
+    stockData.forEach(s => {
+      const pid = s.productos?.id
+      if (!pid) return
+      totalPorProducto[pid] = (totalPorProducto[pid] ?? 0) + (s.cantidad ?? 0)
+    })
+    setSinStockCount(Object.values(totalPorProducto).filter(t => t <= 0).length)
 
     setLoading(false)
   }, [empresaId, tiendaSeleccionada, range])
@@ -218,74 +219,30 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Gráfico y Alertas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', alignItems: 'start' }}>
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1.1rem' }}>Evolución de Ventas vs Gastos</h3>
-            <span style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.8rem' }}>Últimas 24 horas</span>
-          </div>
-          <div style={{ height: '220px', position: 'relative', paddingTop: '20px' }}>
-            <svg style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0 }} viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M 0 80 Q 25 50 50 30 T 100 20" fill="none" stroke="hsl(var(--accent))" strokeWidth="2" />
-              <path d="M 0 80 Q 25 50 50 30 T 100 20 L 100 100 L 0 100 Z" fill="url(#gradient-accent)" opacity="0.08" />
-              <defs>
-                <linearGradient id="gradient-accent" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="hsl(var(--accent))" />
-                  <stop offset="100%" stopColor="transparent" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', color: 'hsl(var(--text-muted))', fontSize: '0.75rem', position: 'absolute', bottom: '-20px' }}>
-              <span>08:00 AM</span><span>12:00 PM</span><span>04:00 PM</span><span>08:00 PM</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Alertas Stock Bajo — datos reales de Supabase */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertCircle size={18} style={{ color: 'hsl(var(--color-gasto))' }} />
-            Alertas de Stock
-          </h3>
-          {loading ? (
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.85rem' }}>Cargando...</p>
-          ) : alertasStock.length === 0 ? (
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.85rem' }}>Sin alertas críticas.</p>
-          ) : alertasStock.map(s => {
-            // Negativo: el ledger registró más salidas que entradas — es una
-            // inconsistencia a revisar, no solo un quiebre de stock.
-            const negativo = s.cantidad < 0
-            const critico = negativo || s.cantidad <= 2
-            return (
-              <div key={s.id} style={{
-                padding: '12px',
-                background: critico ? 'rgba(244, 63, 94, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                border: `1px solid ${critico ? 'rgba(244, 63, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`,
-                borderRadius: 'var(--radius-sm)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    {negativo
-                      ? <XCircle size={14} style={{ color: 'hsl(var(--color-gasto))', flexShrink: 0 }} aria-label="Stock negativo" />
-                      : <AlertTriangle size={14} style={{ color: 'hsl(var(--color-traslado))', flexShrink: 0 }} aria-label="Stock bajo" />}
-                    {s.productos?.nombre || '—'}
-                  </span>
-                  <span style={{
-                    fontSize: '0.8rem',
-                    color: critico ? 'hsl(var(--color-gasto))' : 'hsl(var(--color-traslado))',
-                    fontWeight: 700
-                  }}>{s.cantidad} und</span>
-                </div>
-                <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))' }}>
-                  {s.tiendas?.nombre || '—'}
-                  {negativo && ' · Stock negativo — revisar movimientos'}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* Indicador simple de stock — sin tabla ni jerga técnica.
+          Solo aparece cuando hay productos sin stock (total ≤ 0). */}
+      {!loading && sinStockCount > 0 && (
+        <Link
+          href="/inventario?stock=critico"
+          className="glass-card"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '14px',
+            padding: '18px 24px', textDecoration: 'none', color: 'inherit',
+            borderLeft: '4px solid hsl(var(--color-gasto))',
+          }}
+        >
+          <AlertTriangle size={22} style={{ color: 'hsl(var(--color-gasto))', flexShrink: 0 }} aria-hidden="true" />
+          <span style={{ fontSize: '1rem', fontWeight: 600 }}>
+            {sinStockCount} {sinStockCount === 1 ? 'producto sin stock' : 'productos sin stock'}
+          </span>
+          <span style={{
+            color: 'hsl(var(--accent))', fontWeight: 600, marginLeft: 'auto',
+            display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap',
+          }}>
+            revisar inventario →
+          </span>
+        </Link>
+      )}
 
       {/* Tabla de Movimientos en tiempo real */}
       <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

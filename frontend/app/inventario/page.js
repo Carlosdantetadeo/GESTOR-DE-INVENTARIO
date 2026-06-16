@@ -49,6 +49,9 @@ export default function Inventario() {
   const [search, setSearch] = useState('')
   const [categoria, setCategoria] = useState('all')
   const [tiendaFiltro, setTiendaFiltro] = useState('all')
+  // Filtro "stock crítico" activado por el deep-link del dashboard
+  // (/inventario?stock=critico). Productos con stock total ≤ 0.
+  const [soloCritico, setSoloCritico] = useState(false)
 
   // Inline edit de stock_minimo (base para editar más campos de producto)
   const [editingId, setEditingId] = useState(null)
@@ -65,7 +68,21 @@ export default function Inventario() {
 
   useEffect(() => {
     getEmpresaId().then(setEmpresaId)
+    // Activar el filtro crítico si venimos del indicador del dashboard.
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      if (sp.get('stock') === 'critico') setSoloCritico(true)
+    }
   }, [])
+
+  const clearCritico = () => {
+    setSoloCritico(false)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('stock')
+      window.history.replaceState({}, '', url)
+    }
+  }
 
   useEffect(() => {
     if (empresaId) getCategorias(empresaId).then(setCategoriasDB)
@@ -92,7 +109,9 @@ export default function Inventario() {
   const filteredProductos = productos.filter(item => {
     const matchesSearch = item.nombre.toLowerCase().includes(search.toLowerCase())
     const matchesCat = categoria === 'all' || item.categoria === categoria
-    return matchesSearch && matchesCat
+    const totalStock = Object.values(item.stocks).reduce((s, v) => s + v, 0)
+    const matchesCritico = !soloCritico || totalStock <= 0
+    return matchesSearch && matchesCat && matchesCritico
   })
 
   const getTiendaStock = (prod, tiendaId) => prod.stocks[tiendaId] ?? 0
@@ -285,6 +304,20 @@ export default function Inventario() {
           <option value="all">Todas las Tiendas</option>
           {tiendas.map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
         </select>
+        {soloCritico && (
+          <button
+            onClick={clearCritico}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '8px 14px', borderRadius: '99px', cursor: 'pointer',
+              background: 'hsl(var(--color-gasto) / 0.12)', color: 'hsl(var(--color-gasto))',
+              border: '1px solid hsl(var(--color-gasto) / 0.3)', fontSize: '0.8rem', fontWeight: 600,
+            }}
+          >
+            Sin stock
+            <X size={14} aria-label="Quitar filtro de stock crítico" />
+          </button>
+        )}
       </div>
 
       {/* Tabla */}
