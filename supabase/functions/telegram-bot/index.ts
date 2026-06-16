@@ -17,9 +17,11 @@ const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? ''
 const TG_API        = `https://api.telegram.org/bot${BOT_TOKEN}`
 const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
 
-// Deep-link a reportes del dashboard (018, paso H). Mientras el dominio no esté
-// comprado, queda vacío y el link NO se incluye en los reportes (feature dormida).
+// Deep-link a reportes del dashboard (018, paso H). El link se incluye solo si
+// AMBOS están seteados (URL + secret para firmar el token); si falta alguno,
+// no se emite (no se manda un link sin auth).
 const DASHBOARD_BASE_URL = Deno.env.get('DASHBOARD_BASE_URL') ?? ''
+const JWT_SECRET         = Deno.env.get('JWT_SECRET') ?? ''
 
 // Auto-confirmación de voz/texto (018, decisión #2): 5s con cuenta regresiva.
 const AUTO_CONFIRM_SEGUNDOS = 5
@@ -1428,10 +1430,10 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
       return `📦 *${mdSafe(p.nombre)}* — total *${total}* u.\n${detalle}`
     })
 
+    const deepLinkStock = await construirDeepLink(usuario, rep.periodo, sedeForzada ? String(sedeForzada) : 'all')
     await tg('sendMessage', {
       chat_id: chatId,
-      text: `📊 *Stock actual*\n\n${bloques.join('\n\n')}` +
-        construirDeepLink(rep.periodo, sedeForzada ? String(sedeForzada) : 'all'),
+      text: `📊 *Stock actual*\n\n${bloques.join('\n\n')}` + deepLinkStock,
       parse_mode: 'Markdown',
     })
     return
@@ -1473,7 +1475,7 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
   if (tiendaId) q = q.eq('tienda_origen', tiendaId)
   const { data: ventas } = await q as { data: Array<{ cantidad: number; total: number; productos: { nombre: string } | null }> | null }
 
-  const deepLink = construirDeepLink(rep.periodo, tiendaId ? String(tiendaId) : 'all')
+  const deepLink = await construirDeepLink(usuario, rep.periodo, tiendaId ? String(tiendaId) : 'all')
 
   if (!ventas || ventas.length === 0) {
     await tg('sendMessage', {
@@ -1520,13 +1522,13 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
   })
 }
 
-// Deep-link al dashboard (decisión #9). DORMIDO hasta tener DASHBOARD_BASE_URL:
-// si está vacío, devuelve '' y el link no se incluye. Cuando se configure el
-// dominio, falta firmar un JWT de 15 min {usuario_id, empresa_id, rol} con
-// JWT_SECRET y anexarlo como &token=… (no incluir credenciales en la URL).
-function construirDeepLink(periodo: string, sedeParam: string): string {
-  if (!DASHBOARD_BASE_URL) return ''
-  return `\n\n🔗 Ver gráfico completo: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}`
+// Deep-link al dashboard (decisión #9). Se emite SOLO si están DASHBOARD_BASE_URL
+// y JWT_SECRET; si falta alguno devuelve '' (no se manda un link sin token de
+// auth). El token es un JWT HS256 de 15 min con {usuario_id, empresa_id, rol}.
+async function construirDeepLink(usuario: UsuarioConEmpresa, periodo: string, sedeParam: string): Promise<string> {
+  if (!DASHBOARD_BASE_URL || !JWT_SECRET) return ''
+  const token = await firmarJwtDashboard(usuario.id, usuario.empresa_id, usuario.rol ?? '')
+  return `\n\n🔗 Ver gráfico completo: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}&token=${token}`
 }
 
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────
@@ -1673,6 +1675,31 @@ function bufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
   }
   return btoa(binary)
+}
+
+// ─── JWT del deep-link (HS256 con Web Crypto, sin librerías nuevas) ───────────
+function base64urlBytes(bytes: Uint8Array): string {
+  const CHUNK = 0x8000
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+function base64urlStr(s: string): string {
+  return base64urlBytes(new TextEncoder().encode(s))
+}
+
+// Firma un JWT HS256 con claims {usuario_id, empresa_id, rol} y exp 15 min,
+// usando JWT_SECRET. El dashboard valida la firma con el mismo secret.
+async function firmarJwtDashboard(usuarioId: string | number, empresaId: string, rol: string): Promise<string> {
+  const now     = Math.floor(Date.now() / 1000)
+  const header  = base64urlStr(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = base64urlStr(JSON.stringify({ usuario_id: usuarioId, empresa_id: empresaId, rol, iat: now, exp: now + 15 * 60 }))
+  const data = `${header}.${payload}`
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))
+  return `${data}.${base64urlBytes(new Uint8Array(sig))}`
 }
 
 async function tg(method: string, body: Record<string, unknown>) {
