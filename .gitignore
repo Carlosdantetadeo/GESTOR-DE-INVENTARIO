@@ -44,3 +44,6 @@ Thumbs.db
 test-screenshots/
 test_login.mjs
 test_login_full.mjs
+
+# Skills de ECC (terceros, instalados localmente para acelerar el desarrollo)
+.claude/skills/
