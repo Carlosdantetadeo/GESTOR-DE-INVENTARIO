@@ -117,9 +117,11 @@ async function procesarUpdate(update: TelegramUpdate) {
       if (cb.data.startsWith('adminmodo:')) { await handleAdminModo(cb);   return }
       if (cb.data.startsWith('adminsede:')) { await handleAdminSede(cb);   return }
       if (cb.data.startsWith('fototipo:'))  { await handleFotoTipo(cb);    return }
-      if (cb.data.startsWith('confirmar:')) { await handleConfirmarCb(cb); return }
-      if (cb.data.startsWith('corregir:'))  { await handleCorregirCb(cb);  return }
-      if (cb.data.startsWith('cancelar:'))  { await handleCancelarCb(cb);  return }
+      if (cb.data.startsWith('confirmar:'))  { await handleConfirmarCb(cb);  return }
+      if (cb.data.startsWith('corregir:'))   { await handleCorregirCb(cb);   return }
+      if (cb.data.startsWith('editfield:'))  { await handleEditFieldCb(cb);  return }
+      if (cb.data.startsWith('editcancel:')) { await handleEditCancelCb(cb); return }
+      if (cb.data.startsWith('cancelar:'))   { await handleCancelarCb(cb);   return }
       return
     }
 
@@ -952,12 +954,24 @@ function esComandoCancelar(text: string): boolean {
   return n === '/cancelar' || n === 'cancelar'
 }
 
-// Decisión #7: limpia TODOS los pendientes activos del operario.
+// /cancelar (decisión #7) edit-aware: si el operario está en medio de una EDICIÓN,
+// /cancelar vuelve a la tarjeta SIN descartar el registro. En estado neutro (o con
+// la tarjeta sin editar), descarta todos los pendientes activos.
 async function handleCancelarUniversal(chatId: number, telegramId: number | undefined) {
   if (!telegramId) return
+
+  const pend = await pendienteActivo(telegramId)
+  if (pend?.editing_state) {
+    await supabase.from('movimiento_pendiente')
+      .update({ editing_state: null, editing_item_number: null, editing_field: null })
+      .eq('id', pend.id)
+    await refrescarTarjeta(chatId, { ...pend, editing_state: null })
+    return
+  }
+
   await supabase
     .from('movimiento_pendiente')
-    .update({ cancelled: true, editing_state: null, editing_item_number: null, auto_confirm_at: null })
+    .update({ cancelled: true, editing_state: null, editing_item_number: null, editing_field: null, auto_confirm_at: null })
     .eq('telegram_id', telegramId)
     .eq('cancelled', false)
   await tg('sendMessage', { chat_id: chatId, text: '✅ Cancelado. Estás en estado neutro.' })
@@ -977,10 +991,65 @@ async function handleTextoEntrante(msg: TelegramMessage) {
   await procesarRegistro(chatId, telegramId, 'texto', texto)
 }
 
-// ─── Modo edición por ítem (decisión #6) ──────────────────────────────────────
+// ─── Modo edición por CAMPO (decisión #6, refinado) ───────────────────────────
+// Flujo: [Corregir] → elegir ítem (número, salvo que haya uno solo) → elegir
+// CAMPO (botón) → enviar SOLO el dato → recalcula y vuelve a la tarjeta. Todo
+// editando el mismo mensaje (mínimo de mensajes en el chat).
+
+const CAMPO_LABEL: Record<string, string> = { nombre: 'Nombre', cantidad: 'Cantidad', precio: 'Precio' }
+
+function valorActualCampo(it: TarjetaItem, field: string): string {
+  if (field === 'nombre')   return it.nombre
+  if (field === 'cantidad') return String(it.cantidad)
+  return `S/${it.precio.toFixed(2)}`
+}
+
+// Valida y aplica el nuevo valor de UN campo. Devuelve el ítem actualizado o null.
+function aplicarCampo(it: TarjetaItem, field: string, texto: string): TarjetaItem | null {
+  const t = texto.trim()
+  if (field === 'nombre') {
+    return t ? { ...it, nombre: t } : null
+  }
+  if (field === 'cantidad') {
+    const cantidad = parseInt(t.replace(/[^\d]/g, ''), 10)
+    return Number.isInteger(cantidad) && cantidad > 0 ? { ...it, cantidad } : null
+  }
+  if (field === 'precio') {
+    const precio = parseFloat(t.replace(/[^\d.,]/g, '').replace(',', '.'))
+    return Number.isFinite(precio) && precio >= 0 ? { ...it, precio } : null
+  }
+  return null
+}
+
+// Mensaje "¿Qué corregís?" con los 3 botones de campo + Cancelar.
+function construirSelectorCampo(pendId: string, n: number, it: TarjetaItem) {
+  return {
+    text: `Ítem ${n}: ${it.nombre} — ${it.cantidad} × S/${it.precio.toFixed(2)}\n\n¿Qué corregís?`,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '📝 Nombre',   callback_data: `editfield:nombre:${pendId}` },
+          { text: '🔢 Cantidad', callback_data: `editfield:cantidad:${pendId}` },
+          { text: '💲 Precio',   callback_data: `editfield:precio:${pendId}` },
+        ],
+        [{ text: '❌ Cancelar', callback_data: `editcancel:${pendId}` }],
+      ],
+    },
+  }
+}
+
+// Mensaje "Campo actual: X — Enviá el nuevo valor:".
+function construirPromptValor(pendId: string, it: TarjetaItem, field: string) {
+  return {
+    text: `${CAMPO_LABEL[field]} actual: ${valorActualCampo(it, field)}\n\nEnviá el nuevo valor:`,
+    reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: `editcancel:${pendId}` }]] },
+  }
+}
+
 async function handleEdicionInput(chatId: number, pend: MovPendiente, texto: string) {
   const items = pend.items ?? []
 
+  // Paso: eligió el ítem por número → mostrar el selector de campo.
   if (pend.editing_state === 'asking_item_number') {
     const n = parseInt(texto, 10)
     if (Number.isNaN(n) || n < 1 || n > items.length) {
@@ -991,61 +1060,43 @@ async function handleEdicionInput(chatId: number, pend: MovPendiente, texto: str
       return
     }
     await supabase.from('movimiento_pendiente')
-      .update({ editing_item_number: n, editing_state: 'asking_values' })
+      .update({ editing_item_number: n, editing_state: 'asking_field', editing_field: null })
       .eq('id', pend.id)
-    const it = items[n - 1]
-    const actual = `${it.nombre} — ${it.cantidad} × S/${it.precio.toFixed(2)} = S/${(it.cantidad * it.precio).toFixed(2)}`
     if (pend.card_message_id) {
-      await tg('editMessageText', {
-        chat_id: chatId, message_id: pend.card_message_id,
-        text:
-          `Ítem ${n} actual: ${actual}\n\n` +
-          `Envía los nuevos valores en formato:\nnombre, cantidad, precio\n\n` +
-          `Ejemplo: Tee PVC 1", 6, 1.30\n\nO /cancelar para volver.`,
-        reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: `cancelar:${pend.id}` }]] },
-      })
+      await tg('editMessageText', { chat_id: chatId, message_id: pend.card_message_id, ...construirSelectorCampo(pend.id, n, items[n - 1]) })
     }
     return
   }
 
-  if (pend.editing_state === 'asking_values') {
-    const parsed = parseValoresItem(texto)
-    if (!parsed) {
-      await tg('sendMessage', {
-        chat_id: chatId,
-        text: 'No entendí. Enviá: nombre, cantidad, precio (ej: Tee PVC 1", 6, 1.30) o /cancelar.',
-      })
-      return
-    }
-    const idx = (pend.editing_item_number ?? 0) - 1
-    if (idx < 0 || idx >= items.length) {
+  // En 'asking_field' se espera un TAP de botón, no texto.
+  if (pend.editing_state === 'asking_field') {
+    await tg('sendMessage', { chat_id: chatId, text: 'Tocá un campo (Nombre, Cantidad o Precio) o /cancelar.' })
+    return
+  }
+
+  // Paso final: recibió el nuevo valor del campo elegido.
+  if (pend.editing_state === 'asking_value') {
+    const idx   = (pend.editing_item_number ?? 0) - 1
+    const field = pend.editing_field
+    if (idx < 0 || idx >= items.length || !field) {
       await supabase.from('movimiento_pendiente')
-        .update({ editing_state: null, editing_item_number: null }).eq('id', pend.id)
+        .update({ editing_state: null, editing_item_number: null, editing_field: null }).eq('id', pend.id)
       return
     }
-    items[idx] = parsed
+    const actualizado = aplicarCampo(items[idx], field, texto)
+    if (!actualizado) {
+      await tg('sendMessage', { chat_id: chatId, text: `Valor inválido para ${CAMPO_LABEL[field]}. Enviá solo el dato o /cancelar.` })
+      return
+    }
+    items[idx] = actualizado
     const total = items.reduce((s, it) => s + it.cantidad * it.precio, 0)
     await supabase.from('movimiento_pendiente')
-      .update({ items, total, editing_state: null, editing_item_number: null })
+      .update({ items, total, editing_state: null, editing_item_number: null, editing_field: null })
       .eq('id', pend.id)
-    // Volver a la tarjeta completa con el ítem actualizado.
+    // Vuelve a la tarjeta completa con el campo actualizado.
     await refrescarTarjeta(chatId, { ...pend, items, total, editing_state: null })
     return
   }
-}
-
-// Parsea "nombre, cantidad, precio". El nombre puede tener comas: los dos últimos
-// campos son cantidad y precio, el resto es el nombre.
-function parseValoresItem(texto: string): TarjetaItem | null {
-  const partes = texto.split(',').map(s => s.trim()).filter(s => s.length > 0)
-  if (partes.length < 3) return null
-  const precioStr   = partes.pop()!
-  const cantidadStr = partes.pop()!
-  const nombre      = partes.join(', ').trim()
-  const precio      = parseFloat(precioStr.replace(/[^\d.,]/g, '').replace(',', '.'))
-  const cantidad    = parseInt(cantidadStr.replace(/[^\d]/g, ''), 10)
-  if (!nombre || !Number.isFinite(precio) || precio < 0 || !Number.isInteger(cantidad) || cantidad <= 0) return null
-  return { nombre, cantidad, precio }
 }
 
 // ─── Confirmación (manual + auto) ─────────────────────────────────────────────
@@ -1137,24 +1188,87 @@ async function handleCorregirCb(cb: CallbackQuery) {
   const pendId     = cb.data.split(':')[1]
   await tg('answerCallbackQuery', { callback_query_id: cb.id })
 
-  const { data: pend } = await supabase
+  const { data: pendRow } = await supabase
     .from('movimiento_pendiente').select('*')
     .eq('id', pendId).eq('telegram_id', telegramId).eq('cancelled', false).maybeSingle()
-  if (!pend || (pend as MovPendiente).items.length === 0) {
+  const pend = pendRow as MovPendiente | null
+  const items = pend?.items ?? []
+  if (!pend || items.length === 0) {
     await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '⚠️ Esta revisión ya no está disponible.' })
+    return
+  }
+
+  // Con un solo ítem, saltamos la pregunta del número → directo al selector de campo
+  // (mínimo de mensajes). Con varios, pedimos el número primero.
+  if (items.length === 1) {
+    await supabase.from('movimiento_pendiente')
+      .update({ editing_state: 'asking_field', editing_item_number: 1, editing_field: null, auto_confirm_at: null, card_message_id: msgId })
+      .eq('id', pendId)
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, ...construirSelectorCampo(pendId, 1, items[0]) })
     return
   }
 
   // Entrar en edición cancela la auto-confirmación pendiente.
   await supabase.from('movimiento_pendiente')
-    .update({ editing_state: 'asking_item_number', auto_confirm_at: null, card_message_id: msgId })
+    .update({ editing_state: 'asking_item_number', editing_item_number: null, editing_field: null, auto_confirm_at: null, card_message_id: msgId })
     .eq('id', pendId)
 
   await tg('editMessageText', {
     chat_id: chatId, message_id: msgId,
     text: '¿Qué ítem querés corregir? Enviá el número del ítem (1, 2, 3…) o /cancelar para volver.',
-    reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: `cancelar:${pendId}` }]] },
+    reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: `editcancel:${pendId}` }]] },
   })
+}
+
+// El operario tocó un botón de campo (editfield:<nombre|cantidad|precio>:<id>).
+// Fija el campo y pide el valor único.
+async function handleEditFieldCb(cb: CallbackQuery) {
+  const chatId     = cb.message.chat.id
+  const msgId      = cb.message.message_id
+  const telegramId = cb.from.id
+  const [, field, pendId] = cb.data.split(':')
+  await tg('answerCallbackQuery', { callback_query_id: cb.id })
+
+  const { data: pendRow } = await supabase
+    .from('movimiento_pendiente').select('*')
+    .eq('id', pendId).eq('telegram_id', telegramId).eq('cancelled', false).maybeSingle()
+  const pend = pendRow as MovPendiente | null
+  const idx  = (pend?.editing_item_number ?? 0) - 1
+  if (!pend || !pend.editing_state || idx < 0 || idx >= (pend.items?.length ?? 0)) {
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '⚠️ Esta edición ya no está disponible.' })
+    return
+  }
+
+  await supabase.from('movimiento_pendiente')
+    .update({ editing_state: 'asking_value', editing_field: field, card_message_id: msgId })
+    .eq('id', pendId)
+
+  await tg('editMessageText', { chat_id: chatId, message_id: msgId, ...construirPromptValor(pendId, pend.items[idx], field) })
+}
+
+// [❌ Cancelar] durante la edición o /cancelar en edición: vuelve a la tarjeta
+// SIN descartar el registro (a diferencia del Cancelar de la tarjeta misma).
+async function handleEditCancelCb(cb: CallbackQuery) {
+  const chatId     = cb.message.chat.id
+  const msgId      = cb.message.message_id
+  const telegramId = cb.from.id
+  const pendId     = cb.data.split(':')[1]
+  await tg('answerCallbackQuery', { callback_query_id: cb.id })
+
+  const { data: pendRow } = await supabase
+    .from('movimiento_pendiente').select('*')
+    .eq('id', pendId).eq('telegram_id', telegramId).eq('cancelled', false).maybeSingle()
+  const pend = pendRow as MovPendiente | null
+  if (!pend) {
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '⚠️ Esta revisión ya no está disponible.' })
+    return
+  }
+
+  await supabase.from('movimiento_pendiente')
+    .update({ editing_state: null, editing_item_number: null, editing_field: null })
+    .eq('id', pendId)
+
+  await tg('editMessageText', { chat_id: chatId, message_id: msgId, ...construirTarjeta(pendToTarjeta(pend), {}) })
 }
 
 async function handleCancelarCb(cb: CallbackQuery) {
@@ -1793,8 +1907,9 @@ interface MovPendiente {
   items:               TarjetaItem[]
   total:               number | null
   card_message_id:     number | null
-  editing_state:       'asking_item_number' | 'asking_values' | null
+  editing_state:       'asking_item_number' | 'asking_field' | 'asking_value' | null
   editing_item_number: number | null
+  editing_field:       'nombre' | 'cantidad' | 'precio' | null
   auto_confirm_at:     string | null
   file_id:             string | null
   transcripcion:       string | null

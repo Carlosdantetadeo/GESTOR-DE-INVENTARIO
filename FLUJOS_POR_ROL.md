@@ -67,17 +67,20 @@ Canal: **solo Telegram**.
 - **Casos borde:** imagen sin inventario → aviso y se descarta; edición en curso →
   "estás en modo edición".
 
-## A5. Corregir un ítem ([✏️ Corregir]) — decisión #6
+## A5. Corregir por campo ([✏️ Corregir]) — decisión #6 (migración 019)
 - **Pasos:**
-  1. Tap Corregir → "¿Qué ítem? Enviá el número (1, 2, 3…) o /cancelar." (solo `[❌ Cancelar]`).
-  2. Número válido → muestra el ítem actual y pide "nombre, cantidad, precio".
-  3. Valores OK → actualiza ese ítem, recalcula total, **vuelve a la tarjeta completa**.
-- **Casos borde:** número fuera de rango / valores que no parsean → mensaje de ayuda,
-  sigue en edición. Entrar en edición **cancela la auto-confirmación**.
+  1. Tap Corregir → elegir ítem por número (si hay varios; con uno solo se salta).
+  2. Muestra "Ítem N: … ¿Qué corregís?" con `[📝 Nombre] [🔢 Cantidad] [💲 Precio] [❌ Cancelar]`.
+  3. Toca un campo → "<Campo> actual: <valor> — Enviá el nuevo valor:".
+  4. Envía **solo el dato** → valida ese campo, recalcula total, **vuelve a la tarjeta**.
+- Cada paso **edita el mismo mensaje**. Entrar en edición **cancela la auto-confirmación**.
+- **Casos borde:** valor inválido → "Valor inválido para <Campo>…"; texto en el paso de
+  campo → "Tocá un campo…". `[❌ Cancelar]` / `/cancelar` → vuelve a la tarjeta **sin descartar**.
 
-## A6. `/cancelar` universal — decisión #7
+## A6. `/cancelar` universal — decisión #7 (edit-aware)
 - **Disparador:** texto exacto `/cancelar`/`cancelar`, o voz transcrita "cancelar".
-- **Acción:** marca `cancelled` todos los pendientes activos → "✅ Cancelado. Estás en estado neutro."
+- **Acción:** en medio de una edición → vuelve a la tarjeta sin descartar; en estado neutro →
+  marca `cancelled` todos los pendientes → "✅ Cancelado. Estás en estado neutro."
 
 ## A7. Confirmar → Deshacer (ventana 5 min) — decisión #10
 - **Confirmar** (tap o auto): mapea `compra→ingreso`, registra en `movimientos`

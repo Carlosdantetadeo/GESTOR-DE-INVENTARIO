@@ -108,20 +108,25 @@ Llega foto
 
 ---
 
-## 5. Modo edición por ítem ([Corregir])
+## 5. Modo edición por campo ([Corregir]) — migración 019
 
 ```
 Tap [✏️ Corregir]
-  → "¿Qué ítem querés corregir? Enviá el número (1, 2, 3…) o /cancelar."  [❌ Cancelar]
-  → el operario envía un número (texto)
-       · fuera de rango → "Número fuera de rango…"
-       · válido → "Ítem N actual: …  Enviá: nombre, cantidad, precio"
-  → el operario envía "nombre, cantidad, precio"
-       · no parsea → "No entendí. Enviá: nombre, cantidad, precio…"
-       · OK → actualiza ese ítem, recalcula total, vuelve a la TARJETA completa
+  → elegir ítem (si hay varios): "¿Qué ítem? Enviá el número (1, 2, 3…)"  [❌ Cancelar]
+       (con un solo ítem se salta este paso)
+  → "Ítem N: <nombre> — <cant> × S/<precio>   ¿Qué corregís?"  [📝 Nombre][🔢 Cantidad][💲 Precio][❌ Cancelar]
+  → toca un campo → "<Campo> actual: <valor>   Enviá el nuevo valor:"  [❌ Cancelar]
+  → el operario envía SOLO el dato (sin formato)
+       · inválido → "Valor inválido para <Campo>. Enviá solo el dato o /cancelar."
+       · OK → actualiza ese campo, recalcula total, vuelve a la TARJETA completa
 ```
 
+Estados: `asking_item_number → asking_field → asking_value` (+ `editing_field`).
+Cada paso **edita el mismo mensaje** (cero mensajes nuevos).
+
 - Entrar en edición **cancela la auto-confirmación**.
+- `/cancelar` (o `[❌ Cancelar]`) **durante la edición vuelve a la tarjeta sin cambios**
+  (NO descarta el registro; ver Flujo 6).
 - Durante la edición, **una voz o foto no se interpreta** como nuevo registro:
   "Estás en modo edición… Terminá o /cancelar."
 
@@ -133,8 +138,10 @@ Comando de escape desde cualquier estado de espera. Dispara por:
 - Texto exacto `/cancelar` o `cancelar` (case-insensitive, tolera puntuación).
 - Nota de voz cuya transcripción normalizada sea "cancelar".
 
-Acción: marca `cancelled` **todos** los pendientes activos del operario y responde
-"✅ Cancelado. Estás en estado neutro."
+Acción (edit-aware):
+- **En medio de una edición** → vuelve a la tarjeta **sin descartar** (limpia el estado de edición).
+- **En estado neutro / tarjeta sin editar** → marca `cancelled` **todos** los pendientes
+  activos y responde "✅ Cancelado. Estás en estado neutro."
 
 ---
 
