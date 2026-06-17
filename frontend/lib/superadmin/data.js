@@ -1,14 +1,98 @@
 import { getAdminClient } from './adminClient'
 
-// Etiquetas y costos de referencia de los modelos NLU (solo visibles al superadmin).
-export const MODELOS_NLU = [
-  { id: 'groq-llama',      label: 'Groq Llama 3.3', badge: 'Recomendado', costo: '~$0.37 / 1,000 mensajes' },
-  { id: 'anthropic-haiku', label: 'Claude Haiku',   badge: 'Balanceado',  costo: '~$0.80 / 1,000 mensajes' },
-  { id: 'anthropic-sonnet',label: 'Claude Sonnet',  badge: 'Premium',     costo: '~$3.00 / 1,000 mensajes' },
+// ─── Catálogo de modelos NLU (tabla modelos_nlu, sprint 021) ──────────────────
+// Antes era una constante hardcodeada; ahora el superadmin lo administra desde
+// /superadmin/modelos. El bot resuelve el modelo contra esta misma tabla.
+
+export const PROVEEDORES = ['groq', 'anthropic', 'openrouter']
+
+// Fallback mínimo por si la tabla todavía no fue migrada (evita romper la UI).
+const MODELOS_FALLBACK = [
+  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true },
 ]
-export function modeloLabel(id) {
-  return MODELOS_NLU.find(m => m.id === id)?.label ?? (id || '—')
+
+export async function getModelosNlu({ soloActivos = false } = {}) {
+  const supa = getAdminClient()
+  let q = supa.from('modelos_nlu').select('*').order('created_at', { ascending: true })
+  if (soloActivos) q = q.eq('activo', true)
+  const { data, error } = await q
+  if (error || !data) return MODELOS_FALLBACK
+  return data.length ? data : MODELOS_FALLBACK
 }
+
+// Etiqueta legible de un modelo. Recibe el catálogo ya cargado (las páginas son
+// server components async). Cae al id crudo si no lo encuentra.
+export function modeloLabel(id, catalogo = []) {
+  return catalogo.find(m => m.id === id)?.label ?? (id || '—')
+}
+
+// Formato de costo de referencia para mostrar en el selector / ABM.
+export function costoLabel(m) {
+  // costo aproximado por 1,000 mensajes asumiendo ~700 tok in + ~120 tok out.
+  const usdMil = (Number(m.costo_in) * 700 + Number(m.costo_out) * 120) * 1000
+  return `~$${usdMil.toFixed(2)} / 1,000 mensajes`
+}
+
+function slugify(s) {
+  return String(s || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // quita acentos
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+export async function crearModelo(input) {
+  const { id, label, proveedor, api_model_id, costo_in, costo_out, badge } = input ?? {}
+  const finalId = slugify(id || label)
+  if (!finalId || !label?.trim() || !api_model_id?.trim()) {
+    return { ok: false, message: 'Faltan datos: id/label/api_model_id.' }
+  }
+  if (!PROVEEDORES.includes(proveedor)) {
+    return { ok: false, message: 'Proveedor no válido.' }
+  }
+  const supa = getAdminClient()
+  const { error } = await supa.from('modelos_nlu').insert({
+    id: finalId,
+    label: label.trim(),
+    proveedor,
+    api_model_id: api_model_id.trim(),
+    costo_in: Number(costo_in) || 0,
+    costo_out: Number(costo_out) || 0,
+    badge: badge?.trim() || null,
+  })
+  if (error) return { ok: false, message: error.code === '23505' ? 'Ya existe un modelo con ese id.' : error.message }
+  return { ok: true, id: finalId }
+}
+
+export async function actualizarModelo(id, patch) {
+  const supa = getAdminClient()
+  const allowed = {}
+  if (patch.label !== undefined)        allowed.label = String(patch.label).trim()
+  if (patch.proveedor !== undefined) {
+    if (!PROVEEDORES.includes(patch.proveedor)) return { ok: false, message: 'Proveedor no válido.' }
+    allowed.proveedor = patch.proveedor
+  }
+  if (patch.api_model_id !== undefined) allowed.api_model_id = String(patch.api_model_id).trim()
+  if (patch.costo_in !== undefined)     allowed.costo_in = Number(patch.costo_in) || 0
+  if (patch.costo_out !== undefined)    allowed.costo_out = Number(patch.costo_out) || 0
+  if (patch.badge !== undefined)        allowed.badge = patch.badge?.trim() || null
+  if (patch.activo !== undefined)       allowed.activo = !!patch.activo
+  const { error } = await supa.from('modelos_nlu').update(allowed).eq('id', id)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
+}
+
+export async function eliminarModelo(id) {
+  const supa = getAdminClient()
+  const { count } = await supa.from('empresas')
+    .select('id', { count: 'exact', head: true }).eq('nlu_model', id)
+  if (count && count > 0) {
+    return { ok: false, message: `No se puede eliminar: ${count} empresa(s) usan este modelo.` }
+  }
+  const { error } = await supa.from('modelos_nlu').delete().eq('id', id)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
+}
+
+// ─── Resúmenes de empresas ────────────────────────────────────────────────────
 
 function inicioMesUTC() {
   const now = new Date()
@@ -32,7 +116,7 @@ export async function getEmpresasResumen() {
 
   const { data: empresas } = await supa
     .from('empresas')
-    .select('id, nombre, rubro, nlu_model, created_at')
+    .select('id, nombre, rubro, nlu_model, activa, created_at')
     .order('created_at', { ascending: false })
 
   return Promise.all((empresas ?? []).map(async (e) => {
@@ -52,6 +136,7 @@ export async function getEmpresasResumen() {
       nombre: e.nombre,
       rubro: e.rubro,
       nluModel: e.nlu_model,
+      activa: e.activa !== false,
       operarios: operarios ?? 0,
       tokensMes,
       costoMes,
@@ -66,7 +151,7 @@ export async function getEmpresaDetalle(empresaId) {
 
   const { data: empresa } = await supa
     .from('empresas')
-    .select('id, nombre, rubro, nlu_model, created_at, activa')
+    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at')
     .eq('id', empresaId)
     .single()
   if (!empresa) return null
@@ -111,11 +196,22 @@ export async function getEmpresaDetalle(empresaId) {
 }
 
 export async function updateEmpresaModelo(empresaId, modelo) {
-  if (!MODELOS_NLU.some(m => m.id === modelo)) {
+  const catalogo = await getModelosNlu()
+  if (!catalogo.some(m => m.id === modelo)) {
     return { ok: false, message: 'Modelo no válido.' }
   }
   const supa = getAdminClient()
   const { error } = await supa.from('empresas').update({ nlu_model: modelo }).eq('id', empresaId)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
+}
+
+// Suspensión reversible (sprint 021). `activa = false` bloquea login de clientes
+// y procesamiento del bot. `suspendida_at` queda como auditoría.
+export async function setEmpresaActiva(empresaId, activa) {
+  const supa = getAdminClient()
+  const patch = { activa: !!activa, suspendida_at: activa ? null : new Date().toISOString() }
+  const { error } = await supa.from('empresas').update(patch).eq('id', empresaId)
   if (error) return { ok: false, message: error.message }
   return { ok: true }
 }

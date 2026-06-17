@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, LogOut, ShieldCheck } from 'lucide-react'
+import { Building2, Cpu, LogOut, ShieldCheck } from 'lucide-react'
 
 // Navegación propia del superadmin. En /superadmin/login se renderiza sin sidebar.
 export default function SuperadminChrome({ children }) {
@@ -13,6 +13,7 @@ export default function SuperadminChrome({ children }) {
   }
 
   const isEmpresas = pathname === '/superadmin'
+  const isModelos  = pathname.startsWith('/superadmin/modelos')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -40,6 +41,15 @@ export default function SuperadminChrome({ children }) {
             background: isEmpresas ? 'hsl(var(--accent) / 0.08)' : 'transparent',
           }}>
             <Building2 size={16} /> Empresas
+          </Link>
+          <Link href="/superadmin/modelos" style={{
+            display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px',
+            borderRadius: 'var(--radius-md)', textDecoration: 'none', fontSize: '0.9rem',
+            fontWeight: isModelos ? 600 : 400,
+            color: isModelos ? 'hsl(var(--accent))' : 'hsl(var(--text-secondary))',
+            background: isModelos ? 'hsl(var(--accent) / 0.08)' : 'transparent',
+          }}>
+            <Cpu size={16} /> Modelos
           </Link>
         </nav>
 

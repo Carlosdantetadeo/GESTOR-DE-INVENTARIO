@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireSuperadmin } from '../../../../lib/superadmin/guard'
-import { getEmpresaDetalle, MODELOS_NLU, modeloLabel } from '../../../../lib/superadmin/data'
+import { getEmpresaDetalle, getModelosNlu, modeloLabel, costoLabel } from '../../../../lib/superadmin/data'
 import ModeloSelector from './ModeloSelector'
+import EstadoEmpresa from './EstadoEmpresa'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,9 +22,12 @@ const td = { padding: '10px 14px', fontSize: '0.84rem', whiteSpace: 'nowrap' }
 
 export default async function EmpresaDetalle({ params }) {
   await requireSuperadmin()
-  const detalle = await getEmpresaDetalle(params.id)
+  const [detalle, catalogo] = await Promise.all([getEmpresaDetalle(params.id), getModelosNlu()])
   if (!detalle) notFound()
   const { empresa, consumoMensual, operarios } = detalle
+  const modelosActivos = catalogo
+    .filter(m => m.activo)
+    .map(m => ({ id: m.id, label: m.label, badge: m.badge || '', costo: costoLabel(m) }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '900px' }}>
@@ -41,8 +45,14 @@ export default async function EmpresaDetalle({ params }) {
           <Info k="Nombre" v={empresa.nombre} />
           <Info k="Rubro" v={empresa.rubro || '—'} />
           <Info k="Fecha de alta" v={fmtFecha(empresa.created_at)} />
-          <Info k="Estado" v={empresa.activa === false ? 'Inactiva' : 'Activa'} />
+          <Info k="Estado" v={empresa.activa === false ? '⛔ Suspendida' : '🟢 Activa'} />
         </div>
+      </section>
+
+      {/* Sección — Estado / suspensión */}
+      <section style={card}>
+        <div style={label}>Suspensión</div>
+        <EstadoEmpresa empresaId={empresa.id} activa={empresa.activa !== false} />
       </section>
 
       {/* Sección 2 — Modelo NLU */}
@@ -51,7 +61,7 @@ export default async function EmpresaDetalle({ params }) {
         <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
           El cambio aplica al siguiente mensaje del bot de esta empresa.
         </p>
-        <ModeloSelector empresaId={empresa.id} current={empresa.nlu_model} modelos={MODELOS_NLU} />
+        <ModeloSelector empresaId={empresa.id} current={empresa.nlu_model} modelos={modelosActivos} />
       </section>
 
       {/* Sección 3 — Consumo de tokens */}
@@ -71,7 +81,7 @@ export default async function EmpresaDetalle({ params }) {
                 {consumoMensual.map((c, i) => (
                   <tr key={i} style={{ borderTop: '1px solid hsl(var(--border))' }}>
                     <td style={td}>{c.mes}</td>
-                    <td style={td}>{modeloLabel(c.modelo)}</td>
+                    <td style={td}>{modeloLabel(c.modelo, catalogo)}</td>
                     <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{c.llamadas.toLocaleString()}</td>
                     <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{c.tokens.toLocaleString()}</td>
                     <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>${c.costo.toFixed(4)}</td>

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireSuperadmin } from '../../lib/superadmin/guard'
-import { getEmpresasResumen, modeloLabel } from '../../lib/superadmin/data'
+import { getEmpresasResumen, getModelosNlu, modeloLabel } from '../../lib/superadmin/data'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +14,7 @@ const td = { padding: '12px 14px', fontSize: '0.85rem', whiteSpace: 'nowrap' }
 
 export default async function SuperadminEmpresas() {
   await requireSuperadmin()
-  const empresas = await getEmpresasResumen()
+  const [empresas, catalogo] = await Promise.all([getEmpresasResumen(), getModelosNlu()])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1100px' }}>
@@ -30,6 +30,7 @@ export default async function SuperadminEmpresas() {
           <thead>
             <tr style={{ borderBottom: '1px solid hsl(var(--border))', background: 'hsl(var(--bg-base))' }}>
               <th style={th}>Empresa</th>
+              <th style={th}>Estado</th>
               <th style={th}>Rubro</th>
               <th style={th}>Operarios</th>
               <th style={th}>Modelo NLU</th>
@@ -41,13 +42,18 @@ export default async function SuperadminEmpresas() {
           </thead>
           <tbody>
             {empresas.length === 0 ? (
-              <tr><td style={{ ...td, textAlign: 'center', padding: '32px' }} colSpan={8}>No hay empresas registradas.</td></tr>
+              <tr><td style={{ ...td, textAlign: 'center', padding: '32px' }} colSpan={9}>No hay empresas registradas.</td></tr>
             ) : empresas.map((e, i) => (
               <tr key={e.id} style={{ borderBottom: i < empresas.length - 1 ? '1px solid hsl(var(--border))' : 'none' }}>
                 <td style={{ ...td, fontWeight: 600 }}>{e.nombre}</td>
+                <td style={td}>
+                  {e.activa
+                    ? <span style={{ fontSize: '0.78rem' }}>🟢 Activa</span>
+                    : <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'hsl(var(--color-gasto))' }}>⛔ Suspendida</span>}
+                </td>
                 <td style={{ ...td, color: 'hsl(var(--text-secondary))' }}>{e.rubro || '—'}</td>
                 <td style={td}>{e.operarios}</td>
-                <td style={td}>{modeloLabel(e.nluModel)}</td>
+                <td style={td}>{modeloLabel(e.nluModel, catalogo)}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{e.tokensMes.toLocaleString()}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>${e.costoMes.toFixed(4)}</td>
                 <td style={{ ...td, color: 'hsl(var(--text-secondary))' }}>{fmtFecha(e.ultimoMovimiento)}</td>
