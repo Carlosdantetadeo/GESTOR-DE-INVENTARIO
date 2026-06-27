@@ -6,7 +6,7 @@
 // Consumo diferenciado por empresa en tabla consumo_ia.
 // Suspensión de empresas (empresas.activa): el bot no procesa empresas dadas de baja.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { construirTarjeta, type TarjetaItem, type TarjetaOpciones } from './tarjeta.ts'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────

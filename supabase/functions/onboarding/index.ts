@@ -8,7 +8,7 @@
 //
 // Deploy: supabase functions deploy onboarding --no-verify-jwt
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 
 // ─── Cliente global con service_role — bypasea RLS en todos los inserts ───────
 
