@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-All commands run from the `frontend/` directory:
+The **npm** commands below run from the `frontend/` directory:
 
 ```bash
 npm run dev      # Start Next.js dev server (http://localhost:3000)
@@ -24,6 +24,16 @@ Deploy Edge Functions (run from repo root, requires Supabase CLI):
 supabase functions deploy telegram-bot   --no-verify-jwt
 supabase functions deploy onboarding     --no-verify-jwt
 ```
+
+> ⚠️ **Vercel CLI commands run from the repo ROOT, not from `frontend/`.** The Vercel
+> project `gestor-de-inventario` has **Root Directory = `frontend`** configured, so the
+> CLI resolves paths relative to the repo root and appends `frontend/`. Running
+> `vercel deploy` from inside `frontend/` fails with `frontend/frontend does not exist`.
+> The Vercel link therefore lives at the repo root (`.vercel/`, gitignored) — there must
+> be **no** `frontend/.vercel`. Run `vercel deploy`, `vercel env`, `vercel pull`, etc.
+> from the repo root. (npm and Supabase CLI are the exception — see above.)
+> CLI preview deploys upload the local working tree, so `git checkout <branch>` first to
+> deploy a specific branch's code.
 
 ## Architecture
 
