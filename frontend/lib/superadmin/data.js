@@ -9,7 +9,7 @@ export const PROVEEDORES = ['groq', 'anthropic', 'openrouter']
 
 // Fallback mínimo por si la tabla todavía no fue migrada (evita romper la UI).
 const MODELOS_FALLBACK = [
-  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true },
+  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true, tiene_api_key: false },
 ]
 
 export async function getModelosNlu({ soloActivos = false } = {}) {
@@ -56,7 +56,7 @@ export async function crearModelo(input) {
   let api_key_enc = null
   if (api_key && String(api_key).trim()) {
     try { api_key_enc = await encryptApiKey(String(api_key).trim()) }
-    catch (e) { return { ok: false, message: `No se pudo cifrar la API key: ${e.message}` } }
+    catch (e) { return { ok: false, message: `No se pudo cifrar la API key (config del servidor — revisar MODELOS_ENC_KEY): ${e.message}` } }
   }
   const supa = getAdminClient()
   const { error } = await supa.from('modelos_nlu').insert({
@@ -92,7 +92,7 @@ export async function actualizarModelo(id, patch) {
       allowed.api_key_enc = null   // limpiar → vuelve a usar el secret del proveedor
     } else {
       try { allowed.api_key_enc = await encryptApiKey(v) }
-      catch (e) { return { ok: false, message: `No se pudo cifrar la API key: ${e.message}` } }
+      catch (e) { return { ok: false, message: `No se pudo cifrar la API key (config del servidor — revisar MODELOS_ENC_KEY): ${e.message}` } }
     }
   }
   const { error } = await supa.from('modelos_nlu').update(allowed).eq('id', id)

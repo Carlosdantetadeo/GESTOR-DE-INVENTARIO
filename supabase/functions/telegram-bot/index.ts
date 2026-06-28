@@ -88,13 +88,17 @@ async function resolverModelo(nluModelId: string | undefined | null): Promise<Mo
       .eq('id', nluModelId)
       .maybeSingle()
     if (!data) return FALLBACK_MODELO
+    const apiKey = await descifrarApiKey(data.api_key_enc)
+    if (data.api_key_enc && !apiKey) {
+      console.error(`[resolverModelo] no se pudo descifrar la API key del modelo "${data.id}" — revisar MODELOS_ENC_KEY (se usará el secret del proveedor ${data.proveedor}, que puede estar vacío).`)
+    }
     return {
       id: data.id,
       proveedor: data.proveedor as Proveedor,
       apiModelId: data.api_model_id,
       costoIn: Number(data.costo_in) || 0,
       costoOut: Number(data.costo_out) || 0,
-      apiKey: await descifrarApiKey(data.api_key_enc),
+      apiKey,
     }
   } catch {
     return FALLBACK_MODELO
@@ -1735,8 +1739,12 @@ async function callNLU(
     const url = esOR
       ? 'https://openrouter.ai/api/v1/chat/completions'
       : 'https://api.groq.com/openai/v1/chat/completions'
+    const apiKey = modelo.apiKey || (esOR ? OPENROUTER_KEY : GROQ_KEY)
+    if (!apiKey) {
+      console.error(`[callNLU] sin API key para ${modelo.proveedor} (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o el secret del proveedor.`)
+    }
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${modelo.apiKey || (esOR ? OPENROUTER_KEY : GROQ_KEY)}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     }
     if (esOR) {
@@ -1766,10 +1774,14 @@ async function callNLU(
 
   // ── Anthropic ──
   if (modelo.proveedor === 'anthropic') {
+    const apiKey = modelo.apiKey || ANTHROPIC_KEY
+    if (!apiKey) {
+      console.error(`[callNLU] sin API key para anthropic (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o ANTHROPIC_API_KEY.`)
+    }
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': modelo.apiKey || ANTHROPIC_KEY,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
