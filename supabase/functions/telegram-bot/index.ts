@@ -15,6 +15,10 @@ const BOT_TOKEN     = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 const GROQ_KEY      = Deno.env.get('GROQ_API_KEY')!
 const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
 const OPENROUTER_KEY = Deno.env.get('OPENROUTER_API_KEY') ?? ''
+// Clave maestra para descifrar la API key por modelo (modelos_nlu.api_key_enc, 022).
+// Mismo valor que MODELOS_ENC_KEY en Vercel. Si falta, los modelos sin key propia
+// siguen funcionando con el secret del proveedor (GROQ/ANTHROPIC/OPENROUTER_API_KEY).
+const MODELOS_ENC_KEY = Deno.env.get('MODELOS_ENC_KEY') ?? ''
 const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? ''
 const TG_API        = `https://api.telegram.org/bot${BOT_TOKEN}`
 const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
@@ -43,6 +47,27 @@ type ModeloResuelto = {
   apiModelId: string
   costoIn: number
   costoOut: number
+  apiKey?: string   // key propia del modelo (descifrada de api_key_enc); si falta, se usa el secret del proveedor
+}
+
+// Descifra la API key por modelo (formato v1.<iv_b64>.<ct_b64>, AES-GCM, base64
+// estándar) con la clave maestra MODELOS_ENC_KEY. Nunca lanza: ante cualquier
+// problema devuelve undefined y el bot cae al secret del proveedor.
+async function descifrarApiKey(enc: string | null | undefined): Promise<string | undefined> {
+  if (!enc || !MODELOS_ENC_KEY) return undefined
+  try {
+    const [v, ivB64, ctB64] = enc.split('.')
+    if (v !== 'v1' || !ivB64 || !ctB64) return undefined
+    const raw = Uint8Array.from(atob(MODELOS_ENC_KEY), (c) => c.charCodeAt(0))
+    if (raw.length !== 32) return undefined
+    const key = await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['decrypt'])
+    const iv = Uint8Array.from(atob(ivB64), (c) => c.charCodeAt(0))
+    const ct = Uint8Array.from(atob(ctB64), (c) => c.charCodeAt(0))
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+    return new TextDecoder().decode(pt)
+  } catch {
+    return undefined
+  }
 }
 
 // Fallback de resiliencia: si la tabla falla o el id no está, el bot nunca se rompe.
@@ -59,7 +84,7 @@ async function resolverModelo(nluModelId: string | undefined | null): Promise<Mo
   try {
     const { data } = await supabase
       .from('modelos_nlu')
-      .select('id, proveedor, api_model_id, costo_in, costo_out')
+      .select('id, proveedor, api_model_id, costo_in, costo_out, api_key_enc')
       .eq('id', nluModelId)
       .maybeSingle()
     if (!data) return FALLBACK_MODELO
@@ -69,6 +94,7 @@ async function resolverModelo(nluModelId: string | undefined | null): Promise<Mo
       apiModelId: data.api_model_id,
       costoIn: Number(data.costo_in) || 0,
       costoOut: Number(data.costo_out) || 0,
+      apiKey: await descifrarApiKey(data.api_key_enc),
     }
   } catch {
     return FALLBACK_MODELO
@@ -1710,7 +1736,7 @@ async function callNLU(
       ? 'https://openrouter.ai/api/v1/chat/completions'
       : 'https://api.groq.com/openai/v1/chat/completions'
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${esOR ? OPENROUTER_KEY : GROQ_KEY}`,
+      Authorization: `Bearer ${modelo.apiKey || (esOR ? OPENROUTER_KEY : GROQ_KEY)}`,
       'Content-Type': 'application/json',
     }
     if (esOR) {
@@ -1743,7 +1769,7 @@ async function callNLU(
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': ANTHROPIC_KEY,
+        'x-api-key': modelo.apiKey || ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },

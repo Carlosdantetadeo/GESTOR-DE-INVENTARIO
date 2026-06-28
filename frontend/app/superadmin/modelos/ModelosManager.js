@@ -8,7 +8,7 @@ const PROVEEDORES = ['groq', 'anthropic', 'openrouter']
 const th = { padding: '9px 12px', textAlign: 'left', fontWeight: 600, color: 'hsl(var(--text-muted))', fontSize: '0.72rem', whiteSpace: 'nowrap' }
 const td = { padding: '10px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }
 
-const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', costo_in: '', costo_out: '', badge: '' }
+const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', costo_in: '', costo_out: '', badge: '', api_key: '' }
 
 export default function ModelosManager({ inicial }) {
   const [modelos, setModelos] = useState(inicial)
@@ -106,6 +106,9 @@ export default function ModelosManager({ inicial }) {
           <Campo label="Badge (opcional)">
             <input className="input-field" value={form.badge} onChange={set('badge')} placeholder="Económico" />
           </Campo>
+          <Campo label="API key (opcional)">
+            <input className="input-field" type="password" autoComplete="off" value={form.api_key} onChange={set('api_key')} placeholder="sk-… (se guarda cifrada)" />
+          </Campo>
         </div>
         {error && <span style={{ fontSize: '0.82rem', color: 'hsl(var(--color-gasto))' }}>⚠️ {error}</span>}
         <button type="submit" disabled={saving} className="btn btn-primary"
@@ -120,12 +123,12 @@ export default function ModelosManager({ inicial }) {
           <thead>
             <tr style={{ borderBottom: '1px solid hsl(var(--border))', background: 'hsl(var(--bg-base))' }}>
               <th style={th}>Modelo</th><th style={th}>Proveedor</th><th style={th}>API model id</th>
-              <th style={th}>Costo in</th><th style={th}>Costo out</th><th style={th}>Estado</th><th style={th}></th>
+              <th style={th}>API key</th><th style={th}>Costo in</th><th style={th}>Costo out</th><th style={th}>Estado</th><th style={th}></th>
             </tr>
           </thead>
           <tbody>
             {modelos.length === 0 ? (
-              <tr><td style={{ ...td, textAlign: 'center', padding: '28px' }} colSpan={7}>Sin modelos.</td></tr>
+              <tr><td style={{ ...td, textAlign: 'center', padding: '28px' }} colSpan={8}>Sin modelos.</td></tr>
             ) : modelos.map((m, i) => (
               <tr key={m.id} style={{ borderBottom: i < modelos.length - 1 ? '1px solid hsl(var(--border))' : 'none', opacity: m.activo ? 1 : 0.5 }}>
                 <td style={{ ...td, fontWeight: 600 }}>
@@ -134,6 +137,7 @@ export default function ModelosManager({ inicial }) {
                 </td>
                 <td style={td}>{m.proveedor}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)', fontSize: '0.76rem' }}>{m.api_model_id}</td>
+                <td style={td}>{m.tiene_api_key ? '🔑 Propia' : '— secret'}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{Number(m.costo_in)}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{Number(m.costo_out)}</td>
                 <td style={td}>{m.activo ? '🟢 Activo' : '⚪ Inactivo'}</td>
