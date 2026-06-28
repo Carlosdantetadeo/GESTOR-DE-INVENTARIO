@@ -35,6 +35,15 @@ export default function Login() {
       return
     }
 
+    // Suspensión (sprint 021): si la empresa fue dada de baja, bloquear el acceso.
+    const { data: emp } = await supabase.from('empresas').select('activa').eq('id', empresaId).single()
+    if (emp && emp.activa === false) {
+      setError('Tu empresa está suspendida. Contactá al proveedor.')
+      await supabase.auth.signOut()
+      setLoading(false)
+      return
+    }
+
     window.location.href = new URLSearchParams(window.location.search).get('redirect') || '/'
   }
 

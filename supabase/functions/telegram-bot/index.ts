@@ -2,10 +2,11 @@
 // Bot de Telegram para Agent GMS.
 //
 // Soporta: voz (Groq Whisper STT) · texto · foto (Groq Vision)
-// NLU multi-modelo: groq-llama · anthropic-haiku · anthropic-sonnet
+// NLU multi-modelo dinámico (tabla modelos_nlu): proveedores groq · anthropic · openrouter.
 // Consumo diferenciado por empresa en tabla consumo_ia.
+// Suspensión de empresas (empresas.activa): el bot no procesa empresas dadas de baja.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { construirTarjeta, type TarjetaItem, type TarjetaOpciones } from './tarjeta.ts'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -13,6 +14,11 @@ import { construirTarjeta, type TarjetaItem, type TarjetaOpciones } from './tarj
 const BOT_TOKEN     = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 const GROQ_KEY      = Deno.env.get('GROQ_API_KEY')!
 const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+const OPENROUTER_KEY = Deno.env.get('OPENROUTER_API_KEY') ?? ''
+// Clave maestra para descifrar la API key por modelo (modelos_nlu.api_key_enc, 022).
+// Mismo valor que MODELOS_ENC_KEY en Vercel. Si falta, los modelos sin key propia
+// siguen funcionando con el secret del proveedor (GROQ/ANTHROPIC/OPENROUTER_API_KEY).
+const MODELOS_ENC_KEY = Deno.env.get('MODELOS_ENC_KEY') ?? ''
 const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? ''
 const TG_API        = `https://api.telegram.org/bot${BOT_TOKEN}`
 const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
@@ -31,20 +37,72 @@ const supabase = createClient(
   Deno.env.get('SERVICE_ROLE_KEY')!,
 )
 
-// Modelos disponibles y sus IDs de API
-const GROQ_MODEL_IDS: Record<string, string> = {
-  'groq-llama': 'llama-3.3-70b-versatile',
-}
-const ANTHROPIC_MODEL_IDS: Record<string, string> = {
-  'anthropic-haiku':  'claude-haiku-4-5-20251001',
-  'anthropic-sonnet': 'claude-sonnet-4-6',
+// Catálogo de modelos NLU: vive en la tabla `modelos_nlu` (sprint 021) y se
+// resuelve en runtime con resolverModelo(). El bot ya no hardcodea los modelos;
+// el superadmin los administra desde /superadmin/modelos.
+type Proveedor = 'groq' | 'anthropic' | 'openrouter'
+type ModeloResuelto = {
+  id: string
+  proveedor: Proveedor
+  apiModelId: string
+  costoIn: number
+  costoOut: number
+  apiKey?: string   // key propia del modelo (descifrada de api_key_enc); si falta, se usa el secret del proveedor
 }
 
-// Costo por token en USD [entrada, salida]
-const TOKEN_COSTS: Record<string, [number, number]> = {
-  'groq-llama':       [0.00000059, 0.00000079],
-  'anthropic-haiku':  [0.0000008,  0.000004  ],
-  'anthropic-sonnet': [0.000003,   0.000015  ],
+// Descifra la API key por modelo (formato v1.<iv_b64>.<ct_b64>, AES-GCM, base64
+// estándar) con la clave maestra MODELOS_ENC_KEY. Nunca lanza: ante cualquier
+// problema devuelve undefined y el bot cae al secret del proveedor.
+async function descifrarApiKey(enc: string | null | undefined): Promise<string | undefined> {
+  if (!enc || !MODELOS_ENC_KEY) return undefined
+  try {
+    const [v, ivB64, ctB64] = enc.split('.')
+    if (v !== 'v1' || !ivB64 || !ctB64) return undefined
+    const raw = Uint8Array.from(atob(MODELOS_ENC_KEY), (c) => c.charCodeAt(0))
+    if (raw.length !== 32) return undefined
+    const key = await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['decrypt'])
+    const iv = Uint8Array.from(atob(ivB64), (c) => c.charCodeAt(0))
+    const ct = Uint8Array.from(atob(ctB64), (c) => c.charCodeAt(0))
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+    return new TextDecoder().decode(pt)
+  } catch {
+    return undefined
+  }
+}
+
+// Fallback de resiliencia: si la tabla falla o el id no está, el bot nunca se rompe.
+const FALLBACK_MODELO: ModeloResuelto = {
+  id: 'groq-llama',
+  proveedor: 'groq',
+  apiModelId: 'llama-3.3-70b-versatile',
+  costoIn: 0.00000059,
+  costoOut: 0.00000079,
+}
+
+async function resolverModelo(nluModelId: string | undefined | null): Promise<ModeloResuelto> {
+  if (!nluModelId) return FALLBACK_MODELO
+  try {
+    const { data } = await supabase
+      .from('modelos_nlu')
+      .select('id, proveedor, api_model_id, costo_in, costo_out, api_key_enc')
+      .eq('id', nluModelId)
+      .maybeSingle()
+    if (!data) return FALLBACK_MODELO
+    const apiKey = await descifrarApiKey(data.api_key_enc)
+    if (data.api_key_enc && !apiKey) {
+      console.error(`[resolverModelo] no se pudo descifrar la API key del modelo "${data.id}" — revisar MODELOS_ENC_KEY (se usará el secret del proveedor ${data.proveedor}, que puede estar vacío).`)
+    }
+    return {
+      id: data.id,
+      proveedor: data.proveedor as Proveedor,
+      apiModelId: data.api_model_id,
+      costoIn: Number(data.costo_in) || 0,
+      costoOut: Number(data.costo_out) || 0,
+      apiKey,
+    }
+  } catch {
+    return FALLBACK_MODELO
+  }
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
@@ -525,12 +583,17 @@ async function handlePhoto(message: TelegramMessage) {
 
   const { data: usuario } = await supabase
     .from('usuarios')
-    .select('rol, modo_admin, empresa_id')
+    .select('rol, modo_admin, empresa_id, empresas(activa)')
     .eq('telegram_id', telegramUserId)
     .maybeSingle()
 
   if (!usuario?.empresa_id) {
     await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu cuenta de Telegram no está registrada en el sistema.' })
+    return
+  }
+  // Suspensión (sprint 021): empresa dada de baja → no procesa.
+  if ((usuario.empresas as { activa?: boolean } | null)?.activa === false) {
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contactá al proveedor.' })
     return
   }
   if (usuario.rol === 'admin' && usuario.modo_admin === 'consulta') {
@@ -636,7 +699,7 @@ async function procesarRegistro(
 ) {
   const { data: usuario } = await supabase
     .from('usuarios')
-    .select('id, empresa_id, tienda_id, rol, modo_admin, empresas(nlu_model, rubro)')
+    .select('id, empresa_id, tienda_id, rol, modo_admin, empresas(nlu_model, rubro, activa)')
     .eq('telegram_id', telegramUserId)
     .maybeSingle() as { data: UsuarioConEmpresa | null }
 
@@ -650,8 +713,14 @@ async function procesarRegistro(
     return
   }
 
+  // Suspensión (sprint 021): empresa dada de baja → no procesa.
+  if ((usuario.empresas as { activa?: boolean } | null)?.activa === false) {
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contactá al proveedor.' })
+    return
+  }
+
   const empresaId = usuario.empresa_id
-  const nluModel  = (usuario.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
+  const modelo    = await resolverModelo((usuario.empresas as { nlu_model?: string } | null)?.nlu_model)
   const rubro     = (usuario.empresas?.rubro ?? '').trim() || 'ferretería'
 
   const [{ data: productos }, { data: tiendas }] = await Promise.all([
@@ -661,16 +730,16 @@ async function procesarRegistro(
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
-  const nlu = await callNLU(nluModel, construirSystemPrompt(rubro, listaProd, listaTienda), transcript)
+  const nlu = await callNLU(modelo, construirSystemPrompt(rubro, listaProd, listaTienda), transcript)
 
   // ── Reporte (decisión #9: vendedor también, scoped a su sede) ──
   if (nlu.intent === 'reporte' && nlu.reporte) {
-    logConsumo(empresaId, nluModel, nlu.tokensIn, nlu.tokensOut, 'reporte').catch(console.error)
+    logConsumo(empresaId, modelo, nlu.tokensIn, nlu.tokensOut, 'reporte').catch(console.error)
     await handleReporte(chatId, usuario, nlu.reporte)
     return
   }
 
-  logConsumo(empresaId, nluModel, nlu.tokensIn, nlu.tokensOut, 'nlu').catch(console.error)
+  logConsumo(empresaId, modelo, nlu.tokensIn, nlu.tokensOut, 'nlu').catch(console.error)
 
   // ── Admin en modo consulta no registra (decisión #8) ──
   if (usuario.rol === 'admin' && usuario.modo_admin === 'consulta') {
@@ -1319,8 +1388,8 @@ async function handleFotoTipo(cb: CallbackQuery) {
   const { data: usuario } = await supabase
     .from('usuarios').select('empresa_id, empresas(nlu_model, rubro)')
     .eq('telegram_id', telegramId).maybeSingle() as { data: UsuarioConEmpresa | null }
-  const rubro    = (usuario?.empresas?.rubro ?? '').trim() || 'ferretería'
-  const nluModel = (usuario?.empresas as { nlu_model?: string } | null)?.nlu_model ?? 'groq-llama'
+  const rubro  = (usuario?.empresas?.rubro ?? '').trim() || 'ferretería'
+  const modelo = await resolverModelo((usuario?.empresas as { nlu_model?: string } | null)?.nlu_model)
 
   const fileInfo = await tg('getFile', { file_id: pend.file_id })
   if (!fileInfo.ok || !fileInfo.result?.file_path) {
@@ -1349,8 +1418,8 @@ async function handleFotoTipo(cb: CallbackQuery) {
   ])
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
-  const nlu = await callNLU(nluModel, construirSystemPrompt(rubro, listaProd, listaTienda), prose)
-  logConsumo(pend.empresa_id, nluModel, nlu.tokensIn, nlu.tokensOut, 'foto').catch(console.error)
+  const nlu = await callNLU(modelo, construirSystemPrompt(rubro, listaProd, listaTienda), prose)
+  logConsumo(pend.empresa_id, modelo, nlu.tokensIn, nlu.tokensOut, 'foto').catch(console.error)
 
   if (nlu.items.length === 0) {
     await supabase.from('movimiento_pendiente').update({ cancelled: true }).eq('id', pendId)
@@ -1659,18 +1728,35 @@ async function construirDeepLink(usuario: UsuarioConEmpresa, periodo: string, se
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────
 
 async function callNLU(
-  nluModel: string,
+  modelo: ModeloResuelto,
   systemPrompt: string,
   transcript: string,
 ): Promise<NluResult> {
 
-  // ── Groq ──
-  if (nluModel in GROQ_MODEL_IDS) {
-    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  // ── Groq / OpenRouter (API compatible con OpenAI) ──
+  if (modelo.proveedor === 'groq' || modelo.proveedor === 'openrouter') {
+    const esOR = modelo.proveedor === 'openrouter'
+    const url = esOR
+      ? 'https://openrouter.ai/api/v1/chat/completions'
+      : 'https://api.groq.com/openai/v1/chat/completions'
+    const apiKey = modelo.apiKey || (esOR ? OPENROUTER_KEY : GROQ_KEY)
+    if (!apiKey) {
+      console.error(`[callNLU] sin API key para ${modelo.proveedor} (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o el secret del proveedor.`)
+    }
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    }
+    if (esOR) {
+      // Recomendados por OpenRouter para atribución (opcionales).
+      headers['HTTP-Referer'] = DASHBOARD_BASE_URL || 'https://agent-gms'
+      headers['X-Title'] = 'Agent GMS'
+    }
+    const resp = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
-        model: GROQ_MODEL_IDS[nluModel],
+        model: modelo.apiModelId,
         temperature: 0,
         max_tokens: 2048,
         response_format: { type: 'json_object' },
@@ -1687,16 +1773,20 @@ async function callNLU(
   }
 
   // ── Anthropic ──
-  if (nluModel in ANTHROPIC_MODEL_IDS) {
+  if (modelo.proveedor === 'anthropic') {
+    const apiKey = modelo.apiKey || ANTHROPIC_KEY
+    if (!apiKey) {
+      console.error(`[callNLU] sin API key para anthropic (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o ANTHROPIC_API_KEY.`)
+    }
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': ANTHROPIC_KEY,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: ANTHROPIC_MODEL_IDS[nluModel],
+        model: modelo.apiModelId,
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: transcript }],
@@ -1770,20 +1860,19 @@ function classifyNlu(content: string | undefined, tokensIn: number, tokensOut: n
 
 async function logConsumo(
   empresaId: string | undefined,
-  modelo: string,
+  modelo: ModeloResuelto,
   tokensIn: number,
   tokensOut: number,
   tipo: string,
 ) {
   if (!empresaId) return
-  const [cIn, cOut] = TOKEN_COSTS[modelo] ?? [0, 0]
   await supabase.from('consumo_ia').insert({
     empresa_id:     empresaId,
-    modelo,
+    modelo:         modelo.id,
     tipo,
     tokens_entrada: tokensIn,
     tokens_salida:  tokensOut,
-    costo_usd:      tokensIn * cIn + tokensOut * cOut,
+    costo_usd:      tokensIn * modelo.costoIn + tokensOut * modelo.costoOut,
   })
 }
 
@@ -1899,7 +1988,7 @@ interface UsuarioConEmpresa {
   tienda_id:  number | null
   rol:        string | null
   modo_admin: 'consulta' | 'con_sede' | null
-  empresas:   { nlu_model: string; rubro?: string | null } | null
+  empresas:   { nlu_model: string; rubro?: string | null; activa?: boolean | null } | null
 }
 
 interface ParsedReporte {

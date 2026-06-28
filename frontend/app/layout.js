@@ -1,5 +1,5 @@
 import './globals.css'
-import Sidebar from '../components/Sidebar'
+import AppShell from '../components/AppShell'
 
 export const metadata = {
   title: 'AGENT GMS - Dashboard Inteligente Bsale',
@@ -15,12 +15,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="es">
       <body>
-        <div className="layout-wrapper">
-          <Sidebar empresa={empresaDemo} />
-          <main className="main-content">
-            {children}
-          </main>
-        </div>
+        <AppShell empresa={empresaDemo}>{children}</AppShell>
       </body>
     </html>
   )
