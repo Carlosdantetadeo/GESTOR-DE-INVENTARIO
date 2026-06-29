@@ -12,11 +12,20 @@ export const metadata = {
     siteName: 'Almacenero Digital',
     type: 'website',
     locale: 'es_PE',
+    images: [
+      {
+        url: '/og-almacenero-digital.png',
+        width: 1200,
+        height: 630,
+        alt: 'Almacenero Digital — Control de inventario y ventas',
+      },
+    ],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'Almacenero Digital',
     description: 'Control de inventario y ventas para tu negocio',
+    images: ['/og-almacenero-digital.png'],
   },
 }
 
