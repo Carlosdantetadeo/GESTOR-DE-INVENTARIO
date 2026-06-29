@@ -5,7 +5,7 @@ import { encryptApiKey } from './cryptoModelo'
 // Antes era una constante hardcodeada; ahora el superadmin lo administra desde
 // /superadmin/modelos. El bot resuelve el modelo contra esta misma tabla.
 
-export const PROVEEDORES = ['groq', 'anthropic', 'openrouter']
+export const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
 // Fallback mínimo por si la tabla todavía no fue migrada (evita romper la UI).
 const MODELOS_FALLBACK = [
@@ -15,7 +15,7 @@ const MODELOS_FALLBACK = [
 export async function getModelosNlu({ soloActivos = false } = {}) {
   const supa = getAdminClient()
   let q = supa.from('modelos_nlu')
-    .select('id, label, proveedor, api_model_id, costo_in, costo_out, badge, activo, created_at, api_key_enc')
+    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, activo, created_at, api_key_enc')
     .order('created_at', { ascending: true })
   if (soloActivos) q = q.eq('activo', true)
   const { data, error } = await q
@@ -45,13 +45,17 @@ function slugify(s) {
 }
 
 export async function crearModelo(input) {
-  const { id, label, proveedor, api_model_id, costo_in, costo_out, badge, api_key } = input ?? {}
+  const { id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, api_key } = input ?? {}
   const finalId = slugify(id || label)
   if (!finalId || !label?.trim() || !api_model_id?.trim()) {
     return { ok: false, message: 'Faltan datos: id/label/api_model_id.' }
   }
   if (!PROVEEDORES.includes(proveedor)) {
     return { ok: false, message: 'Proveedor no válido.' }
+  }
+  const baseUrl = base_url?.trim() || null
+  if (proveedor === 'openai-compat' && !baseUrl) {
+    return { ok: false, message: 'El proveedor openai-compat requiere una Base URL (ej. el endpoint MaaS de Huawei).' }
   }
   let api_key_enc = null
   if (api_key && String(api_key).trim()) {
@@ -64,6 +68,7 @@ export async function crearModelo(input) {
     label: label.trim(),
     proveedor,
     api_model_id: api_model_id.trim(),
+    base_url: baseUrl,
     costo_in: Number(costo_in) || 0,
     costo_out: Number(costo_out) || 0,
     badge: badge?.trim() || null,
@@ -82,6 +87,7 @@ export async function actualizarModelo(id, patch) {
     allowed.proveedor = patch.proveedor
   }
   if (patch.api_model_id !== undefined) allowed.api_model_id = String(patch.api_model_id).trim()
+  if (patch.base_url !== undefined)     allowed.base_url = String(patch.base_url).trim() || null
   if (patch.costo_in !== undefined)     allowed.costo_in = Number(patch.costo_in) || 0
   if (patch.costo_out !== undefined)    allowed.costo_out = Number(patch.costo_out) || 0
   if (patch.badge !== undefined)        allowed.badge = patch.badge?.trim() || null

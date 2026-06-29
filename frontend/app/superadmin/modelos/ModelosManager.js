@@ -3,12 +3,12 @@
 import { useState } from 'react'
 import { Plus, Trash2, Power } from 'lucide-react'
 
-const PROVEEDORES = ['groq', 'anthropic', 'openrouter']
+const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
 const th = { padding: '9px 12px', textAlign: 'left', fontWeight: 600, color: 'hsl(var(--text-muted))', fontSize: '0.72rem', whiteSpace: 'nowrap' }
 const td = { padding: '10px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }
 
-const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', costo_in: '', costo_out: '', badge: '', api_key: '' }
+const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', base_url: '', costo_in: '', costo_out: '', badge: '', api_key: '' }
 
 export default function ModelosManager({ inicial }) {
   const [modelos, setModelos] = useState(inicial)
@@ -94,6 +94,11 @@ export default function ModelosManager({ inicial }) {
           <Campo label="API model id">
             <input className="input-field" value={form.api_model_id} onChange={set('api_model_id')} placeholder="deepseek/deepseek-chat" required />
           </Campo>
+          {form.proveedor === 'openai-compat' && (
+            <Campo label="Base URL (endpoint OpenAI-compatible)">
+              <input className="input-field" value={form.base_url} onChange={set('base_url')} placeholder="https://…/v1 (ej. MaaS de Huawei)" required />
+            </Campo>
+          )}
           <Campo label="ID interno (opcional)">
             <input className="input-field" value={form.id} onChange={set('id')} placeholder="se genera del nombre" />
           </Campo>
