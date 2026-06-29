@@ -650,17 +650,23 @@ async function handlePhoto(message: TelegramMessage) {
 
 // Prompt del NLU con el contrato 018 (intent/tipo/tipo_explicito/confianza/items).
 function construirSystemPrompt(rubro: string, listaProd: string, listaTienda: string): string {
+  const hoy = hoyPeruISO()
   return `Eres el asistente de inventario de un negocio de ${rubro} en Perú.
-Decidí la INTENCIÓN del mensaje y respondé SOLO con JSON válido.
+Hoy es ${hoy} (hora Perú). Decidí la INTENCIÓN del mensaje y respondé SOLO con JSON válido.
 
 A) CONSULTA / REPORTE — el mensaje PIDE información ("¿cuánto vendí hoy?",
-   "reporte de la semana", "stock de cemento", "ventas de la sede Centro"):
+   "reporte de la semana", "ventas del 25 de junio", "qué vendió Erick",
+   "stock de cemento", "ventas de la sede Centro"):
    {
      "intent": "reporte",
      "periodo": "hoy"|"semana"|"mes",
+     "fecha": <"YYYY-MM-DD" si pide una FECHA puntual ("ayer", "el 25 de junio", "25/06"), o null>,
      "tienda_nombre": <nombre de tienda mencionado, o null>,
+     "vendedor_nombre": <nombre de vendedor/operario mencionado ("qué vendió Erick"), o null>,
      "producto": <nombre de producto si pide stock puntual, o null>
    }
+   - "fecha": resolvé fechas relativas/sueltas contra HOY (${hoy}): "ayer" = hoy menos 1 día;
+     "el 25 de junio" = el 25/06 del año en curso. Si NO hay fecha puntual → "fecha": null y usá "periodo".
 
 B) REGISTRO — el mensaje DECLARA un movimiento ya hecho ("vendí 3 tubos",
    "entraron 10 bolsas"):
@@ -1563,8 +1569,15 @@ async function upsertAdmin(
 // Inicio del período en hora Perú (UTC-5 fijo, sin DST). created_at se guarda en
 // UTC; si calculáramos "hoy" con la fecha UTC, entre las 19:00 y medianoche Perú
 // (00:00–05:00 UTC del día siguiente) el reporte mostraría datos del día equivocado.
+const PERU_OFFSET_MS = 5 * 60 * 60 * 1000
+
+// Fecha de HOY en Perú como 'YYYY-MM-DD' (para que el NLU resuelva fechas relativas).
+function hoyPeruISO(): string {
+  const p = new Date(Date.now() - PERU_OFFSET_MS)
+  return `${p.getUTCFullYear()}-${String(p.getUTCMonth() + 1).padStart(2, '0')}-${String(p.getUTCDate()).padStart(2, '0')}`
+}
+
 function inicioPeriodoPeru(periodo: 'hoy' | 'semana' | 'mes'): { desdeIso: string; titulo: string } {
-  const PERU_OFFSET_MS = 5 * 60 * 60 * 1000
   const nowPeru = new Date(Date.now() - PERU_OFFSET_MS)   // componentes UTC == reloj de pared Perú
   const y = nowPeru.getUTCFullYear()
   const m = nowPeru.getUTCMonth()
@@ -1574,6 +1587,20 @@ function inicioPeriodoPeru(periodo: 'hoy' | 'semana' | 'mes'): { desdeIso: strin
   const desdeMs = Date.UTC(y, m, d - diasAtras, 0, 0, 0) + PERU_OFFSET_MS
   const titulo = periodo === 'hoy' ? 'Hoy' : periodo === 'semana' ? 'Últimos 7 días' : 'Últimos 30 días'
   return { desdeIso: new Date(desdeMs).toISOString(), titulo }
+}
+
+// Rango del reporte. Si hay fecha puntual ('YYYY-MM-DD') → ventana ACOTADA de ese día
+// (desde medianoche Perú a la medianoche siguiente). Si no → período relativo abierto.
+function rangoReportePeru(rep: ParsedReporte): { desdeIso: string; hastaIso: string | null; titulo: string } {
+  if (rep.fecha) {
+    const [y, m, d] = rep.fecha.split('-').map(Number)
+    const desdeMs = Date.UTC(y, m - 1, d,     0, 0, 0) + PERU_OFFSET_MS
+    const hastaMs = Date.UTC(y, m - 1, d + 1, 0, 0, 0) + PERU_OFFSET_MS
+    const titulo = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+    return { desdeIso: new Date(desdeMs).toISOString(), hastaIso: new Date(hastaMs).toISOString(), titulo }
+  }
+  const { desdeIso, titulo } = inicioPeriodoPeru(rep.periodo)
+  return { desdeIso, hastaIso: null, titulo }
 }
 
 // Decisión #9: el vendedor ve reportes SCOPED a su sede (sin "permiso denegado");
@@ -1635,8 +1662,8 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     return
   }
 
-  // ── Modo B: reporte de ventas del período ──
-  const { desdeIso, titulo } = inicioPeriodoPeru(rep.periodo)
+  // ── Modo B: reporte de ventas del período / fecha puntual ──
+  const { desdeIso, hastaIso, titulo } = rangoReportePeru(rep)
 
   // Vendedor: sede forzada (sin anunciar la restricción, decisión #9).
   // Admin: resuelve la sede mencionada por el NLU si la hay; si no, consolida.
@@ -1662,23 +1689,54 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     tiendaNombre = t.nombre
   }
 
+  // Filtro por vendedor (solo admin; el vendedor ya está scoped a su sede).
+  let vendedorId: number | null = null
+  let vendedorNombre: string | null = null
+  if (!esVendedor && rep.vendedor_nombre) {
+    const { data: v } = await supabase
+      .from('usuarios')
+      .select('id, nombre')
+      .eq('empresa_id', empresaId)
+      .ilike('nombre', `%${rep.vendedor_nombre}%`)
+      .limit(1)
+      .maybeSingle()
+    if (!v) {
+      await tg('sendMessage', {
+        chat_id: chatId,
+        text: `🔍 No encontré ningún vendedor que coincida con *${mdSafe(rep.vendedor_nombre)}*.`,
+        parse_mode: 'Markdown',
+      })
+      return
+    }
+    vendedorId = v.id
+    vendedorNombre = v.nombre
+  }
+
   let q = supabase
     .from('movimientos')
     .select('cantidad, total, tienda_origen, productos!inner(nombre, empresa_id)')
     .eq('tipo', 'venta')
     .eq('productos.empresa_id', empresaId)
     .gte('created_at', desdeIso)
-  if (tiendaId) q = q.eq('tienda_origen', tiendaId)
+  if (hastaIso)    q = q.lt('created_at', hastaIso)   // fecha puntual: cota superior
+  if (tiendaId)    q = q.eq('tienda_origen', tiendaId)
+  if (vendedorId)  q = q.eq('usuario_id', vendedorId)
   const { data: ventas } = await q as { data: Array<{ cantidad: number; total: number; productos: { nombre: string } | null }> | null }
 
-  const deepLink = await construirDeepLink(usuario, rep.periodo, tiendaId ? String(tiendaId) : 'all')
+  const deepLink = await construirDeepLink(usuario, rep.fecha ?? rep.periodo, tiendaId ? String(tiendaId) : 'all')
+
+  // Cabecera con los filtros activos — siempre explícito (UX): Todas/Todos.
+  const sedeTxt = tiendaNombre ?? (esVendedor ? 'tu sede' : 'Todas')
+  const vendTxt = vendedorNombre ?? 'Todos'
+  const cabecera =
+    `🗓️ ${titulo}\n` +
+    `🏪 Sede: *${mdSafe(sedeTxt)}*\n` +
+    `🧑 Vendedor: *${mdSafe(vendTxt)}*`
 
   if (!ventas || ventas.length === 0) {
     await tg('sendMessage', {
       chat_id: chatId,
-      text:
-        `📊 No hay ventas registradas para ese período ` +
-        `(_${titulo.toLowerCase()}_${tiendaNombre ? `, sede ${mdSafe(tiendaNombre)}` : ''}).` + deepLink,
+      text: `📊 *Sin ventas para este filtro*\n${cabecera}` + deepLink,
       parse_mode: 'Markdown',
     })
     return
@@ -1698,22 +1756,26 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
 
   const numVentas = ventas.length
   const ticket    = totalVentas / numVentas
-  const top = [...porProd.entries()]
-    .sort((a, b) => b[1].monto - a[1].monto)
-    .slice(0, 5)
-    .map(([nombre, v], i) =>
-      `${i + 1}. ${mdSafe(nombre)} — *${v.cantidad}* u. · S/. ${v.monto.toFixed(2)}`)
+  const ordenados = [...porProd.entries()].sort((a, b) => b[1].monto - a[1].monto)
+  // "Todos" los productos del scope filtrado; tope para no pasar el límite de Telegram (~4096).
+  const MAX_LISTA = 50
+  const lista = ordenados
+    .slice(0, MAX_LISTA)
+    .map(([nombre, v], i) => `${i + 1}. ${mdSafe(nombre)} — *${v.cantidad}* u. · S/. ${v.monto.toFixed(2)}`)
     .join('\n')
+  const extra = ordenados.length > MAX_LISTA
+    ? `\n…y ${ordenados.length - MAX_LISTA} producto(s) más — ver dashboard`
+    : ''
 
   await tg('sendMessage', {
     chat_id: chatId,
     text:
-      `📊 *Reporte de ventas — ${titulo}*` +
-      (tiendaNombre ? `\n🏪 Sede: *${mdSafe(tiendaNombre)}*` : '') + `\n\n` +
+      `📊 *Reporte de ventas*\n${cabecera}\n` +
+      `────────────\n` +
       `💰 Total vendido: *S/. ${totalVentas.toFixed(2)}*\n` +
       `🧾 N° de ventas: *${numVentas}*\n` +
       `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n\n` +
-      `🏆 *Top productos:*\n${top}` + deepLink,
+      `🧾 *Productos vendidos (${ordenados.length}):*\n${lista}${extra}` + deepLink,
     parse_mode: 'Markdown',
   })
 }
@@ -1831,13 +1893,24 @@ function classifyNlu(content: string | undefined, tokensIn: number, tokensOut: n
   const esReporte = obj.intent === 'reporte' || obj.tipo === 'reporte'
   if (esReporte) {
     const periodo = obj.periodo === 'semana' || obj.periodo === 'mes' ? obj.periodo : 'hoy'
+    // fecha puntual: solo si es 'YYYY-MM-DD' y es una fecha de calendario REAL (round-trip
+    // de componentes — Date.parse acepta '2026-02-30' y la rueda a marzo). Si no, cae a periodo.
+    const fechaRaw = typeof obj.fecha === 'string' ? obj.fecha.trim() : ''
+    let fecha: string | null = null
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fechaRaw)) {
+      const [yy, mm, dd] = fechaRaw.split('-').map(Number)
+      const dt = new Date(Date.UTC(yy, mm - 1, dd))
+      if (dt.getUTCFullYear() === yy && dt.getUTCMonth() === mm - 1 && dt.getUTCDate() === dd) fecha = fechaRaw
+    }
     return {
       ...vacio,
       intent: 'reporte',
       reporte: {
         periodo,
-        tienda_nombre: typeof obj.tienda_nombre === 'string' && obj.tienda_nombre.trim() ? obj.tienda_nombre.trim() : null,
-        producto:      typeof obj.producto      === 'string' && obj.producto.trim()      ? obj.producto.trim()      : null,
+        fecha,
+        tienda_nombre:   typeof obj.tienda_nombre   === 'string' && obj.tienda_nombre.trim()   ? obj.tienda_nombre.trim()   : null,
+        vendedor_nombre: typeof obj.vendedor_nombre === 'string' && obj.vendedor_nombre.trim() ? obj.vendedor_nombre.trim() : null,
+        producto:        typeof obj.producto        === 'string' && obj.producto.trim()        ? obj.producto.trim()        : null,
       },
     }
   }
@@ -2008,9 +2081,11 @@ interface UsuarioConEmpresa {
 }
 
 interface ParsedReporte {
-  periodo:       'hoy' | 'semana' | 'mes'
-  tienda_nombre: string | null
-  producto:      string | null
+  periodo:         'hoy' | 'semana' | 'mes'
+  fecha:           string | null   // 'YYYY-MM-DD' si se pidió una fecha puntual; null usa `periodo`
+  tienda_nombre:   string | null
+  vendedor_nombre: string | null
+  producto:        string | null
 }
 
 // 018 — fila de movimiento_pendiente (la tarjeta de revisión vive acá hasta confirmar).
