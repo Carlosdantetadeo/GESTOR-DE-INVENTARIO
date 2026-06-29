@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Lock, Mail, Package, CheckCircle2 } from 'lucide-react'
+import Image from 'next/image'
+import { Lock, Mail, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 export default function Login() {
@@ -73,17 +74,15 @@ export default function Login() {
     }}>
       <div style={{ width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '40px', height: '40px', background: 'hsl(var(--accent))',
-            borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <Package size={20} color="#fff" />
-          </div>
-          <div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Inventario</div>
-            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Control de stock</div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <Image
+            src="/logo-almacenerodigital.png"
+            alt="Almacenero Digital"
+            width={220}
+            height={120}
+            priority
+            style={{ height: '56px', width: 'auto' }}
+          />
         </div>
 
         <div style={{
