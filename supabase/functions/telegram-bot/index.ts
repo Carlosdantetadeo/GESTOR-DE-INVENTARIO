@@ -28,6 +28,10 @@ const TG_FILE       = `https://api.telegram.org/file/bot${BOT_TOKEN}`
 // no se emite (no se manda un link sin auth).
 const DASHBOARD_BASE_URL = Deno.env.get('DASHBOARD_BASE_URL') ?? ''
 const JWT_SECRET         = Deno.env.get('JWT_SECRET') ?? ''
+// Versión del deep-link (cache-buster del preview de Telegram). Subir este número
+// cuando cambie el branding del link para forzar a Telegram a regenerar la vista
+// previa cacheada con el logo viejo (ver construirDeepLink).
+const DEEP_LINK_VERSION = '2'
 
 // Ventana de auto-reversión del vendedor (018, decisión #10).
 const UNDO_VENTANA_MS = 5 * 60 * 1000
@@ -1855,7 +1859,10 @@ async function construirDeepLink(usuario: UsuarioConEmpresa, periodo: string, se
   const tokenParam = JWT_SECRET
     ? `&token=${await firmarJwtDashboard(usuario.id, usuario.empresa_id, usuario.rol ?? '')}`
     : ''
-  return `\n\n🔗 Ver detalle completo en el dashboard: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}${tokenParam}`
+  // &v=<DEEP_LINK_VERSION>: parámetro de versión fijo. La URL es la "cache key" con la
+  // que Telegram guarda la vista previa (Open Graph) del link. Subir este número cambia
+  // la URL y obliga a Telegram a regenerar el preview, descartando el branding cacheado.
+  return `\n\n🔗 Ver detalle completo en el dashboard: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}&v=${DEEP_LINK_VERSION}${tokenParam}`
 }
 
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────
