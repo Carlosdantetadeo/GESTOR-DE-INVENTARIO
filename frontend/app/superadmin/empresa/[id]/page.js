@@ -5,6 +5,8 @@ import { requireSuperadmin } from '../../../../lib/superadmin/guard'
 import { getEmpresaDetalle, getModelosNlu, modeloLabel, costoLabel } from '../../../../lib/superadmin/data'
 import ModeloSelector from './ModeloSelector'
 import EstadoEmpresa from './EstadoEmpresa'
+import TokensTelegram from './TokensTelegram'
+import OperariosSuperadmin from './OperariosSuperadmin'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +57,16 @@ export default async function EmpresaDetalle({ params }) {
         <EstadoEmpresa empresaId={empresa.id} activa={empresa.activa !== false} />
       </section>
 
+      {/* Sección — Tokens de conexión Telegram */}
+      <section style={card}>
+        <div style={label}>Conexión Telegram</div>
+        <TokensTelegram
+          empresaId={empresa.id}
+          tokenVendedor={empresa.telegram_token}
+          tokenAdmin={empresa.telegram_token_admin}
+        />
+      </section>
+
       {/* Sección 2 — Modelo NLU */}
       <section style={card}>
         <div style={label}>Modelo NLU</div>
@@ -93,32 +105,10 @@ export default async function EmpresaDetalle({ params }) {
         )}
       </section>
 
-      {/* Sección 4 — Operarios (read-only) */}
+      {/* Sección 4 — Operarios (con Desconectar) */}
       <section style={card}>
         <div style={label}>Operarios</div>
-        {operarios.length === 0 ? (
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))', margin: 0 }}>Sin operarios vinculados.</p>
-        ) : (
-          <div style={{ overflowX: 'auto', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius-md)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'hsl(var(--bg-base))' }}>
-                  <th style={th}>Nombre</th><th style={th}>Rol</th><th style={th}>Sede</th><th style={th}>Último registro</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operarios.map((u) => (
-                  <tr key={u.id} style={{ borderTop: '1px solid hsl(var(--border))' }}>
-                    <td style={{ ...td, fontWeight: 600 }}>{u.nombre || '—'}</td>
-                    <td style={td}>{u.rol === 'admin' ? 'Admin' : 'Operario'}</td>
-                    <td style={{ ...td, color: 'hsl(var(--text-secondary))' }}>{u.sede}</td>
-                    <td style={{ ...td, color: 'hsl(var(--text-secondary))' }}>{fmtFecha(u.ultimoRegistro, true)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <OperariosSuperadmin empresaId={empresa.id} operarios={operarios} />
       </section>
     </div>
   )

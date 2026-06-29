@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Users, MapPin, Unlink, X } from 'lucide-react'
+import { Users, MapPin, Unlink, X, Copy, Check } from 'lucide-react'
 
 function formatFecha(dateStr) {
   if (!dateStr) return '—'
@@ -34,6 +34,7 @@ function estadoActividad(ultimo) {
 export default function UsuariosPage() {
   const [empresaId, setEmpresaId] = useState(null)
   const [operarios, setOperarios] = useState([])
+  const [tokens,    setTokens]    = useState({ vendedor: '', admin: '' })
   const [loading,   setLoading]   = useState(true)
   const [confirmU,  setConfirmU]  = useState(null)   // operario pendiente de desconectar
   const [deleting,  setDeleting]  = useState(false)
@@ -46,6 +47,14 @@ export default function UsuariosPage() {
       const empId = user.app_metadata?.empresa_id
       if (!empId) { setLoading(false); return }
       setEmpresaId(empId)
+
+      // Tokens de conexión Telegram de la empresa (read-only; RLS limita a la propia).
+      const { data: emp } = await supabase
+        .from('empresas')
+        .select('telegram_token, telegram_token_admin')
+        .eq('id', empId)
+        .single()
+      if (emp) setTokens({ vendedor: emp.telegram_token ?? '', admin: emp.telegram_token_admin ?? '' })
 
       // RLS limita la query a la empresa del admin.
       const { data: usrs } = await supabase
@@ -104,6 +113,20 @@ export default function UsuariosPage() {
             Operarios conectados al bot de Telegram y su actividad reciente
           </p>
         </div>
+
+        {/* Conexión Telegram (tokens read-only) */}
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={styles.sectionLabel}>Conexión Telegram</div>
+          <div style={{ ...styles.card, gap: '14px' }}>
+            <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
+              Tus empleados se conectan al bot enviándole <code>/start &lt;token&gt;</code>. Compartí el
+              token de <strong>operario</strong> con tus vendedores. El token <strong>admin</strong> es
+              para administradores (reportes) — no lo compartas.
+            </p>
+            <TokenReadOnly etiqueta="Token operario" valor={tokens.vendedor} />
+            <TokenReadOnly etiqueta="Token admin" valor={tokens.admin} />
+          </div>
+        </section>
 
         {/* Operarios conectados */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -235,6 +258,31 @@ export default function UsuariosPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Token read-only con botón copiar (el cliente no puede rotarlo — eso es solo superadmin).
+function TokenReadOnly({ etiqueta, valor }) {
+  const [copiado, setCopiado] = useState(false)
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(valor)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 1500)
+    } catch { /* noop */ }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>{etiqueta}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <code style={{ flex: '1 1 260px', minWidth: 0, fontFamily: 'var(--font-mono)', fontSize: '0.8rem', padding: '8px 12px', borderRadius: 'var(--radius-md)', background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border))', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          {valor || '—'}
+        </code>
+        <button onClick={copiar} className="btn btn-secondary" style={{ padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {copiado ? <Check size={14} /> : <Copy size={14} />} {copiado ? 'Copiado' : 'Copiar'}
+        </button>
+      </div>
     </div>
   )
 }
