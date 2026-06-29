@@ -1666,7 +1666,6 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
       chat_id: chatId,
       text: `📊 *Stock actual*\n\n${bloques.join('\n\n')}` + deepLinkStock,
       parse_mode: 'Markdown',
-      disable_web_page_preview: true,
     })
     return
   }
@@ -1747,7 +1746,6 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
       chat_id: chatId,
       text: `📊 *Sin ventas para este filtro*\n${cabecera}` + deepLink,
       parse_mode: 'Markdown',
-      disable_web_page_preview: true,
     })
     return
   }
@@ -1842,7 +1840,6 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
       `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n\n` +
       cuerpo + deepLink,
     parse_mode: 'Markdown',
-    disable_web_page_preview: true,
   })
 }
 
