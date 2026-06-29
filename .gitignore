@@ -34,6 +34,7 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 pnpm-debug.log*
+debug.log
 
 # OS files
 .DS_Store
@@ -48,3 +49,9 @@ test_login_full.mjs
 # Skills de ECC (terceros, instalados localmente para acelerar el desarrollo)
 .claude/skills/
 .vercel
+
+# Notas/insumos locales de trabajo (no van al repo)
+claude-insight/
+logo-almacenerodigital.png
+PROMPT_CLAUDE_CODE_*.txt
+CHECKLIST_PRUEBAS_*.md
