@@ -40,7 +40,7 @@ const supabase = createClient(
 // Catálogo de modelos NLU: vive en la tabla `modelos_nlu` (sprint 021) y se
 // resuelve en runtime con resolverModelo(). El bot ya no hardcodea los modelos;
 // el superadmin los administra desde /superadmin/modelos.
-type Proveedor = 'groq' | 'anthropic' | 'openrouter'
+type Proveedor = 'groq' | 'anthropic' | 'openrouter' | 'openai-compat'
 type ModeloResuelto = {
   id: string
   proveedor: Proveedor
@@ -48,6 +48,7 @@ type ModeloResuelto = {
   costoIn: number
   costoOut: number
   apiKey?: string   // key propia del modelo (descifrada de api_key_enc); si falta, se usa el secret del proveedor
+  baseUrl?: string  // URL base del endpoint OpenAI-compatible (proveedor 'openai-compat', ej. Huawei MaaS)
 }
 
 // Descifra la API key por modelo (formato v1.<iv_b64>.<ct_b64>, AES-GCM, base64
@@ -84,7 +85,7 @@ async function resolverModelo(nluModelId: string | undefined | null): Promise<Mo
   try {
     const { data } = await supabase
       .from('modelos_nlu')
-      .select('id, proveedor, api_model_id, costo_in, costo_out, api_key_enc')
+      .select('id, proveedor, api_model_id, costo_in, costo_out, api_key_enc, base_url')
       .eq('id', nluModelId)
       .maybeSingle()
     if (!data) return FALLBACK_MODELO
@@ -99,6 +100,7 @@ async function resolverModelo(nluModelId: string | undefined | null): Promise<Mo
       costoIn: Number(data.costo_in) || 0,
       costoOut: Number(data.costo_out) || 0,
       apiKey,
+      baseUrl: data.base_url ?? undefined,
     }
   } catch {
     return FALLBACK_MODELO
@@ -1733,13 +1735,27 @@ async function callNLU(
   transcript: string,
 ): Promise<NluResult> {
 
-  // ── Groq / OpenRouter (API compatible con OpenAI) ──
-  if (modelo.proveedor === 'groq' || modelo.proveedor === 'openrouter') {
+  // ── Groq / OpenRouter / OpenAI-compatible genérico (Huawei MaaS, etc.) ──
+  if (modelo.proveedor === 'groq' || modelo.proveedor === 'openrouter' || modelo.proveedor === 'openai-compat') {
     const esOR = modelo.proveedor === 'openrouter'
-    const url = esOR
-      ? 'https://openrouter.ai/api/v1/chat/completions'
-      : 'https://api.groq.com/openai/v1/chat/completions'
-    const apiKey = modelo.apiKey || (esOR ? OPENROUTER_KEY : GROQ_KEY)
+    // URL del endpoint: hardcodeada para groq/openrouter; base_url para openai-compat.
+    let url: string
+    if (modelo.proveedor === 'groq') {
+      url = 'https://api.groq.com/openai/v1/chat/completions'
+    } else if (esOR) {
+      url = 'https://openrouter.ai/api/v1/chat/completions'
+    } else {
+      const base = (modelo.baseUrl ?? '').replace(/\/+$/, '')
+      if (!base) {
+        console.error(`[callNLU] modelo openai-compat "${modelo.id}" sin base_url; no se puede llamar.`)
+        return { intent: 'registro', tipo: null, tipo_explicito: false, confianza: 0, items: [], reporte: null, tokensIn: 0, tokensOut: 0 }
+      }
+      url = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`
+    }
+    // Key: la del modelo; fallback al secret SOLO para groq/openrouter (nunca mandar
+    // el secret de un proveedor a un endpoint de terceros openai-compat).
+    const apiKey = modelo.apiKey
+      || (modelo.proveedor === 'groq' ? GROQ_KEY : esOR ? OPENROUTER_KEY : '')
     if (!apiKey) {
       console.error(`[callNLU] sin API key para ${modelo.proveedor} (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o el secret del proveedor.`)
     }
