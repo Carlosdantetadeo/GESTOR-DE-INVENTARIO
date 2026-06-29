@@ -1720,9 +1720,6 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     vendedorNombre = v.nombre
   }
 
-  // Desglose por vendedor/sede (solo admin; el vendedor ya está scoped a su sede).
-  const agrupar = esVendedor ? null : rep.agrupar
-
   let q = supabase
     .from('movimientos')
     .select('cantidad, total, tienda_origen, usuario_id, productos!inner(nombre, empresa_id)')
@@ -1732,7 +1729,7 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
   if (hastaIso)    q = q.lt('created_at', hastaIso)   // fecha puntual: cota superior
   if (tiendaId)    q = q.eq('tienda_origen', tiendaId)
   if (vendedorId)  q = q.eq('usuario_id', vendedorId)
-  const { data: ventas } = await q as { data: Array<{ cantidad: number; total: number; tienda_origen: number | null; usuario_id: number | null; productos: { nombre: string } | null }> | null }
+  const { data: ventas } = await q as { data: VentaRow[] | null }
 
   const deepLink = await construirDeepLink(usuario, rep.fecha ?? rep.periodo, tiendaId ? String(tiendaId) : 'all')
 
@@ -1768,38 +1765,69 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
   const numVentas = ventas.length
   const ticket    = totalVentas / numVentas
 
-  // Cuerpo: desglose por vendedor/sede (solo los que vendieron) o resumen de productos.
-  let cuerpo: string
-  if (agrupar) {
-    const nombres = new Map<number, string>()
-    if (agrupar === 'vendedor') {
-      const { data } = await supabase.from('usuarios').select('id, nombre').eq('empresa_id', empresaId)
-      for (const u of (data ?? []) as Array<{ id: number; nombre: string | null }>) nombres.set(u.id, u.nombre ?? '—')
-    } else {
-      const { data } = await supabase.from('tiendas').select('id, nombre').eq('empresa_id', empresaId)
-      for (const t of (data ?? []) as Array<{ id: number; nombre: string | null }>) nombres.set(t.id, t.nombre ?? '—')
-    }
-    const grupos = new Map<number, { monto: number; ventas: number; unidades: number }>()
-    for (const v of ventas) {
-      const key = agrupar === 'vendedor' ? v.usuario_id : v.tienda_origen
+  // Cuerpo del reporte:
+  //  • Consolidado (sin sede ni vendedor puntual): desglose por sede + por vendedor
+  //    (monto y N° de ventas en cada uno) + resumen por producto (cantidad y monto).
+  //  • Filtrado (sede/vendedor puntual, o vendedor scoped a su sede): solo el resumen
+  //    por producto de ese filtro — el desglose de las demás dimensiones no aplica.
+  const ventasList = ventas               // ya narrowed a VentaRow[] tras el guard de arriba
+  const MAX      = 10                      // tope de filas por desglose (sede / vendedor)
+  const MAX_PROD = 3                       // top-3 productos por monto; el detalle completo va al dashboard (deep-link)
+  const medalla  = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`)
+
+  const renderDesglose = (
+    encabezado: string,                    // ej. "🏪 *Por sede"
+    keyOf: (v: VentaRow) => number | null,
+    nombres: Map<number, string>,
+  ): string => {
+    const grupos = new Map<number, { monto: number; ventas: number }>()
+    for (const v of ventasList) {
+      const key = keyOf(v)
       if (key == null) continue
-      const g = grupos.get(key) ?? { monto: 0, ventas: 0, unidades: 0 }
-      g.monto    += Number(v.total ?? 0)
-      g.ventas   += 1
-      g.unidades += Number(v.cantidad ?? 0)
+      const g = grupos.get(key) ?? { monto: 0, ventas: 0 }
+      g.monto  += Number(v.total ?? 0)
+      g.ventas += 1
       grupos.set(key, g)
     }
     const ordenados = [...grupos.entries()].sort((a, b) => b[1].monto - a[1].monto)
-    const MAX = 20
-    const medalla = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`)
     const filas = ordenados.slice(0, MAX).map(([key, g], i) =>
-      `${medalla(i)} ${mdSafe(nombres.get(key) ?? '—')} — S/. ${g.monto.toFixed(2)} · ${g.ventas} ${g.ventas === 1 ? 'venta' : 'ventas'} · ${g.unidades} u.`,
+      `${medalla(i)} ${mdSafe(nombres.get(key) ?? '—')} — S/. ${g.monto.toFixed(2)} · ${g.ventas} ${g.ventas === 1 ? 'venta' : 'ventas'}`,
     ).join('\n')
     const mas = ordenados.length > MAX ? `\n…y ${ordenados.length - MAX} más` : ''
-    cuerpo = `👥 *Por ${agrupar} (${ordenados.length}):*\n${filas}${mas}`
+    return `${encabezado} (${ordenados.length}):*\n${filas}${mas}`
+  }
+
+  // Resumen por producto: solo el top-3 por monto. El detalle completo de todos
+  // los productos se ve en el dashboard vía el deep-link al pie del mensaje.
+  const prodOrden = [...porProd.entries()].sort((a, b) => b[1].monto - a[1].monto)
+  const totalUnidades = prodOrden.reduce((s, [, p]) => s + p.cantidad, 0)
+  const filasProd = prodOrden.slice(0, MAX_PROD).map(([nombre, p]) =>
+    `• ${mdSafe(nombre)} — ${p.cantidad} u. · S/. ${p.monto.toFixed(2)}`,
+  ).join('\n')
+  // El puntero al dashboard solo se agrega si efectivamente habrá deep-link al pie
+  // (si faltan DASHBOARD_BASE_URL/JWT_SECRET, deepLink === '' y el 👇 quedaría colgado).
+  const masProd = prodOrden.length > MAX_PROD
+    ? `\n…y ${prodOrden.length - MAX_PROD} más${deepLink ? ' 👇' : ''}`
+    : ''
+  const bloqueProd = `📦 *Top productos (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
+
+  const hayFiltro = tiendaId != null || vendedorId != null
+  let cuerpo: string
+  if (hayFiltro) {
+    cuerpo = bloqueProd
   } else {
-    const totalUnidades = [...porProd.values()].reduce((s, v) => s + v.cantidad, 0)
-    cuerpo = `📦 Productos: *${totalUnidades}* u. en *${porProd.size}* ítem(s)`
+    const nombresSede = new Map<number, string>()
+    const nombresVend = new Map<number, string>()
+    const [sedesRes, vendsRes] = await Promise.all([
+      supabase.from('tiendas').select('id, nombre').eq('empresa_id', empresaId),
+      supabase.from('usuarios').select('id, nombre').eq('empresa_id', empresaId),
+    ])
+    for (const t of (sedesRes.data ?? []) as Array<{ id: number; nombre: string | null }>) nombresSede.set(t.id, t.nombre ?? '—')
+    for (const u of (vendsRes.data ?? []) as Array<{ id: number; nombre: string | null }>) nombresVend.set(u.id, u.nombre ?? '—')
+
+    const bloqueSede = renderDesglose('🏪 *Por sede',     v => v.tienda_origen, nombresSede)
+    const bloqueVend = renderDesglose('🧑 *Por vendedor', v => v.usuario_id,    nombresVend)
+    cuerpo = `${bloqueSede}\n\n${bloqueVend}\n\n${bloqueProd}`
   }
 
   await tg('sendMessage', {
@@ -1819,9 +1847,15 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
 // y JWT_SECRET; si falta alguno devuelve '' (no se manda un link sin token de
 // auth). El token es un JWT HS256 de 15 min con {usuario_id, empresa_id, rol}.
 async function construirDeepLink(usuario: UsuarioConEmpresa, periodo: string, sedeParam: string): Promise<string> {
-  if (!DASHBOARD_BASE_URL || !JWT_SECRET) return ''
-  const token = await firmarJwtDashboard(usuario.id, usuario.empresa_id, usuario.rol ?? '')
-  return `\n\n🔗 Ver gráfico completo: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}&token=${token}`
+  // El link se manda en CADA reporte siempre que esté DASHBOARD_BASE_URL. El admin
+  // accede con su sesión del dashboard (scoping por empresa vía login/RLS). El token
+  // JWT es opcional: se agrega solo si hay JWT_SECRET, para habilitar acceso
+  // passwordless cuando /reportes lo consuma (hoy la página lo ignora).
+  if (!DASHBOARD_BASE_URL) return ''
+  const tokenParam = JWT_SECRET
+    ? `&token=${await firmarJwtDashboard(usuario.id, usuario.empresa_id, usuario.rol ?? '')}`
+    : ''
+  return `\n\n🔗 Ver detalle completo en el dashboard: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}${tokenParam}`
 }
 
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────
@@ -2122,8 +2156,17 @@ interface ParsedReporte {
   fecha:           string | null   // 'YYYY-MM-DD' si se pidió una fecha puntual; null usa `periodo`
   tienda_nombre:   string | null
   vendedor_nombre: string | null
-  agrupar:         'vendedor' | 'sede' | null   // desglose por cada vendedor/sede, o null
+  agrupar:         'vendedor' | 'sede' | null   // (legacy) hint del NLU; el cuerpo del reporte ya no lo usa
   producto:        string | null
+}
+
+// Fila de venta que consume handleReporte (proyección del SELECT a movimientos).
+interface VentaRow {
+  cantidad:      number
+  total:         number
+  tienda_origen: number | null
+  usuario_id:    number | null
+  productos:     { nombre: string } | null
 }
 
 // 018 — fila de movimiento_pendiente (la tarjeta de revisión vive acá hasta confirmar).
