@@ -663,6 +663,7 @@ A) CONSULTA / REPORTE — el mensaje PIDE información ("¿cuánto vendí hoy?",
      "fecha": <"YYYY-MM-DD" si pide una FECHA puntual ("ayer", "el 25 de junio", "25/06"), o null>,
      "tienda_nombre": <nombre de tienda mencionado, o null>,
      "vendedor_nombre": <nombre de vendedor/operario mencionado ("qué vendió Erick"), o null>,
+     "agrupar": <"vendedor" si pide "por vendedor"/"por cada vendedor"; "sede" si pide "por sede"/"por tienda"; o null>,
      "producto": <nombre de producto si pide stock puntual, o null>
    }
    - "fecha": resolvé fechas relativas/sueltas contra HOY (${hoy}): "ayer" = hoy menos 1 día;
@@ -1712,16 +1713,19 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     vendedorNombre = v.nombre
   }
 
+  // Desglose por vendedor/sede (solo admin; el vendedor ya está scoped a su sede).
+  const agrupar = esVendedor ? null : rep.agrupar
+
   let q = supabase
     .from('movimientos')
-    .select('cantidad, total, tienda_origen, productos!inner(nombre, empresa_id)')
+    .select('cantidad, total, tienda_origen, usuario_id, productos!inner(nombre, empresa_id)')
     .eq('tipo', 'venta')
     .eq('productos.empresa_id', empresaId)
     .gte('created_at', desdeIso)
   if (hastaIso)    q = q.lt('created_at', hastaIso)   // fecha puntual: cota superior
   if (tiendaId)    q = q.eq('tienda_origen', tiendaId)
   if (vendedorId)  q = q.eq('usuario_id', vendedorId)
-  const { data: ventas } = await q as { data: Array<{ cantidad: number; total: number; productos: { nombre: string } | null }> | null }
+  const { data: ventas } = await q as { data: Array<{ cantidad: number; total: number; tienda_origen: number | null; usuario_id: number | null; productos: { nombre: string } | null }> | null }
 
   const deepLink = await construirDeepLink(usuario, rep.fecha ?? rep.periodo, tiendaId ? String(tiendaId) : 'all')
 
@@ -1754,12 +1758,42 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     porProd.set(nombre, acc)
   }
 
-  const numVentas     = ventas.length
-  const ticket        = totalVentas / numVentas
-  // Resumen (no lista): total de unidades y de ítems distintos. El detalle
-  // producto-por-producto se ve en el dashboard (deep-link).
-  const totalUnidades = [...porProd.values()].reduce((s, v) => s + v.cantidad, 0)
-  const numProductos  = porProd.size
+  const numVentas = ventas.length
+  const ticket    = totalVentas / numVentas
+
+  // Cuerpo: desglose por vendedor/sede (solo los que vendieron) o resumen de productos.
+  let cuerpo: string
+  if (agrupar) {
+    const nombres = new Map<number, string>()
+    if (agrupar === 'vendedor') {
+      const { data } = await supabase.from('usuarios').select('id, nombre').eq('empresa_id', empresaId)
+      for (const u of (data ?? []) as Array<{ id: number; nombre: string | null }>) nombres.set(u.id, u.nombre ?? '—')
+    } else {
+      const { data } = await supabase.from('tiendas').select('id, nombre').eq('empresa_id', empresaId)
+      for (const t of (data ?? []) as Array<{ id: number; nombre: string | null }>) nombres.set(t.id, t.nombre ?? '—')
+    }
+    const grupos = new Map<number, { monto: number; ventas: number; unidades: number }>()
+    for (const v of ventas) {
+      const key = agrupar === 'vendedor' ? v.usuario_id : v.tienda_origen
+      if (key == null) continue
+      const g = grupos.get(key) ?? { monto: 0, ventas: 0, unidades: 0 }
+      g.monto    += Number(v.total ?? 0)
+      g.ventas   += 1
+      g.unidades += Number(v.cantidad ?? 0)
+      grupos.set(key, g)
+    }
+    const ordenados = [...grupos.entries()].sort((a, b) => b[1].monto - a[1].monto)
+    const MAX = 20
+    const medalla = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`)
+    const filas = ordenados.slice(0, MAX).map(([key, g], i) =>
+      `${medalla(i)} ${mdSafe(nombres.get(key) ?? '—')} — S/. ${g.monto.toFixed(2)} · ${g.ventas} ${g.ventas === 1 ? 'venta' : 'ventas'} · ${g.unidades} u.`,
+    ).join('\n')
+    const mas = ordenados.length > MAX ? `\n…y ${ordenados.length - MAX} más` : ''
+    cuerpo = `👥 *Por ${agrupar} (${ordenados.length}):*\n${filas}${mas}`
+  } else {
+    const totalUnidades = [...porProd.values()].reduce((s, v) => s + v.cantidad, 0)
+    cuerpo = `📦 Productos: *${totalUnidades}* u. en *${porProd.size}* ítem(s)`
+  }
 
   await tg('sendMessage', {
     chat_id: chatId,
@@ -1768,8 +1802,8 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
       `────────────\n` +
       `💰 Total vendido: *S/. ${totalVentas.toFixed(2)}*\n` +
       `🧾 N° de ventas: *${numVentas}*\n` +
-      `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n` +
-      `📦 Productos: *${totalUnidades}* u. en *${numProductos}* ítem(s)` + deepLink,
+      `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n\n` +
+      cuerpo + deepLink,
     parse_mode: 'Markdown',
   })
 }
@@ -1896,6 +1930,7 @@ function classifyNlu(content: string | undefined, tokensIn: number, tokensOut: n
       const dt = new Date(Date.UTC(yy, mm - 1, dd))
       if (dt.getUTCFullYear() === yy && dt.getUTCMonth() === mm - 1 && dt.getUTCDate() === dd) fecha = fechaRaw
     }
+    const agrupar = obj.agrupar === 'vendedor' || obj.agrupar === 'sede' ? obj.agrupar : null
     return {
       ...vacio,
       intent: 'reporte',
@@ -1904,6 +1939,7 @@ function classifyNlu(content: string | undefined, tokensIn: number, tokensOut: n
         fecha,
         tienda_nombre:   typeof obj.tienda_nombre   === 'string' && obj.tienda_nombre.trim()   ? obj.tienda_nombre.trim()   : null,
         vendedor_nombre: typeof obj.vendedor_nombre === 'string' && obj.vendedor_nombre.trim() ? obj.vendedor_nombre.trim() : null,
+        agrupar,
         producto:        typeof obj.producto        === 'string' && obj.producto.trim()        ? obj.producto.trim()        : null,
       },
     }
@@ -2079,6 +2115,7 @@ interface ParsedReporte {
   fecha:           string | null   // 'YYYY-MM-DD' si se pidió una fecha puntual; null usa `periodo`
   tienda_nombre:   string | null
   vendedor_nombre: string | null
+  agrupar:         'vendedor' | 'sede' | null   // desglose por cada vendedor/sede, o null
   producto:        string | null
 }
 
