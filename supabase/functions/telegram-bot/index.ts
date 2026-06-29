@@ -1804,7 +1804,11 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
   const filasProd = prodOrden.slice(0, MAX_PROD).map(([nombre, p]) =>
     `• ${mdSafe(nombre)} — ${p.cantidad} u. · S/. ${p.monto.toFixed(2)}`,
   ).join('\n')
-  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más — ver detalle completo en el dashboard 👇` : ''
+  // El puntero al dashboard solo se agrega si efectivamente habrá deep-link al pie
+  // (si faltan DASHBOARD_BASE_URL/JWT_SECRET, deepLink === '' y el 👇 quedaría colgado).
+  const masProd = prodOrden.length > MAX_PROD
+    ? `\n…y ${prodOrden.length - MAX_PROD} más${deepLink ? ' 👇' : ''}`
+    : ''
   const bloqueProd = `📦 *Top productos (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
 
   const hayFiltro = tiendaId != null || vendedorId != null
@@ -1843,9 +1847,15 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
 // y JWT_SECRET; si falta alguno devuelve '' (no se manda un link sin token de
 // auth). El token es un JWT HS256 de 15 min con {usuario_id, empresa_id, rol}.
 async function construirDeepLink(usuario: UsuarioConEmpresa, periodo: string, sedeParam: string): Promise<string> {
-  if (!DASHBOARD_BASE_URL || !JWT_SECRET) return ''
-  const token = await firmarJwtDashboard(usuario.id, usuario.empresa_id, usuario.rol ?? '')
-  return `\n\n🔗 Ver gráfico completo: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}&token=${token}`
+  // El link se manda en CADA reporte siempre que esté DASHBOARD_BASE_URL. El admin
+  // accede con su sesión del dashboard (scoping por empresa vía login/RLS). El token
+  // JWT es opcional: se agrega solo si hay JWT_SECRET, para habilitar acceso
+  // passwordless cuando /reportes lo consuma (hoy la página lo ignora).
+  if (!DASHBOARD_BASE_URL) return ''
+  const tokenParam = JWT_SECRET
+    ? `&token=${await firmarJwtDashboard(usuario.id, usuario.empresa_id, usuario.rol ?? '')}`
+    : ''
+  return `\n\n🔗 Ver detalle completo en el dashboard: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}${tokenParam}`
 }
 
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────

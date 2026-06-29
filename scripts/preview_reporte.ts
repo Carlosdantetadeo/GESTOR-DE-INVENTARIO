@@ -86,7 +86,8 @@ async function render(empresaId: string, tiendaId: number | null, vendedorId: nu
   const prodOrden = [...porProd.entries()].sort((a, b) => b[1].monto - a[1].monto)
   const totalUnidades = prodOrden.reduce((s, [, p]) => s + p.cantidad, 0)
   const filasProd = prodOrden.slice(0, MAX_PROD).map(([n, p]) => `• ${mdSafe(n)} — ${p.cantidad} u. · S/. ${p.monto.toFixed(2)}`).join('\n')
-  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más — ver detalle completo en el dashboard 👇` : ''
+  // El preview no emite deep-link (sin secrets de auth), así que no promete el 👇.
+  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más` : ''
   const bloqueProd = `📦 *Top productos (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
 
   const hayFiltro = tiendaId != null || vendedorId != null
