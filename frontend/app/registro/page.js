@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Building2, Mail, MapPin, Package, Tag, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
+import Image from 'next/image'
+import { Building2, Mail, MapPin, Tag, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
 
 // URL hardcodeada — no depende del env var que tiene /rest/v1 de más
 const EDGE_URL = 'https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/onboarding'
@@ -291,19 +292,15 @@ export default function Registro() {
 
 function Brand() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{
-        width: '40px', height: '40px',
-        background: 'hsl(var(--accent))',
-        borderRadius: 'var(--radius-md)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Package size={20} color="#fff" />
-      </div>
-      <div>
-        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Almacenero Digital</div>
-        <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Inventario por voz</div>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      <Image
+        src="/logo-almacenerodigital.png"
+        alt="Almacenero Digital"
+        width={220}
+        height={120}
+        priority
+        style={{ height: '56px', width: 'auto' }}
+      />
     </div>
   )
 }
