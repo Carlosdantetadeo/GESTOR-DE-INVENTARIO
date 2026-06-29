@@ -301,7 +301,7 @@ function Brand() {
         <Package size={20} color="#fff" />
       </div>
       <div>
-        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Agent GMS</div>
+        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Almacenero Digital</div>
         <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Inventario por voz</div>
       </div>
     </div>

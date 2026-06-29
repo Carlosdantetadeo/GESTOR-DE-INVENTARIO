@@ -2,8 +2,8 @@ import './globals.css'
 import AppShell from '../components/AppShell'
 
 export const metadata = {
-  title: 'AGENT GMS - Dashboard Inteligente Bsale',
-  description: 'Visualiza tus transacciones y stock en tiempo real con inteligencia artificial',
+  title: 'Almacenero Digital — Gestión de Inventario Inteligente',
+  description: 'Almacenero Digital: registra ventas e inventario por voz en segundos y visualiza tu stock en tiempo real con inteligencia artificial.',
 }
 
 export default function RootLayout({ children }) {

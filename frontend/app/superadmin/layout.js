@@ -1,7 +1,7 @@
 import SuperadminChrome from '../../components/SuperadminChrome'
 
 export const metadata = {
-  title: 'Panel Superadmin — AGENT GMS',
+  title: 'Panel Superadmin — Almacenero Digital',
 }
 
 export default function SuperadminLayout({ children }) {
