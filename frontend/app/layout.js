@@ -2,8 +2,22 @@ import './globals.css'
 import AppShell from '../components/AppShell'
 
 export const metadata = {
-  title: 'Almacenero Digital — Gestión de Inventario Inteligente',
-  description: 'Almacenero Digital: registra ventas e inventario por voz en segundos y visualiza tu stock en tiempo real con inteligencia artificial.',
+  metadataBase: new URL('https://dashboard.almacenero.digital'),
+  title: 'Almacenero Digital',
+  description: 'Control de inventario y ventas para tu negocio',
+  openGraph: {
+    title: 'Almacenero Digital',
+    description: 'Control de inventario y ventas para tu negocio',
+    url: 'https://dashboard.almacenero.digital',
+    siteName: 'Almacenero Digital',
+    type: 'website',
+    locale: 'es_PE',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Almacenero Digital',
+    description: 'Control de inventario y ventas para tu negocio',
+  },
 }
 
 export default function RootLayout({ children }) {
