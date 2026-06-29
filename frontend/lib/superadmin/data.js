@@ -177,7 +177,7 @@ export async function getEmpresaDetalle(empresaId) {
 
   const { data: empresa } = await supa
     .from('empresas')
-    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at')
+    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at, telegram_token, telegram_token_admin')
     .eq('id', empresaId)
     .single()
   if (!empresa) return null
@@ -238,6 +238,31 @@ export async function setEmpresaActiva(empresaId, activa) {
   const supa = getAdminClient()
   const patch = { activa: !!activa, suspendida_at: activa ? null : new Date().toISOString() }
   const { error } = await supa.from('empresas').update(patch).eq('id', empresaId)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
+}
+
+// Rota un token de conexión Telegram de la empresa (solo superadmin). `tipo`:
+// 'vendedor' → telegram_token; 'admin' → telegram_token_admin. Genera un UUID nuevo
+// e invalida el anterior para CONEXIONES NUEVAS (los operadores ya vinculados siguen).
+export async function rotarTokenEmpresa(empresaId, tipo) {
+  const campo = tipo === 'admin' ? 'telegram_token_admin'
+    : tipo === 'vendedor' ? 'telegram_token'
+    : null
+  if (!campo) return { ok: false, message: 'Tipo de token no válido (vendedor | admin).' }
+  const nuevo = crypto.randomUUID()
+  const supa = getAdminClient()
+  const { error } = await supa.from('empresas').update({ [campo]: nuevo }).eq('id', empresaId)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true, tipo, token: nuevo }
+}
+
+// Desconecta (elimina) un operador de Telegram de la empresa (solo superadmin).
+// Scoped por empresa_id para no borrar de otra empresa por id equivocado.
+export async function desconectarOperador(empresaId, usuarioId) {
+  if (!usuarioId) return { ok: false, message: 'Falta el id del operador.' }
+  const supa = getAdminClient()
+  const { error } = await supa.from('usuarios').delete().eq('id', usuarioId).eq('empresa_id', empresaId)
   if (error) return { ok: false, message: error.message }
   return { ok: true }
 }

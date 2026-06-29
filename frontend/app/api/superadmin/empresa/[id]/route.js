@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { verifySession, SESSION_COOKIE } from '@/lib/superadmin/session'
-import { updateEmpresaModelo, setEmpresaActiva } from '@/lib/superadmin/data'
+import { updateEmpresaModelo, setEmpresaActiva, rotarTokenEmpresa, desconectarOperador } from '@/lib/superadmin/data'
 
 async function isAuthed() {
   const token = cookies().get(SESSION_COOKIE)?.value
@@ -9,8 +9,10 @@ async function isAuthed() {
 }
 
 // PATCH /api/superadmin/empresa/[id]
-//   body: { modelo }          → cambia el modelo NLU activo
-//   body: { activa: boolean } → suspende / reactiva la empresa
+//   body: { modelo }              → cambia el modelo NLU activo
+//   body: { activa: boolean }     → suspende / reactiva la empresa
+//   body: { rotar: 'vendedor'|'admin' } → regenera ese token de Telegram
+//   body: { desconectar: <usuarioId> }  → elimina un operador de Telegram
 // Service role, bypassa RLS.
 export async function PATCH(request, { params }) {
   if (!(await isAuthed())) {
@@ -25,6 +27,16 @@ export async function PATCH(request, { params }) {
 
   if (body.modelo !== undefined) {
     const res = await updateEmpresaModelo(params.id, body.modelo)
+    return NextResponse.json(res, { status: res.ok ? 200 : 400 })
+  }
+
+  if (body.rotar !== undefined) {
+    const res = await rotarTokenEmpresa(params.id, body.rotar)
+    return NextResponse.json(res, { status: res.ok ? 200 : 400 })
+  }
+
+  if (body.desconectar !== undefined) {
+    const res = await desconectarOperador(params.id, body.desconectar)
     return NextResponse.json(res, { status: res.ok ? 200 : 400 })
   }
 
