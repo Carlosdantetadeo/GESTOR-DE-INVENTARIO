@@ -743,6 +743,13 @@ async function procesarRegistro(
 
   // ── Reporte (decisión #9: vendedor también, scoped a su sede) ──
   if (nlu.intent === 'reporte' && nlu.reporte) {
+    // Fallback robusto: si el modelo NLU no devolvió `agrupar` (los modelos chicos
+    // ignoran campos nuevos), lo deduzco del texto del pedido.
+    if (!nlu.reporte.agrupar) {
+      const t = transcript.toLowerCase()
+      if (/(por|cada)\s+(vendedor|operari|emplead)/.test(t)) nlu.reporte.agrupar = 'vendedor'
+      else if (/(por|cada)\s+(sede|tienda|local|sucursal)/.test(t)) nlu.reporte.agrupar = 'sede'
+    }
     logConsumo(empresaId, modelo, nlu.tokensIn, nlu.tokensOut, 'reporte').catch(console.error)
     await handleReporte(chatId, usuario, nlu.reporte)
     return
