@@ -1754,18 +1754,12 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     porProd.set(nombre, acc)
   }
 
-  const numVentas = ventas.length
-  const ticket    = totalVentas / numVentas
-  const ordenados = [...porProd.entries()].sort((a, b) => b[1].monto - a[1].monto)
-  // "Todos" los productos del scope filtrado; tope para no pasar el límite de Telegram (~4096).
-  const MAX_LISTA = 50
-  const lista = ordenados
-    .slice(0, MAX_LISTA)
-    .map(([nombre, v], i) => `${i + 1}. ${mdSafe(nombre)} — *${v.cantidad}* u. · S/. ${v.monto.toFixed(2)}`)
-    .join('\n')
-  const extra = ordenados.length > MAX_LISTA
-    ? `\n…y ${ordenados.length - MAX_LISTA} producto(s) más — ver dashboard`
-    : ''
+  const numVentas     = ventas.length
+  const ticket        = totalVentas / numVentas
+  // Resumen (no lista): total de unidades y de ítems distintos. El detalle
+  // producto-por-producto se ve en el dashboard (deep-link).
+  const totalUnidades = [...porProd.values()].reduce((s, v) => s + v.cantidad, 0)
+  const numProductos  = porProd.size
 
   await tg('sendMessage', {
     chat_id: chatId,
@@ -1774,8 +1768,8 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
       `────────────\n` +
       `💰 Total vendido: *S/. ${totalVentas.toFixed(2)}*\n` +
       `🧾 N° de ventas: *${numVentas}*\n` +
-      `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n\n` +
-      `🧾 *Productos vendidos (${ordenados.length}):*\n${lista}${extra}` + deepLink,
+      `🎟️ Ticket promedio: *S/. ${ticket.toFixed(2)}*\n` +
+      `📦 Productos: *${totalUnidades}* u. en *${numProductos}* ítem(s)` + deepLink,
     parse_mode: 'Markdown',
   })
 }
