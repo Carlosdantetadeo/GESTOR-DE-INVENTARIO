@@ -69,7 +69,7 @@ async function render(empresaId: string, tiendaId: number | null, vendedorId: nu
   const ticket = totalVentas / numVentas
 
   const ventasList = ventas
-  const MAX = 10, MAX_PROD = 15
+  const MAX = 10, MAX_PROD = 3
   const medalla = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`)
   const renderDesglose = (enc: string, keyOf: (v: VentaRow) => number | null, nombres: Map<number, string>) => {
     const g = new Map<number, { monto: number; ventas: number }>()
@@ -86,8 +86,8 @@ async function render(empresaId: string, tiendaId: number | null, vendedorId: nu
   const prodOrden = [...porProd.entries()].sort((a, b) => b[1].monto - a[1].monto)
   const totalUnidades = prodOrden.reduce((s, [, p]) => s + p.cantidad, 0)
   const filasProd = prodOrden.slice(0, MAX_PROD).map(([n, p]) => `• ${mdSafe(n)} — ${p.cantidad} u. · S/. ${p.monto.toFixed(2)}`).join('\n')
-  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más` : ''
-  const bloqueProd = `📦 *Por producto (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
+  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más — ver detalle completo en el dashboard 👇` : ''
+  const bloqueProd = `📦 *Top productos (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
 
   const hayFiltro = tiendaId != null || vendedorId != null
   let cuerpo: string

@@ -1772,7 +1772,7 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
   //    por producto de ese filtro — el desglose de las demás dimensiones no aplica.
   const ventasList = ventas               // ya narrowed a VentaRow[] tras el guard de arriba
   const MAX      = 10                      // tope de filas por desglose (sede / vendedor)
-  const MAX_PROD = 15                      // tope de filas del resumen por producto
+  const MAX_PROD = 3                       // top-3 productos por monto; el detalle completo va al dashboard (deep-link)
   const medalla  = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`)
 
   const renderDesglose = (
@@ -1797,14 +1797,15 @@ async function handleReporte(chatId: number, usuario: UsuarioConEmpresa, rep: Pa
     return `${encabezado} (${ordenados.length}):*\n${filas}${mas}`
   }
 
-  // Resumen por producto (cantidad y monto), ordenado por monto descendente.
+  // Resumen por producto: solo el top-3 por monto. El detalle completo de todos
+  // los productos se ve en el dashboard vía el deep-link al pie del mensaje.
   const prodOrden = [...porProd.entries()].sort((a, b) => b[1].monto - a[1].monto)
   const totalUnidades = prodOrden.reduce((s, [, p]) => s + p.cantidad, 0)
   const filasProd = prodOrden.slice(0, MAX_PROD).map(([nombre, p]) =>
     `• ${mdSafe(nombre)} — ${p.cantidad} u. · S/. ${p.monto.toFixed(2)}`,
   ).join('\n')
-  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más` : ''
-  const bloqueProd = `📦 *Por producto (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
+  const masProd = prodOrden.length > MAX_PROD ? `\n…y ${prodOrden.length - MAX_PROD} más — ver detalle completo en el dashboard 👇` : ''
+  const bloqueProd = `📦 *Top productos (${prodOrden.length} ítem(s), ${totalUnidades} u.):*\n${filasProd}${masProd}`
 
   const hayFiltro = tiendaId != null || vendedorId != null
   let cuerpo: string
