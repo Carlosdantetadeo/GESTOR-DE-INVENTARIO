@@ -39,6 +39,7 @@ export default function Movimientos() {
   const [search, setSearch] = useState('')
   const [filterTipo, setFilterTipo] = useState('all')
   const [tienda, setTienda] = useState('all')
+  const [fecha, setFecha] = useState('')
 
   useEffect(() => {
     getEmpresaId().then(setEmpresaId)
@@ -81,7 +82,13 @@ export default function Movimientos() {
     const matchesSearch = prodNombre.includes(search.toLowerCase())
     const matchesTipo = filterTipo === 'all' || item.tipo === filterTipo
     const matchesTienda = tienda === 'all' || tiendaNombre.includes(tienda)
-    return matchesSearch && matchesTipo && matchesTienda
+    // Fecha exacta: compara el día local (es-PE) del movimiento contra el día elegido
+    const matchesFecha = !fecha || (() => {
+      const d = new Date(item.created_at)
+      const yyyyMmDd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return yyyyMmDd === fecha
+    })()
+    return matchesSearch && matchesTipo && matchesTienda && matchesFecha
   })
 
   const handleExportExcel = () => {
@@ -167,6 +174,26 @@ export default function Movimientos() {
               <option key={t.id} value={t.nombre}>{t.nombre}</option>
             ))}
           </select>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>Fecha</label>
+            <input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="input-field"
+              style={{ width: '160px' }}
+            />
+            {fecha && (
+              <button
+                type="button"
+                onClick={() => setFecha('')}
+                className="btn btn-secondary"
+                style={{ padding: '8px 12px', fontSize: '0.75rem' }}
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
