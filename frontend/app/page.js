@@ -35,6 +35,7 @@ export default function Dashboard() {
   const [tiendas, setTiendas] = useState([])
   const [tiendaSeleccionada, setTiendaSeleccionada] = useState('all')
   const [range, setRange] = useState('today')
+  const [filterTipo, setFilterTipo] = useState('all')
   const [movimientos, setMovimientos] = useState([])
   const [kpis, setKpis] = useState({ ventas: 0, ingresos: 0, gastos: 0, totalMovimientos: 0 })
   const [sinStockCount, setSinStockCount] = useState(0)
@@ -101,6 +102,10 @@ export default function Dashboard() {
 
   const fmt = (n) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+  const movimientosFiltrados = filterTipo === 'all'
+    ? movimientos
+    : movimientos.filter(m => m.tipo === filterTipo)
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
@@ -162,6 +167,20 @@ export default function Dashboard() {
             <option value="today">Hoy</option>
             <option value="7d">Últimos 7 Días</option>
             <option value="30d">Último Mes</option>
+          </select>
+
+          <select
+            value={filterTipo}
+            onChange={(e) => setFilterTipo(e.target.value)}
+            className="input-field"
+            style={{ width: '150px', padding: '10px 16px' }}
+          >
+            <option value="all">Todos los Tipos</option>
+            <option value="venta">Venta</option>
+            <option value="ingreso">Ingreso</option>
+            <option value="gasto">Gasto</option>
+            <option value="traslado">Traslado</option>
+            <option value="ajuste">Ajuste</option>
           </select>
         </div>
       </div>
@@ -279,13 +298,13 @@ export default function Dashboard() {
                     Cargando...
                   </td>
                 </tr>
-              ) : movimientos.length === 0 ? (
+              ) : movimientosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
                     Sin movimientos en este período.
                   </td>
                 </tr>
-              ) : movimientos.map((mov) => (
+              ) : movimientosFiltrados.map((mov) => (
                 <tr key={mov.id}>
                   <td><span className={`badge badge-${mov.tipo}`}>{mov.tipo}</span></td>
                   <td style={{ fontWeight: 600 }}>{mov.productos?.nombre || '—'}</td>
