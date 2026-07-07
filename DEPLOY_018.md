@@ -40,24 +40,7 @@ git pull origin main
 ```
 
 ### 4. Aplicar la migración 018 en producción — ⚠️ PASO MANUAL
-**No es un comando de terminal.** Este repo aplica migraciones por el **Supabase
-SQL Editor** (no por `supabase db push`: las migraciones viven en `migrations/`,
-fuera del flujo del CLI).
-
-1. Abrir el SQL Editor del proyecto de **producción**.
-2. Pegar el contenido completo de `migrations/018_ux_unificada.sql`.
-3. Ejecutar y confirmar que termina sin errores.
-
-Verificación rápida (correr en el SQL Editor):
-```sql
-SELECT to_regclass('public.movimiento_pendiente');   -- debe existir
-SELECT to_regclass('public.auditoria_reversiones');  -- debe existir
-SELECT column_name FROM information_schema.columns
-  WHERE table_name = 'usuarios' AND column_name = 'modo_admin';  -- 1 fila
-```
-
-### 5. Verificar los secrets de la función
-018 **no** agrega secrets obligatorios (`DASHBOARD_BASE_URL` y `JWT_SECRET` son
+**No es un comando de terminal.** Este repo aplica migraciones por el **SupabaseActualizá DASHBOARD_BASE_URL con el valor https://dashboard.almacenero.digital en todos los archivos donde aparezca el placeholder PENDIENTE. Hacé un commit en feat/018-ux-unificada.`DASHBOARD_BASE_URL` y `JWT_SECRET` son
 opcionales: el deep-link queda dormido si faltan). Confirmar que no falte ninguno
 de los existentes (`SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`):
@@ -78,7 +61,7 @@ supabase functions deploy telegram-bot --no-verify-jwt
 
 Probar con un operario real, en producción, antes de cerrar:
 
-- [ ] Un registro por **voz** (tarjeta → tap `[✅ Confirmar]`; no auto-confirma).
+- [ ] Un registro por **voz** (con verbo: debe auto-confirmar a 5s).
 - [ ] Un registro por **texto**.
 - [ ] Un registro por **foto** (pregunta Compra/Venta → tarjeta → Confirmar).
 - [ ] Un **Deshacer** dentro de los 5 min.

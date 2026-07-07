@@ -2,7 +2,7 @@
 
 Sistema de inventario por voz para ferreterías. Registrá ventas e ingresos en 2 segundos desde Telegram.
 
-**Dashboard web:** https://gestor-de-inventario-one.vercel.app
+**Dashboard web:**  
 
 ---
 
@@ -42,9 +42,7 @@ Cada empleado que vaya a registrar ventas necesita vincularse al bot.
 
 ### Paso 1 — El administrador comparte el token
 
-El token de tu empresa está en el dashboard, sección **Usuarios**: ahí ves el comando `/start TOKEN` listo para copiar y compartir. También llegó en el email de bienvenida.
-
-Guardalo en un lugar seguro: es único para tu empresa y es lo que vincula a tus empleados con tus datos.
+El `telegram_token` de tu empresa llegó en el email de bienvenida. Guardalo en un lugar seguro: es único para tu empresa y es lo que vincula a tus empleados con tus datos.
 
 ### Paso 2 — El empleado envía el comando al bot
 
@@ -127,31 +125,25 @@ El bot responde "🔍 Analizando imagen...", interpreta lo que ve y registra los
 
 ## 4. Confirmación del bot
 
-Después de cada registro el bot responde con el resumen y **un botón Deshacer por cada producto**. Si registraste más de un producto, agrega también un botón **"Deshacer todo"**.
-
-El mensaje **repite lo que el bot escuchó** (🎤) para que puedas verificar que la transcripción fue correcta:
+Después de cada registro el bot responde con el resumen y **un botón Deshacer por cada producto**. Si registraste más de un producto, agrega también un botón **"Deshacer todo"**:
 
 ```
 ✅ 2 movimientos registrados
-🎤 "vendí 3 bombas de 2 pulgadas a 5 soles y 2 tubos pvc"
 
-💰 Venta — Bomba 2 pulgadas × 3
-   💵 S/. 5.00 c/u → Subtotal: S/. 15.00
+💰 Bomba 2 pulgadas × 3 — S/. 15.00
    📍 Sede Centro
 
-💰 Venta — Tubo PVC × 2
+📦 Tubo PVC × 2
    📍 Sede Centro
 
 💵 Total: S/. 15.00
 
-Si lo escuchado no es lo que dijiste, tocá Deshacer y repetí el mensaje.
+Deshacer individual o todo desde los botones.
 
 [ ↩️ Bomba 2 pulgadas ]
 [ ↩️ Tubo PVC ]
 [ ↩️ Deshacer todo ]
 ```
-
-Si registraste un solo producto, el encabezado indica el tipo de movimiento: **"✅ Venta registrada"**, **"✅ Ingreso registrado"**, etc. En los **ingresos** la línea de monto muestra el costo unitario (*"💵 Costo: S/. 25.00 c/u → S/. 50.00"*) en lugar del precio de venta.
 
 Si algún producto no se entendió, el mensaje lo indica:
 
@@ -205,7 +197,7 @@ Accedé desde: **https://gestor-de-inventario-one.vercel.app**
 | **Movimientos** | Historial completo con filtros por producto, tipo y sede. Exportar a Excel o PDF. Botón Deshacer por fila. |
 | **Inventario** | Stock actual por producto y sede (una columna por sede), valor total del inventario, alertas de quiebre. Exportar a Excel. |
 | **Reportes** | Tres reportes descargables: Ventas, Valorización de almacén e Historial de transacciones. Filtros por sede y período, en Excel o PDF. |
-| **Usuarios** | Token de Telegram de tu empresa (con botón de copiado) y lista de operarios conectados con su sede y fecha de vinculación. |
+| **Usuarios** | 🚧 En construcción — todavía no disponible. |
 | **Configuración** | Elegir el modelo de IA que procesa los mensajes del bot y ver el consumo acumulado (llamadas, tokens, costo). |
 
 ### Filtros disponibles
