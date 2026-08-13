@@ -11,6 +11,7 @@ import { enqueue } from '../../../lib/auditoria/offline/queue'
 import { registerFlushers, flushStore, flushAll } from '../../../lib/auditoria/offline/syncEngine'
 import { syncCatalogo, buscarLocal, getCatalogoMeta, getConfigLocal } from '../../../lib/auditoria/offline/catalogo'
 import { flushFotos } from '../../../lib/auditoria/offline/fotos'
+import { encolarAudio, listAudios, removeAudio, flushAudios } from '../../../lib/auditoria/offline/audios'
 import { getOrCreateSesionActiva, subirConteo } from '../../../lib/auditoria/queries'
 import { evaluarSemaforo } from '../../../lib/auditoria/semaforo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
@@ -53,10 +54,23 @@ export default function CapturaPage() {
   const [aviso, setAviso] = useState('')
   const [mesesStockMuerto, setMesesStockMuerto] = useState(6)
   const [fotos, setFotos] = useState([]) // { blob, url } pendientes de adjuntar
+  const [audios, setAudios] = useState([]) // notas de voz offline
   const recorderRef = useRef(null)
 
   // Registrar los flushers (conteos primero, luego fotos que dependen de ellos).
-  useEffect(() => { registerFlushers([conteosFlusher, flushFotos]) }, [])
+  useEffect(() => { registerFlushers([conteosFlusher, flushFotos, flushAudios]) }, [])
+
+  const refreshAudios = useCallback(async () => { setAudios(await listAudios()) }, [])
+
+  // Al reconectar (y al montar), transcribir las notas pendientes y refrescar.
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      if (online) await flushAudios()
+      if (vivo) setAudios(await listAudios())
+    })()
+    return () => { vivo = false }
+  }, [online])
 
   // Preparar catálogo y sesión cuando la sesión de auth esté lista.
   useEffect(() => {
@@ -93,7 +107,6 @@ export default function CapturaPage() {
     : null
 
   async function grabarVoz() {
-    if (!online) { setAviso('Sin conexión: usá la búsqueda para registrar.'); return }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const rec = new MediaRecorder(stream)
@@ -102,6 +115,17 @@ export default function CapturaPage() {
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop())
         const blob = new Blob(chunks, { type: rec.mimeType }) // preservar mimeType (FR-018)
+
+        // Sin conexión: encolar el audio para transcribir al reconectar (FR-016).
+        if (!navigator.onLine) {
+          await encolarAudio({ blob, mimeType: rec.mimeType })
+          await refreshAudios()
+          await refreshPending()
+          setAviso('Nota de voz guardada. Se transcribirá al reconectar.')
+          return
+        }
+
+        // Con conexión: transcribir ahora y prellenar la búsqueda.
         const fd = new FormData()
         fd.append('audio', blob)
         try {
@@ -127,6 +151,24 @@ export default function CapturaPage() {
   function detenerVoz() {
     recorderRef.current?.stop()
     setGrabando(false)
+  }
+
+  async function usarAudio(a) {
+    buscar(a.transcripcion || '')
+    await removeAudio(a.client_op_id)
+    await refreshAudios()
+    await refreshPending()
+  }
+
+  async function descartarAudio(a) {
+    await removeAudio(a.client_op_id)
+    await refreshAudios()
+    await refreshPending()
+  }
+
+  async function procesarAudios() {
+    await flushAudios()
+    await refreshAudios()
   }
 
   async function agregarFoto(e) {
@@ -215,6 +257,35 @@ export default function CapturaPage() {
           {grabando ? 'Detener' : '🎤 Voz'}
         </button>
       </div>
+
+      {audios.length > 0 && (
+        <section style={{ marginTop: 12, padding: 10, border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: '0.9rem' }}>Notas de voz pendientes ({audios.length})</strong>
+            {online && audios.some((a) => !a.transcripcion) && <button onClick={procesarAudios} style={miniBtn}>Procesar</button>}
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {audios.map((a) => (
+              <li key={a.client_op_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
+                {a.transcripcion ? (
+                  <>
+                    <span>“{a.transcripcion}”</span>
+                    <span style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => usarAudio(a)} style={miniBtn}>Usar</button>
+                      <button onClick={() => descartarAudio(a)} style={miniBtnGhost}>×</button>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color: '#64748b' }}>🎤 Grabada, pendiente de transcribir</span>
+                    <button onClick={() => descartarAudio(a)} style={miniBtnGhost}>×</button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {!pieza && resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
@@ -306,3 +377,5 @@ const btnStyle = { padding: '10px 14px', border: 'none', borderRadius: 8, cursor
 const itemStyle = { width: '100%', textAlign: 'left', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', cursor: 'pointer', marginBottom: 6 }
 const labelStyle = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: '#334155' }
 const linkBtn = { marginLeft: 8, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.8rem' }
+const miniBtn = { padding: '4px 10px', border: 'none', borderRadius: 6, background: '#0d9488', color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }
+const miniBtnGhost = { padding: '4px 8px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: '0.75rem' }

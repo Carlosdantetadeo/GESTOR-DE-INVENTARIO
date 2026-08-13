@@ -58,7 +58,7 @@ description: "Task list for AuditorIA — Sector Autopartes"
 
 - [x] T016 [US1] Sincronizar catálogo del tenant a IndexedDB (`catalogo`) al login/arranque en `frontend/lib/auditoria/offline/catalogo.js` (SC-010)
 - [x] T017 [P] [US1] Implementar fuzzy match on-device en `frontend/lib/auditoria/matching.js` (normalización + trigramas; top-3; desempate por `referencia`) (FR-004; research R4) — 6/6 tests en verde
-- [ ] T018 [US1] Grabación de voz con `MediaRecorder` preservando `mimeType` en `frontend/app/auditoria/captura/page.js` (FR-016/FR-018) — **parcial: voz online (Groq) ✅; encolado de audio offline para transcribir al reconectar PENDIENTE**
+- [x] T018 [US1] Grabación de voz con `MediaRecorder` preservando `mimeType` en `frontend/app/auditoria/captura/page.js` (FR-016/FR-018): online transcribe y prellena; offline encola el audio (`cola_audios`, store v2) y lo transcribe al reconectar (`offline/audios.js`), listo para que el auditor complete el conteo
 - [x] T019 [US1] UI de captura con búsqueda local, selección entre coincidencias y confirmación explícita antes de guardar (FR-001) en `frontend/app/auditoria/captura/page.js`
 - [x] T020 [US1] Subida idempotente de `conteos` vía `queries.js` (`upsert onConflict=client_op_id`); marca `duplicado` cuando ya existe conteo de la pieza en la sesión (FR-015)
 

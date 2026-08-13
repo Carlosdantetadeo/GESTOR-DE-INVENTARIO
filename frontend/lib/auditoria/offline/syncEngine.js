@@ -41,11 +41,12 @@ export async function flushAll() {
 }
 
 export async function pendingCount() {
-  const [conteos, fotos] = await Promise.all([
+  const [conteos, fotos, audios] = await Promise.all([
     countQueue('cola_conteos'),
     countQueue('cola_fotos'),
+    countQueue('cola_audios'),
   ])
-  return conteos + fotos
+  return conteos + fotos + audios
 }
 
 // Engancha los disparadores. Devuelve una función de limpieza.
