@@ -189,3 +189,56 @@ export async function rechazarPieza({ piezaId, uid }) {
     .eq('id', piezaId)
   if (error) throw error
 }
+
+// ── Catálogo y configuración (US6) ────────────────────────────────────────────
+
+// Importa filas de catálogo: actualiza las piezas existentes (por nombre) e
+// inserta las nuevas. Devuelve { insertados, actualizados }.
+export async function importarCatalogo({ empresaId, filas }) {
+  const { data: existentes, error: e0 } = await supabase.from('productos').select('id, nombre')
+  if (e0) throw e0
+  const mapa = new Map((existentes || []).map((p) => [p.nombre.trim().toLowerCase(), p.id]))
+
+  const nuevos = []
+  let actualizados = 0
+  for (const f of filas) {
+    const campos = {
+      unidad_medida: f.unidad_medida,
+      referencia: f.referencia,
+      stock_minimo: f.stock_minimo,
+      punto_reorden: f.punto_reorden,
+      stock_maximo: f.stock_maximo,
+    }
+    const id = mapa.get(f.nombre.trim().toLowerCase())
+    if (id) {
+      const { error } = await supabase.from('productos').update(campos).eq('id', id)
+      if (error) throw error
+      actualizados += 1
+    } else {
+      nuevos.push({ empresa_id: empresaId, nombre: f.nombre, ...campos })
+    }
+  }
+
+  let insertados = 0
+  if (nuevos.length) {
+    const { data, error } = await supabase.from('productos').insert(nuevos).select('id')
+    if (error) throw error
+    insertados = data?.length ?? nuevos.length
+  }
+  return { insertados, actualizados }
+}
+
+// Config del tenant (RLS de empresas devuelve solo la propia).
+export async function getEmpresaConfig() {
+  const { data, error } = await supabase.from('empresas').select('rubro, meses_stock_muerto').single()
+  if (error) throw error
+  return data
+}
+
+export async function updateEmpresaConfig({ empresaId, mesesStockMuerto }) {
+  const { error } = await supabase
+    .from('empresas')
+    .update({ meses_stock_muerto: mesesStockMuerto })
+    .eq('id', empresaId)
+  if (error) throw error
+}

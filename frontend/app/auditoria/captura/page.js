@@ -9,7 +9,7 @@ import { useAuditoria } from '../AuditoriaShell'
 import { getDB } from '../../../lib/auditoria/offline/db'
 import { enqueue } from '../../../lib/auditoria/offline/queue'
 import { registerFlushers, flushStore, flushAll } from '../../../lib/auditoria/offline/syncEngine'
-import { syncCatalogo, buscarLocal, getCatalogoMeta } from '../../../lib/auditoria/offline/catalogo'
+import { syncCatalogo, buscarLocal, getCatalogoMeta, getConfigLocal } from '../../../lib/auditoria/offline/catalogo'
 import { getOrCreateSesionActiva, subirConteo } from '../../../lib/auditoria/queries'
 import { evaluarSemaforo } from '../../../lib/auditoria/semaforo'
 
@@ -49,6 +49,7 @@ export default function CapturaPage() {
   const [estado, setEstado] = useState('integra')
   const [grabando, setGrabando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const [mesesStockMuerto, setMesesStockMuerto] = useState(6)
   const recorderRef = useRef(null)
 
   // Registrar el flusher de conteos una sola vez.
@@ -65,9 +66,11 @@ export default function CapturaPage() {
         const id = await ensureSesion({
           online, empresaId: session.empresaId, tiendaId: session.tiendaId, uid: session.user.id,
         })
+        const cfg = await getConfigLocal()
         if (!vivo) return
         setCatalogoInfo(info)
         setSesionId(id)
+        if (cfg?.meses_stock_muerto) setMesesStockMuerto(cfg.meses_stock_muerto)
       } catch {
         setAviso('No se pudo preparar el catálogo o la sesión.')
       }
@@ -83,7 +86,7 @@ export default function CapturaPage() {
   }, [])
 
   const semaforo = pieza && cantidad !== ''
-    ? evaluarSemaforo(pieza, { cantidad: Number(cantidad), estado_fisico: estado })
+    ? evaluarSemaforo(pieza, { cantidad: Number(cantidad), estado_fisico: estado }, { meses_stock_muerto: mesesStockMuerto })
     : null
 
   async function grabarVoz() {

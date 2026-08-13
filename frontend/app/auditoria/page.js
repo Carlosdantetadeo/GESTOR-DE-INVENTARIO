@@ -16,6 +16,7 @@ export default function AuditoriaHome() {
         <Link href="/auditoria/captura" style={botonStyle}>🎤 Contar pieza</Link>
         <Link href="/auditoria/recepcion" style={botonStyle}>📷 Recepción</Link>
         <Link href="/auditoria/supervisor" style={{ ...botonStyle, background: '#0f172a' }}>📊 Panel supervisor</Link>
+        <Link href="/auditoria/catalogo" style={{ ...botonStyle, background: '#334155' }}>⚙️ Administración</Link>
       </div>
     </main>
   )

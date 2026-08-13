@@ -130,9 +130,9 @@ description: "Task list for AuditorIA — Sector Autopartes"
 
 **Independent Test**: cargar 50 piezas → reconocibles por voz en < 5 min; un auditor nuevo entra y ve solo su sede (SC-008).
 
-- [ ] T035 [US6] Carga de catálogo Excel/CSV (columnas: nombre, unidad_medida, referencia, stock_minimo, punto_reorden) con validación por fila sin abortar las válidas en `frontend/app/auditoria/catalogo/page.js` (FR-013/FR-014)
-- [ ] T036 [P] [US6] Gestión de usuarios web: invitar/crear usuario de Supabase Auth con `app_metadata` (`empresa_id`, `rol`, `tienda_id`) en `frontend/app/auditoria/catalogo/` (research R2/R3)
-- [ ] T037 [P] [US6] Configuración de umbrales del sector (incl. `meses_stock_muerto`, default 6) en `frontend/app/auditoria/catalogo/`
+- [x] T035 [US6] Carga de catálogo Excel/CSV (columnas: nombre, unidad_medida, referencia, stock_minimo, punto_reorden, stock_maximo) con validación por fila sin abortar las válidas en `frontend/app/auditoria/catalogo/page.js` (FR-013/FR-014)
+- [x] T036 [P] [US6] Gestión de usuarios web: crear/listar usuario de Supabase Auth con `app_metadata` (`empresa_id`, `rol`, `tienda_id`) vía `frontend/app/api/auditoria/usuarios/route.js` (service role + guard admin) (research R2/R3)
+- [x] T037 [P] [US6] Configuración del tenant (`meses_stock_muerto`, migración 031) en `frontend/app/auditoria/catalogo/page.js`, cableada al semáforo vía sync
 
 **Checkpoint**: todas las historias del spec funcionan.
 
