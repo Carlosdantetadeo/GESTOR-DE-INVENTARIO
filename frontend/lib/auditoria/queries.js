@@ -242,3 +242,42 @@ export async function updateEmpresaConfig({ empresaId, mesesStockMuerto }) {
     .eq('id', empresaId)
   if (error) throw error
 }
+
+// ── Salidas / ventas (FR-021) ─────────────────────────────────────────────────
+
+// Stock actual de una pieza en una sede (tabla derivada por trigger).
+export async function getStock(productoId, tiendaId) {
+  const { data, error } = await supabase
+    .from('stock')
+    .select('cantidad')
+    .eq('producto_id', productoId)
+    .eq('tienda_id', tiendaId)
+    .maybeSingle()
+  if (error) throw error
+  return data?.cantidad ?? 0
+}
+
+// Registra una salida (venta) en el ledger. El trigger descuenta el stock.
+// Mismo ledger que el bot; NUNCA se escribe stock directo (Constitución IV/V).
+export async function registrarSalida({ productoId, tiendaId, cantidad, precio, clientOpId }) {
+  const { data, error } = await supabase
+    .from('movimientos')
+    .insert({
+      tipo: 'venta',
+      producto_id: productoId,
+      tienda_origen: tiendaId,
+      cantidad,
+      precio_unitario: precio ?? 0,
+      client_op_id: clientOpId,
+    })
+    .select('id, created_at')
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Deshacer = DELETE del movimiento (el trigger revierte el stock). Ventana corta.
+export async function deshacerSalida(movimientoId) {
+  const { error } = await supabase.from('movimientos').delete().eq('id', movimientoId)
+  if (error) throw error
+}

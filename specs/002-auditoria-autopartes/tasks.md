@@ -144,8 +144,8 @@ description: "Task list for AuditorIA — Sector Autopartes"
 
 **Independent Test**: registrar una salida baja el stock (vía trigger); deshacer la revierte; el bot sigue registrando en paralelo (FR-020/FR-021).
 
-- [ ] T038 Registro de salida → INSERT `movimientos tipo='venta'`, `tienda_origen=tienda_id`, `client_op_id` (dedupe vía índice de T045), validando stock disponible, en `frontend/app/auditoria/salidas/page.js` (Constitución I/IV/V)
-- [ ] T039 Deshacer salida (ventana corta) → DELETE del movimiento (reversión por trigger) en `frontend/app/auditoria/salidas/`
+- [x] T038 Registro de salida → INSERT `movimientos tipo='venta'`, `tienda_origen=tienda_id`, `client_op_id`, validando stock disponible, en `frontend/app/auditoria/salidas/page.js` (Constitución I/IV/V)
+- [x] T039 Deshacer salida (ventana de 5 min) → DELETE del movimiento (reversión por trigger) en `frontend/app/auditoria/salidas/page.js`
 
 **Checkpoint**: alcance v1 completo (auditoría + recepción + salidas).
 
