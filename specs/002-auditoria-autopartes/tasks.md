@@ -101,10 +101,10 @@ description: "Task list for AuditorIA — Sector Autopartes"
 
 **Independent Test**: factura de 10 ítems → ≥ 8 identificados; ítem inexistente queda pendiente sin entrar al inventario (SC-003; FR-007).
 
-- [ ] T028 [US4] Endpoint server-side de OCR de factura (Groq Vision, key oculta) en `supabase/functions/auditoria-ocr/index.ts` o ruta API del frontend según dónde vivan las keys (research R5; `contracts/data-operations.md`)
-- [ ] T029 [US4] UI de revisión ítem por ítem con match sugerido (fuzzy/`pg_trgm`) e indicador de baja confianza en `frontend/app/auditoria/recepcion/page.js` (FR-005/FR-006)
-- [ ] T030 [US4] Confirmar recepción → INSERT `movimientos tipo='ingreso'` (con `client_op_id`, dedupe vía índice de T045) para ítems con match; ítems sin match → `piezas_pendientes` (`pendiente`) (FR-007; Constitución IV/V)
-- [ ] T031 [US4] Aprobar/rechazar pieza pendiente (supervisor/admin): aprobar crea `productos` + movimiento de ingreso; rechazar cierra sin efecto (FR-007) en `frontend/app/auditoria/supervisor/`
+- [x] T028 [US4] Endpoint server-side de OCR de factura (Groq Vision, key oculta, modelo por env) en `frontend/app/api/auditoria/factura/route.js` (research R5; `contracts/data-operations.md`)
+- [x] T029 [US4] UI de revisión ítem por ítem con match local (fuzzy) e indicador de baja confianza en `frontend/app/auditoria/recepcion/page.js` (FR-005/FR-006)
+- [x] T030 [US4] Confirmar recepción → INSERT `movimientos tipo='ingreso'` (con `client_op_id`, dedupe) para ítems con match; ítems sin match → `piezas_pendientes` (`pendiente`) (FR-007; Constitución IV/V)
+- [x] T031 [US4] Aprobar/rechazar pieza pendiente (supervisor/admin): aprobar crea `productos` + movimiento de ingreso; rechazar cierra sin efecto (FR-007) en `frontend/app/auditoria/supervisor/page.js`
 
 **Checkpoint**: US1–US4 funcionan; recepción sin doble digitación.
 

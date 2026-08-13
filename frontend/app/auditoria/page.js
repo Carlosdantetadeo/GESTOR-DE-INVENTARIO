@@ -14,6 +14,7 @@ export default function AuditoriaHome() {
       <p style={{ color: '#475569' }}>Control de inventario por voz.</p>
       <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
         <Link href="/auditoria/captura" style={botonStyle}>🎤 Contar pieza</Link>
+        <Link href="/auditoria/recepcion" style={botonStyle}>📷 Recepción</Link>
         <Link href="/auditoria/supervisor" style={{ ...botonStyle, background: '#0f172a' }}>📊 Panel supervisor</Link>
       </div>
     </main>

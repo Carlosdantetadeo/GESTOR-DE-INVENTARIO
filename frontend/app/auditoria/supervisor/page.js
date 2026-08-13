@@ -12,6 +12,8 @@ import {
   getConteosDeSesiones,
   cerrarSesion,
   getPiezasPendientes,
+  aprobarPieza,
+  rechazarPieza,
 } from '../../../lib/auditoria/queries'
 
 const COLOR_BG = { verde: '#16a34a', amarillo: '#f59e0b', rojo: '#ef4444' }
@@ -55,6 +57,24 @@ export default function SupervisorPage() {
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [session, cargar])
+
+  async function aprobar(pieza) {
+    try {
+      await aprobarPieza({ pieza, empresaId: session.empresaId, uid: session.user.id })
+      await cargar()
+    } catch {
+      setError('No se pudo aprobar la pieza.')
+    }
+  }
+
+  async function rechazar(pieza) {
+    try {
+      await rechazarPieza({ piezaId: pieza.id, uid: session.user.id })
+      await cargar()
+    } catch {
+      setError('No se pudo rechazar la pieza.')
+    }
+  }
 
   async function cerrar(sesion) {
     const delaSesion = conteos.filter((c) => c.sesion_id === sesion.id)
@@ -135,9 +155,16 @@ export default function SupervisorPage() {
             {pendientes.map((p) => (
               <li key={p.id} style={filaStyle}>
                 <strong>{p.descripcion_extraida}</strong>
-                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  {p.cantidad ?? '—'} {p.unidad_sugerida ?? ''} · aprobación en US4
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    {p.cantidad ?? '—'} {p.unidad_sugerida ?? ''}
+                    {p.precio_unitario != null ? ` · ${p.precio_unitario}` : ''}
+                  </span>
+                  <span style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => aprobar(p)} style={btnAprobar}>Aprobar</button>
+                    <button onClick={() => rechazar(p)} style={btnRechazar}>Rechazar</button>
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
@@ -165,3 +192,5 @@ function Vacio({ children }) {
 const listaStyle = { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }
 const filaStyle = { display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff' }
 const btnCerrar = { padding: '6px 12px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }
+const btnAprobar = { padding: '6px 12px', border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }
+const btnRechazar = { padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', color: '#334155', cursor: 'pointer', fontSize: '0.8rem' }

@@ -111,9 +111,81 @@ export async function cerrarSesion({ sesionId, resumen, uid }) {
 export async function getPiezasPendientes() {
   const { data, error } = await supabase
     .from('piezas_pendientes')
-    .select('id, descripcion_extraida, unidad_sugerida, cantidad, precio_unitario, created_at')
+    .select('id, descripcion_extraida, unidad_sugerida, cantidad, precio_unitario, tienda_id, created_at')
     .eq('estado', 'pendiente')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data || []
+}
+
+// ── Recepción por factura (US4) ───────────────────────────────────────────────
+
+// Ingreso de mercadería al ledger. tipo='ingreso' → el trigger suma stock en la
+// sede destino y actualiza ultimo_costo. Idempotente por client_op_id.
+export async function crearIngreso({ productoId, tiendaId, cantidad, costo, clientOpId }) {
+  const { error } = await supabase.from('movimientos').upsert(
+    {
+      tipo: 'ingreso',
+      producto_id: productoId,
+      tienda_destino: tiendaId,
+      cantidad,
+      costo_unitario: costo ?? 0,
+      client_op_id: clientOpId,
+    },
+    { onConflict: 'client_op_id', ignoreDuplicates: true },
+  )
+  if (error) throw error
+}
+
+// Pieza de factura sin match en el catálogo: queda pendiente de aprobación (FR-007).
+export async function crearPiezaPendiente({ empresaId, tiendaId, descripcion, unidad, cantidad, precio, recepcionRef }) {
+  const { error } = await supabase.from('piezas_pendientes').insert({
+    empresa_id: empresaId,
+    tienda_id: tiendaId,
+    descripcion_extraida: descripcion,
+    unidad_sugerida: unidad ?? null,
+    cantidad: cantidad ?? null,
+    precio_unitario: precio ?? null,
+    recepcion_ref: recepcionRef ?? null,
+  })
+  if (error) throw error
+}
+
+// Aprueba una pieza pendiente: crea el producto, registra el ingreso (si hay
+// cantidad) y marca la pieza como aprobada. Solo supervisor/admin (US4/T031).
+export async function aprobarPieza({ pieza, empresaId, uid }) {
+  const { data: prod, error: e1 } = await supabase
+    .from('productos')
+    .insert({
+      nombre: pieza.descripcion_extraida,
+      empresa_id: empresaId,
+      unidad_medida: pieza.unidad_sugerida ?? 'unidad',
+    })
+    .select('id')
+    .single()
+  if (e1) throw e1
+
+  if (pieza.cantidad && pieza.tienda_id) {
+    await crearIngreso({
+      productoId: prod.id,
+      tiendaId: pieza.tienda_id,
+      cantidad: pieza.cantidad,
+      costo: pieza.precio_unitario ?? 0,
+      clientOpId: crypto.randomUUID(),
+    })
+  }
+
+  const { error: e2 } = await supabase
+    .from('piezas_pendientes')
+    .update({ estado: 'aprobada', producto_id: prod.id, resuelta_por: uid, resolved_at: new Date().toISOString() })
+    .eq('id', pieza.id)
+  if (e2) throw e2
+}
+
+export async function rechazarPieza({ piezaId, uid }) {
+  const { error } = await supabase
+    .from('piezas_pendientes')
+    .update({ estado: 'rechazada', resuelta_por: uid, resolved_at: new Date().toISOString() })
+    .eq('id', piezaId)
+  if (error) throw error
 }
