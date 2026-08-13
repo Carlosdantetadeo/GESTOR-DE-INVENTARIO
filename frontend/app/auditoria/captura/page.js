@@ -10,8 +10,10 @@ import { getDB } from '../../../lib/auditoria/offline/db'
 import { enqueue } from '../../../lib/auditoria/offline/queue'
 import { registerFlushers, flushStore, flushAll } from '../../../lib/auditoria/offline/syncEngine'
 import { syncCatalogo, buscarLocal, getCatalogoMeta, getConfigLocal } from '../../../lib/auditoria/offline/catalogo'
+import { flushFotos } from '../../../lib/auditoria/offline/fotos'
 import { getOrCreateSesionActiva, subirConteo } from '../../../lib/auditoria/queries'
 import { evaluarSemaforo } from '../../../lib/auditoria/semaforo'
+import { comprimirImagen } from '../../../lib/auditoria/imagen'
 
 const ESTADOS = [
   { v: 'integra', l: 'Íntegra' },
@@ -50,10 +52,11 @@ export default function CapturaPage() {
   const [grabando, setGrabando] = useState(false)
   const [aviso, setAviso] = useState('')
   const [mesesStockMuerto, setMesesStockMuerto] = useState(6)
+  const [fotos, setFotos] = useState([]) // { blob, url } pendientes de adjuntar
   const recorderRef = useRef(null)
 
-  // Registrar el flusher de conteos una sola vez.
-  useEffect(() => { registerFlushers([conteosFlusher]) }, [])
+  // Registrar los flushers (conteos primero, luego fotos que dependen de ellos).
+  useEffect(() => { registerFlushers([conteosFlusher, flushFotos]) }, [])
 
   // Preparar catálogo y sesión cuando la sesión de auth esté lista.
   useEffect(() => {
@@ -126,6 +129,22 @@ export default function CapturaPage() {
     setGrabando(false)
   }
 
+  async function agregarFoto(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const blob = await comprimirImagen(file)
+      setFotos((prev) => [...prev, { blob, url: URL.createObjectURL(blob) }])
+    } catch {
+      setAviso('No se pudo procesar la foto.')
+    }
+  }
+
+  function quitarFoto(i) {
+    setFotos((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
   async function confirmar() {
     if (!pieza || cantidad === '' || !sesionId || !semaforo) return
     const item = {
@@ -142,11 +161,20 @@ export default function CapturaPage() {
       auditor_uid: session.user.id,
       created_at: new Date().toISOString(),
     }
-    await enqueue('cola_conteos', item)
+    const guardado = await enqueue('cola_conteos', item)
+    // Encolar las fotos de evidencia atadas a este conteo (por su client_op_id).
+    for (const f of fotos) {
+      await enqueue('cola_fotos', {
+        conteo_client_op_id: guardado.client_op_id,
+        empresa_id: session.empresaId,
+        sesion_id: sesionId,
+        blob: f.blob,
+      })
+    }
     await refreshPending()
     if (online) flushAll()
     // Reset para la próxima pieza.
-    setTexto(''); setResultados([]); setPieza(null); setCantidad(''); setEstado('integra')
+    setTexto(''); setResultados([]); setPieza(null); setCantidad(''); setEstado('integra'); setFotos([])
     setAviso('Conteo registrado.')
   }
 
@@ -233,6 +261,26 @@ export default function CapturaPage() {
               {semaforo.estrategia && <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>{semaforo.estrategia}</div>}
             </div>
           )}
+
+          <div>
+            <label style={{ ...btnStyle, background: '#e2e8f0', color: '#0f172a', display: 'inline-block', fontSize: '0.9rem' }}>
+              📷 Adjuntar foto
+              <input type="file" accept="image/*" capture="environment" onChange={agregarFoto} style={{ display: 'none' }} />
+            </label>
+            {fotos.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                {fotos.map((f, i) => (
+                  <div key={i} style={{ position: 'relative' }}>
+                    <img src={f.url} alt="evidencia" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8 }} />
+                    <button
+                      onClick={() => quitarFoto(i)}
+                      style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 999, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', lineHeight: 1 }}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             onClick={confirmar}

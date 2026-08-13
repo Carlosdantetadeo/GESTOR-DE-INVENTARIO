@@ -91,7 +91,7 @@ export async function getConteosDeSesiones(sesionIds) {
   if (!sesionIds.length) return []
   const { data, error } = await supabase
     .from('conteos')
-    .select('id, cantidad, estado_fisico, semaforo_color, semaforo_razon, created_at, duplicado, sesion_id, producto_id, productos(nombre, referencia)')
+    .select('id, cantidad, estado_fisico, semaforo_color, semaforo_razon, created_at, duplicado, sesion_id, producto_id, productos(nombre, referencia), evidencias(storage_path)')
     .in('sesion_id', sesionIds)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -280,4 +280,33 @@ export async function registrarSalida({ productoId, tiendaId, cantidad, precio, 
 export async function deshacerSalida(movimientoId) {
   const { error } = await supabase.from('movimientos').delete().eq('id', movimientoId)
   if (error) throw error
+}
+
+// ── Evidencia fotográfica (US5) ───────────────────────────────────────────────
+
+// Resuelve el id de DB de un conteo por su client_op_id (para enlazar la foto
+// una vez que el conteo se sincronizó).
+export async function getConteoIdByClientOp(clientOpId) {
+  const { data } = await supabase.from('conteos').select('id').eq('client_op_id', clientOpId).maybeSingle()
+  return data?.id ?? null
+}
+
+// Sube la foto a Storage y registra la fila de evidencia. Idempotente.
+export async function subirEvidencia({ clientOpId, empresaId, sesionId, conteoId, blob }) {
+  const path = `${empresaId}/${sesionId}/${conteoId}/${clientOpId}.jpg`
+  const { error: upErr } = await supabase.storage
+    .from('evidencias')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+  if (upErr) throw upErr
+  const { error } = await supabase.from('evidencias').upsert(
+    { client_op_id: clientOpId, empresa_id: empresaId, conteo_id: conteoId, storage_path: path },
+    { onConflict: 'client_op_id', ignoreDuplicates: true },
+  )
+  if (error) throw error
+}
+
+// URL firmada temporal para ver una evidencia (bucket privado).
+export async function urlEvidencia(storagePath) {
+  const { data } = await supabase.storage.from('evidencias').createSignedUrl(storagePath, 120)
+  return data?.signedUrl ?? null
 }

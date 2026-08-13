@@ -14,6 +14,7 @@ import {
   getPiezasPendientes,
   aprobarPieza,
   rechazarPieza,
+  urlEvidencia,
 } from '../../../lib/auditoria/queries'
 
 const COLOR_BG = { verde: '#16a34a', amarillo: '#f59e0b', rojo: '#ef4444' }
@@ -76,6 +77,12 @@ export default function SupervisorPage() {
     }
   }
 
+  async function verFoto(path) {
+    const url = await urlEvidencia(path)
+    if (url) window.open(url, '_blank', 'noopener')
+    else setError('No se pudo abrir la foto.')
+  }
+
   async function cerrar(sesion) {
     const delaSesion = conteos.filter((c) => c.sesion_id === sesion.id)
     const por_color = { verde: 0, amarillo: 0, rojo: 0 }
@@ -120,7 +127,12 @@ export default function SupervisorPage() {
           <ul style={listaStyle}>
             {rojos.map((c) => (
               <li key={c.id} style={filaStyle}>
-                <div><strong>{c.productos?.nombre ?? 'Pieza'}</strong> · {c.cantidad}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span><strong>{c.productos?.nombre ?? 'Pieza'}</strong> · {c.cantidad}</span>
+                  {c.evidencias?.length > 0 && (
+                    <button onClick={() => verFoto(c.evidencias[0].storage_path)} style={btnFoto}>📷 Ver foto</button>
+                  )}
+                </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{c.semaforo_razon}</div>
               </li>
             ))}
@@ -194,3 +206,4 @@ const filaStyle = { display: 'flex', flexDirection: 'column', gap: 2, padding: '
 const btnCerrar = { padding: '6px 12px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }
 const btnAprobar = { padding: '6px 12px', border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }
 const btnRechazar = { padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', color: '#334155', cursor: 'pointer', fontSize: '0.8rem' }
+const btnFoto = { padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', color: '#0f172a', cursor: 'pointer', fontSize: '0.75rem' }

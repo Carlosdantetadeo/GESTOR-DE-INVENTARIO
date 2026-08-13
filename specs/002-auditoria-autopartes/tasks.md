@@ -116,9 +116,9 @@ description: "Task list for AuditorIA — Sector Autopartes"
 
 **Independent Test**: foto de pieza oxidada sin red → aparece en el dashboard vinculada al conteo correcto al reconectar.
 
-- [ ] T032 [US5] Captura de cámara + compresión ≤ 2MB y encolado en `cola_fotos` con `client_op_id` en `frontend/app/auditoria/captura/` (FR-008; Assumptions)
-- [ ] T033 [US5] Subida a Storage `evidencias` + fila `evidencias` idempotente en el sync engine (`frontend/lib/auditoria/offline/syncEngine.js`)
-- [ ] T034 [US5] Mostrar la foto de evidencia en el detalle del conteo del dashboard en `frontend/app/auditoria/supervisor/`
+- [x] T032 [US5] Captura de cámara + compresión ≤ 2MB (`frontend/lib/auditoria/imagen.js`) y encolado en `cola_fotos` con `client_op_id` en `frontend/app/auditoria/captura/page.js` (FR-008)
+- [x] T033 [US5] Subida a Storage `evidencias` + fila `evidencias` idempotente en `frontend/lib/auditoria/offline/fotos.js` (resuelve `conteo_id` por `client_op_id` tras sincronizar el conteo)
+- [x] T034 [US5] Mostrar la foto de evidencia (URL firmada) en el detalle del conteo rojo del dashboard en `frontend/app/auditoria/supervisor/page.js`
 
 **Checkpoint**: US1–US5 funcionan; hallazgos documentados con foto.
 
