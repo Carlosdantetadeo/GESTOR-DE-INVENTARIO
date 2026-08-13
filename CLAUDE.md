@@ -60,7 +60,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 These guidelines are working if: fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 
-## Project Context — AGENT GMS1
+## Project Context — ALMACENERO DIGITAL
 
 **Descripción:** Sistema de inventario multi-tenant para ferreterías. Bot de Telegram para entrada de stock por voz (Groq/Whisper). Dashboard Next.js con KPIs, movimientos e inventario.
 
