@@ -75,7 +75,7 @@ description: "Task list for AuditorIA — Sector Autopartes"
 - [x] T021 [P] [US2] Implementar motor puro `evaluarSemaforo(pieza, conteo, config)` en `frontend/lib/auditoria/semaforo.js` (color = peor de estado físico + salud de inventario; stock muerto = 6 meses; + regla de sobrestock) (`contracts/semaforo.md`)
 - [x] T022 [P] [US2] Unit tests del semáforo (8 casos del contrato) en `frontend/lib/auditoria/semaforo.test.mjs` — 8/8 en verde con `node --test`
 - [x] T023 [US2] Capturar `estado_fisico` en el flujo de conteo e integrar el resultado del semáforo en la tarjeta de confirmación, persistiendo `semaforo_color`/`semaforo_razon` en `conteos` (FR-019; `frontend/app/auditoria/captura/page.js`)
-- [ ] T024 [US2] Precalcular y sincronizar `ultima_salida_at` por pieza (desde el ledger `movimientos`) para la dimensión de rotación offline (research R6) — la columna existe (024); falta el mecanismo que la puebla
+- [x] T024 [US2] Poblar `ultima_salida_at` por pieza desde el ledger para la rotación offline: backfill + trigger `tr_ultima_salida` en `migrations/032_ultima_salida_rotacion.sql` (forward-only; el sync del catálogo ya lo lee)
 
 **Checkpoint**: US1 + US2 funcionan — captura por voz con semáforo offline.
 
