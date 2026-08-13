@@ -87,9 +87,9 @@ description: "Task list for AuditorIA — Sector Autopartes"
 
 **Independent Test**: 3 piezas rojas registradas → aparecen en el dashboard en < 30s con su detalle (SC-006).
 
-- [ ] T025 [US3] Dashboard de supervisor en tiempo real (conteos por color, alertas de rojos, progreso) usando Supabase Realtime en `frontend/app/auditoria/supervisor/page.js`
-- [ ] T026 [US3] Cierre de sesión con cálculo de `resumen` (totales por color + insight ejecutivo si hay red) en `frontend/app/auditoria/supervisor/` (US5 del spec — cierre)
-- [ ] T027 [US3] Panel de aprobaciones que lista `piezas_pendientes` (`pendiente`) para el supervisor en `frontend/app/auditoria/supervisor/` (base para US4)
+- [x] T025 [US3] Dashboard de supervisor en tiempo real (conteos por color, alertas de rojos, progreso) usando Supabase Realtime en `frontend/app/auditoria/supervisor/page.js`
+- [x] T026 [US3] Cierre de sesión con cálculo de `resumen` (totales por color) en `frontend/app/auditoria/supervisor/page.js` (insight ejecutivo con IA queda para más adelante)
+- [x] T027 [US3] Panel que lista `piezas_pendientes` (`pendiente`) para el supervisor en `frontend/app/auditoria/supervisor/page.js` (aprobar/rechazar se cablea en US4/T031)
 
 **Checkpoint**: US1–US3 funcionan; el supervisor tiene visibilidad y control.
 

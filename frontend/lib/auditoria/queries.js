@@ -72,3 +72,48 @@ async function marcarDuplicados(sesionId, productoId) {
     await supabase.from('conteos').update({ duplicado: true }).in('id', data.map((r) => r.id))
   }
 }
+
+// ── Dashboard del supervisor (US3) ────────────────────────────────────────────
+
+// Sesiones abiertas de la empresa (RLS ya filtra por tenant).
+export async function getSesionesAbiertas() {
+  const { data, error } = await supabase
+    .from('sesiones_auditoria')
+    .select('id, tienda_id, created_at, tiendas(nombre)')
+    .eq('estado', 'abierta')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+// Conteos de las sesiones dadas, con el nombre de la pieza (embed por FK).
+export async function getConteosDeSesiones(sesionIds) {
+  if (!sesionIds.length) return []
+  const { data, error } = await supabase
+    .from('conteos')
+    .select('id, cantidad, estado_fisico, semaforo_color, semaforo_razon, created_at, duplicado, sesion_id, producto_id, productos(nombre, referencia)')
+    .in('sesion_id', sesionIds)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+// Cierra una sesión con su resumen (totales por color). US3.
+export async function cerrarSesion({ sesionId, resumen, uid }) {
+  const { error } = await supabase
+    .from('sesiones_auditoria')
+    .update({ estado: 'cerrada', resumen, cerrada_por: uid, closed_at: new Date().toISOString() })
+    .eq('id', sesionId)
+  if (error) throw error
+}
+
+// Piezas detectadas en facturas pendientes de aprobación (panel del supervisor).
+export async function getPiezasPendientes() {
+  const { data, error } = await supabase
+    .from('piezas_pendientes')
+    .select('id, descripcion_extraida, unidad_sugerida, cantidad, precio_unitario, created_at')
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
