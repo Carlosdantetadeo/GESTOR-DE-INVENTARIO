@@ -122,7 +122,7 @@ export async function getPiezasPendientes() {
 
 // Ingreso de mercadería al ledger. tipo='ingreso' → el trigger suma stock en la
 // sede destino y actualiza ultimo_costo. Idempotente por client_op_id.
-export async function crearIngreso({ productoId, tiendaId, cantidad, costo, clientOpId }) {
+export async function crearIngreso({ productoId, tiendaId, cantidad, costo, authUid, clientOpId }) {
   const { error } = await supabase.from('movimientos').upsert(
     {
       tipo: 'ingreso',
@@ -130,11 +130,32 @@ export async function crearIngreso({ productoId, tiendaId, cantidad, costo, clie
       tienda_destino: tiendaId,
       cantidad,
       costo_unitario: costo ?? 0,
+      auth_uid: authUid ?? null,
       client_op_id: clientOpId,
     },
     { onConflict: 'client_op_id', ignoreDuplicates: true },
   )
   if (error) throw error
+}
+
+// Ingreso manual de inventario (sin factura). Solo supervisor/admin (rol en UI).
+// Devuelve el movimiento para poder deshacerlo.
+export async function registrarIngresoManual({ productoId, tiendaId, cantidad, costo, authUid, clientOpId }) {
+  const { data, error } = await supabase
+    .from('movimientos')
+    .insert({
+      tipo: 'ingreso',
+      producto_id: productoId,
+      tienda_destino: tiendaId,
+      cantidad,
+      costo_unitario: costo ?? 0,
+      auth_uid: authUid ?? null,
+      client_op_id: clientOpId,
+    })
+    .select('id, created_at')
+    .single()
+  if (error) throw error
+  return data
 }
 
 // Pieza de factura sin match en el catálogo: queda pendiente de aprobación (FR-007).
@@ -171,6 +192,7 @@ export async function aprobarPieza({ pieza, empresaId, uid }) {
       tiendaId: pieza.tienda_id,
       cantidad: pieza.cantidad,
       costo: pieza.precio_unitario ?? 0,
+      authUid: uid,
       clientOpId: crypto.randomUUID(),
     })
   }
@@ -259,7 +281,7 @@ export async function getStock(productoId, tiendaId) {
 
 // Registra una salida (venta) en el ledger. El trigger descuenta el stock.
 // Mismo ledger que el bot; NUNCA se escribe stock directo (Constitución IV/V).
-export async function registrarSalida({ productoId, tiendaId, cantidad, precio, clientOpId }) {
+export async function registrarSalida({ productoId, tiendaId, cantidad, precio, authUid, clientOpId }) {
   const { data, error } = await supabase
     .from('movimientos')
     .insert({
@@ -268,6 +290,7 @@ export async function registrarSalida({ productoId, tiendaId, cantidad, precio, 
       tienda_origen: tiendaId,
       cantidad,
       precio_unitario: precio ?? 0,
+      auth_uid: authUid ?? null,
       client_op_id: clientOpId,
     })
     .select('id, created_at')
@@ -309,4 +332,26 @@ export async function subirEvidencia({ clientOpId, empresaId, sesionId, conteoId
 export async function urlEvidencia(storagePath) {
   const { data } = await supabase.storage.from('evidencias').createSignedUrl(storagePath, 120)
   return data?.signedUrl ?? null
+}
+
+// ── Reportes (US Admin) ───────────────────────────────────────────────────────
+
+// Ventas en un rango. Trae el autor (auth_uid web y usuario_id de Telegram) y
+// el total para agregar por usuario. RLS ya filtra por empresa (vía producto).
+export async function getVentas({ desde, hasta }) {
+  const { data, error } = await supabase
+    .from('movimientos')
+    .select('auth_uid, usuario_id, cantidad, total, created_at')
+    .eq('tipo', 'venta')
+    .gte('created_at', desde)
+    .lte('created_at', hasta)
+  if (error) throw error
+  return data || []
+}
+
+// Nombres de los operarios de Telegram (para resolver usuario_id en el reporte).
+export async function getUsuariosTelegram() {
+  const { data, error } = await supabase.from('usuarios').select('id, nombre')
+  if (error) throw error
+  return data || []
 }
