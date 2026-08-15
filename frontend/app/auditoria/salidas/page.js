@@ -1,11 +1,13 @@
 'use client'
 
-// Registro de salidas/ventas (FR-021). Escribe en el mismo ledger `movimientos`
-// que el bot; el trigger descuenta stock. Deshacer = DELETE con ventana de 5 min.
-// Requiere conexión (valida stock y escribe online).
-import { useEffect, useState } from 'react'
+// Registro de salidas/ventas (FR-021), pensado mobile-first para el vendedor.
+// Tres formas de encontrar la pieza: búsqueda por texto, VOZ (Groq Whisper) y
+// FOTO de boleta/factura (Groq Vision → prellena el ítem). El vendedor ingresa
+// cantidad y precio. Escribe en el mismo ledger que el bot; deshacer = DELETE.
+import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
+import { comprimirImagen } from '../../../lib/auditoria/imagen'
 import { getStock, registrarSalida, deshacerSalida } from '../../../lib/auditoria/queries'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -18,8 +20,11 @@ export default function SalidasPage() {
   const [stock, setStock] = useState(null)
   const [cantidad, setCantidad] = useState('')
   const [precio, setPrecio] = useState('')
-  const [ultima, setUltima] = useState(null) // { id, created_at }
+  const [ultima, setUltima] = useState(null)
+  const [grabando, setGrabando] = useState(false)
+  const [procesando, setProcesando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const recorderRef = useRef(null)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
@@ -32,17 +37,65 @@ export default function SalidasPage() {
 
   async function elegir(p) {
     setPieza(p); setResultados([])
+    try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
+  }
+
+  async function grabarVoz() {
+    if (!online) { setAviso('La voz necesita conexión.'); return }
     try {
-      setStock(await getStock(p.producto_id ?? p.id, session.tiendaId))
-    } catch {
-      setStock(null)
-    }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const rec = new MediaRecorder(stream)
+      const chunks = []
+      rec.ondataavailable = (e) => chunks.push(e.data)
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(chunks, { type: rec.mimeType })
+        const fd = new FormData()
+        fd.append('audio', blob)
+        try {
+          const res = await fetch('/api/auditoria/transcribir', { method: 'POST', body: fd })
+          if (res.ok) { const { texto: t } = await res.json(); buscar(t) }
+          else setAviso('La voz no está configurada. Usá la búsqueda.')
+        } catch { setAviso('No se pudo transcribir.') }
+      }
+      recorderRef.current = rec
+      rec.start()
+      setGrabando(true)
+    } catch { setAviso('No se pudo acceder al micrófono.') }
+  }
+
+  function detenerVoz() { recorderRef.current?.stop(); setGrabando(false) }
+
+  async function procesarFoto(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!online) { setAviso('La foto necesita conexión.'); return }
+    setProcesando(true); setAviso('')
+    try {
+      const blob = await comprimirImagen(file)
+      const fd = new FormData()
+      fd.append('imagen', blob, 'boleta.jpg')
+      const res = await fetch('/api/auditoria/factura', { method: 'POST', body: fd })
+      if (!res.ok) {
+        setAviso(res.status === 501 ? 'La lectura de fotos no está configurada.' : 'No se pudo leer la foto.')
+        return
+      }
+      const { items } = await res.json()
+      if (!items?.length) { setAviso('No se detectaron ítems en la foto.'); return }
+      const it = items[0]
+      await buscar(it.descripcion)
+      if (it.cantidad) setCantidad(String(it.cantidad))
+      if (it.precio_unitario) setPrecio(String(it.precio_unitario))
+      if (items.length > 1) setAviso(`Cargué el primer ítem. Hay ${items.length - 1} más: registralos de a uno.`)
+    } catch { setAviso('Error procesando la foto.') }
+    finally { setProcesando(false) }
   }
 
   async function registrar() {
     const cant = Number(cantidad)
     if (!pieza || !cant) return
-    if (!online) { setAviso('Registrar salidas requiere conexión.'); return }
+    if (!online) { setAviso('Registrar ventas requiere conexión.'); return }
     if (stock != null && cant > stock) { setAviso(`Stock insuficiente (disponible: ${stock}).`); return }
     try {
       const mov = await registrarSalida({
@@ -54,27 +107,18 @@ export default function SalidasPage() {
         clientOpId: crypto.randomUUID(),
       })
       setUltima({ ...mov, nombre: pieza.nombre, cantidad: cant })
-      setAviso('Salida registrada.')
+      setAviso('Venta registrada.')
       setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio('')
-    } catch {
-      setAviso('No se pudo registrar la salida.')
-    }
+    } catch { setAviso('No se pudo registrar la venta.') }
   }
 
   async function deshacer() {
     if (!ultima) return
     if (Date.now() - new Date(ultima.created_at).getTime() > VENTANA_MS) {
-      setAviso('La ventana para deshacer (5 min) venció.')
-      setUltima(null)
-      return
+      setAviso('La ventana para deshacer (5 min) venció.'); setUltima(null); return
     }
-    try {
-      await deshacerSalida(ultima.id)
-      setAviso('Salida revertida.')
-      setUltima(null)
-    } catch {
-      setAviso('No se pudo revertir.')
-    }
+    try { await deshacerSalida(ultima.id); setAviso('Venta revertida.'); setUltima(null) }
+    catch { setAviso('No se pudo revertir.') }
   }
 
   if (!session) return <Cont><p>Cargando…</p></Cont>
@@ -82,17 +126,31 @@ export default function SalidasPage() {
 
   return (
     <Cont>
-      <h2 style={{ marginTop: 0 }}>Registrar salida</h2>
+      <h2 style={{ marginTop: 0 }}>Registrar venta</h2>
 
-      <input
-        value={texto}
-        onChange={(e) => buscar(e.target.value)}
-        placeholder="Buscar pieza por nombre o referencia…"
-        style={inp}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <input
+          value={texto}
+          onChange={(e) => buscar(e.target.value)}
+          placeholder="Buscar producto por nombre…"
+          style={inp}
+        />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={grabando ? detenerVoz : grabarVoz}
+            style={{ ...btnGrande, flex: 1, background: grabando ? '#ef4444' : '#0d9488', color: '#fff' }}
+          >
+            {grabando ? '⏹ Detener' : '🎤 Voz'}
+          </button>
+          <label style={{ ...btnGrande, flex: 1, background: '#0d9488', color: '#fff', textAlign: 'center' }}>
+            {procesando ? '…' : '📷 Foto'}
+            <input type="file" accept="image/*" capture="environment" onChange={procesarFoto} style={{ display: 'none' }} disabled={procesando} />
+          </label>
+        </div>
+      </div>
 
       {!pieza && resultados.length > 0 && (
-        <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>
           {resultados.map(({ pieza: p }) => (
             <li key={p.producto_id ?? p.id}>
               <button onClick={() => elegir(p)} style={item}>
@@ -104,39 +162,43 @@ export default function SalidasPage() {
       )}
 
       {pieza && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <strong>{pieza.nombre}</strong>
+            <strong style={{ fontSize: '1.05rem' }}>{pieza.nombre}</strong>
             <button onClick={() => setPieza(null)} style={linkBtn}>cambiar</button>
             {stock != null && <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Stock disponible: {stock}</div>}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Cantidad" style={inp} autoFocus />
-            <input type="number" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="Precio unit." style={inp} />
-          </div>
-          <button onClick={registrar} disabled={!cantidad} style={{ ...btn, opacity: cantidad ? 1 : 0.5 }}>
-            💰 Registrar salida
+          <label style={lbl}>Cantidad
+            <input type="number" inputMode="numeric" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} style={inp} autoFocus />
+          </label>
+          <label style={lbl}>Precio unitario
+            <input type="number" inputMode="decimal" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)} style={inp} />
+          </label>
+          <button onClick={registrar} disabled={!cantidad} style={{ ...btnGrande, background: '#0f172a', color: '#fff', opacity: cantidad ? 1 : 0.5 }}>
+            💰 Registrar venta
           </button>
         </div>
       )}
 
       {ultima && (
-        <div style={{ marginTop: 16, padding: 12, border: '1px solid #e2e8f0', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ marginTop: 16, padding: 12, border: '1px solid #e2e8f0', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: '0.9rem' }}>Última: {ultima.nombre} × {ultima.cantidad}</span>
-          <button onClick={deshacer} style={{ ...btn, background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1' }}>↩️ Deshacer</button>
+          <button onClick={deshacer} style={{ ...btnGrande, background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', padding: '8px 14px' }}>↩️ Deshacer</button>
         </div>
       )}
 
-      {aviso && <p style={{ marginTop: 12, color: '#0d9488', fontSize: '0.85rem' }}>{aviso}</p>}
+      {aviso && <p style={{ marginTop: 14, color: '#0d9488', fontSize: '0.9rem' }}>{aviso}</p>}
     </Cont>
   )
 }
 
 function Cont({ children }) {
-  return <main style={{ padding: 16, maxWidth: 560, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
+  return <main style={{ padding: 16, maxWidth: 480, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
 }
 
-const inp = { flex: 1, width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '1rem' }
-const item = { width: '100%', textAlign: 'left', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', cursor: 'pointer', marginBottom: 6 }
-const btn = { padding: '11px 16px', border: 'none', borderRadius: 10, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
-const linkBtn = { marginLeft: 8, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.8rem' }
+// fontSize 16 evita el zoom automático en iOS; botones altos para el dedo.
+const inp = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: 10, fontSize: '16px' }
+const btnGrande = { minHeight: 48, padding: '12px 16px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: '1rem', fontWeight: 600 }
+const item = { width: '100%', textAlign: 'left', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', cursor: 'pointer', marginBottom: 8, fontSize: '1rem' }
+const lbl = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: '#334155' }
+const linkBtn = { marginLeft: 10, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.85rem' }
