@@ -54,8 +54,15 @@ export default function SalidasPage() {
         fd.append('audio', blob)
         try {
           const res = await fetch('/api/auditoria/transcribir', { method: 'POST', body: fd })
-          if (res.ok) { const { texto: t } = await res.json(); buscar(t) }
-          else setAviso('La voz no está configurada. Usá la búsqueda.')
+          if (res.ok) {
+            const { texto: t } = await res.json()
+            if (t?.trim()) buscar(t)
+            else setAviso('No te entendí. Probá de nuevo o buscá por nombre.')
+          } else if (res.status === 501) {
+            setAviso('La voz no está configurada (falta GROQ_API_KEY en Vercel).')
+          } else {
+            setAviso('No se pudo transcribir el audio. Probá de nuevo.')
+          }
         } catch { setAviso('No se pudo transcribir.') }
       }
       recorderRef.current = rec

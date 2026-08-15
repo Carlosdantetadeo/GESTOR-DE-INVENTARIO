@@ -15,8 +15,14 @@ export async function POST(request) {
     return NextResponse.json({ error: 'sin_audio' }, { status: 400 })
   }
 
+  // Groq detecta el formato por la extensión. El navegador puede grabar en webm
+  // (Android/Chrome) o mp4 (iPhone/Safari): mandamos la extensión real para que
+  // Whisper no rechace el audio. audio/webm;codecs=opus → webm ; audio/mp4 → mp4
+  const sub = (audio.type || '').split(';')[0].split('/')[1]
+  const ext = ['webm', 'mp4', 'm4a', 'ogg', 'wav', 'mpeg', 'mp3'].includes(sub) ? sub : 'webm'
+
   const groqForm = new FormData()
-  groqForm.append('file', audio, 'audio.webm')
+  groqForm.append('file', audio, `audio.${ext}`)
   groqForm.append('model', 'whisper-large-v3')
   groqForm.append('language', 'es')
 
@@ -27,6 +33,8 @@ export async function POST(request) {
   })
 
   if (!res.ok) {
+    const detalle = await res.text().catch(() => '')
+    console.error('groq transcripcion error', res.status, detalle)
     return NextResponse.json({ error: 'groq_error' }, { status: 502 })
   }
 
