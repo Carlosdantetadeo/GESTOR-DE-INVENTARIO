@@ -1,0 +1,4 @@
+{
+  "//": "Marca los módulos de AuditorIA como ESM para poder correr los tests con `node --test` sin dependencias extra. No afecta al resto del frontend.",
+  "type": "module"
+}
