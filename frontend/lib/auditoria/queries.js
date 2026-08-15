@@ -341,7 +341,7 @@ export async function urlEvidencia(storagePath) {
 export async function getVentas({ desde, hasta }) {
   const { data, error } = await supabase
     .from('movimientos')
-    .select('auth_uid, usuario_id, cantidad, total, created_at')
+    .select('auth_uid, usuario_id, tienda_origen, cantidad, total, created_at')
     .eq('tipo', 'venta')
     .gte('created_at', desde)
     .lte('created_at', hasta)
@@ -352,6 +352,13 @@ export async function getVentas({ desde, hasta }) {
 // Nombres de los operarios de Telegram (para resolver usuario_id en el reporte).
 export async function getUsuariosTelegram() {
   const { data, error } = await supabase.from('usuarios').select('id, nombre')
+  if (error) throw error
+  return data || []
+}
+
+// Nombres de las sedes (para el resumen de ventas por tienda).
+export async function getTiendas() {
+  const { data, error } = await supabase.from('tiendas').select('id, nombre')
   if (error) throw error
   return data || []
 }

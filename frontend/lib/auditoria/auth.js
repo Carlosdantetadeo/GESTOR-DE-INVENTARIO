@@ -4,9 +4,14 @@
 import { supabase } from '../supabase'
 
 export const ROLES = {
-  AUDITOR: 'auditor',
+  VENDEDOR: 'vendedor',
   SUPERVISOR: 'supervisor',
   ADMIN: 'admin',
+}
+
+// Rol de campo: solo registra ventas (no toca inventario ni cuenta).
+export function isVendedor(rol) {
+  return rol === ROLES.VENDEDOR
 }
 
 // Devuelve { user, empresaId, rol, tiendaId } o null si no hay sesión.
