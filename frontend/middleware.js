@@ -67,7 +67,13 @@ export async function middleware(request) {
 
   // Con sesión activa → no dejar pasar a /login ni /registro
   if (user && isPublic) {
-    return NextResponse.redirect(new URL('/', request.url))
+    return NextResponse.redirect(new URL('/auditoria', request.url))
+  }
+
+  // El módulo de auditoría (Almacenero Digital) es la app principal:
+  // la raíz redirige al módulo nuevo.
+  if (user && path === '/') {
+    return NextResponse.redirect(new URL('/auditoria', request.url))
   }
 
   return response
