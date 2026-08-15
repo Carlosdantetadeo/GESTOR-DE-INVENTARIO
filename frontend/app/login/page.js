@@ -45,7 +45,7 @@ export default function Login() {
       return
     }
 
-    window.location.href = new URLSearchParams(window.location.search).get('redirect') || '/'
+    window.location.href = new URLSearchParams(window.location.search).get('redirect') || '/auditoria'
   }
 
   const handleReset = async (e) => {
