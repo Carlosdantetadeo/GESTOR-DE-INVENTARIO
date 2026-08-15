@@ -16,7 +16,7 @@ export default function CatalogoPage() {
   const [meses, setMeses] = useState(6)
   const [usuarios, setUsuarios] = useState([])
   const [resultado, setResultado] = useState('')
-  const [nuevo, setNuevo] = useState({ email: '', password: '', rol: 'auditor', tienda_id: '' })
+  const [nuevo, setNuevo] = useState({ email: '', password: '', rol: 'vendedor', tienda_id: '' })
   const [aviso, setAviso] = useState('')
 
   const cargarUsuarios = useCallback(async () => {
@@ -78,7 +78,7 @@ export default function CatalogoPage() {
       }),
     })
     if (res.ok) {
-      setNuevo({ email: '', password: '', rol: 'auditor', tienda_id: '' })
+      setNuevo({ email: '', password: '', rol: 'vendedor', tienda_id: '' })
       setAviso('Usuario creado.')
       cargarUsuarios()
     } else {
@@ -127,7 +127,7 @@ export default function CatalogoPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })} style={inp}>
-              <option value="auditor">Auditor</option>
+              <option value="vendedor">Vendedor</option>
               <option value="supervisor">Supervisor</option>
               <option value="admin">Admin</option>
             </select>

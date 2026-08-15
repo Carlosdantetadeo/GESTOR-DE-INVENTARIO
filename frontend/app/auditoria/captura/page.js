@@ -6,6 +6,7 @@
 // por búsqueda manual (offline-first, FR-001).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
+import { canSupervise } from '../../../lib/auditoria/auth'
 import { getDB } from '../../../lib/auditoria/offline/db'
 import { enqueue } from '../../../lib/auditoria/offline/queue'
 import { registerFlushers, flushStore, flushAll } from '../../../lib/auditoria/offline/syncEngine'
@@ -222,6 +223,7 @@ export default function CapturaPage() {
 
   if (!session) return <Contenedor><p>Cargando…</p></Contenedor>
   if (!session.empresaId) return <Contenedor><p>Tu cuenta no tiene empresa asignada.</p></Contenedor>
+  if (!canSupervise(session.rol)) return <Contenedor><p>Solo supervisor o admin pueden contar inventario.</p></Contenedor>
   if (!sesionId) {
     return (
       <Contenedor>

@@ -6,7 +6,7 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { getAdminClient } from '@/lib/superadmin/adminClient'
 
-const ROLES = ['auditor', 'supervisor', 'admin']
+const ROLES = ['vendedor', 'supervisor', 'admin']
 
 function normUrl() {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
