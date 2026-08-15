@@ -1,0 +1,19 @@
+{
+  "name": "Almacenero Digital",
+  "short_name": "Almacenero",
+  "description": "Control de inventario por voz con semáforo",
+  "start_url": "/auditoria",
+  "scope": "/auditoria",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0d9488",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo-almacenerodigital.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

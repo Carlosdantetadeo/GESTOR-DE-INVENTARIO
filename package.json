@@ -1,4 +1,5 @@
 {
+  "name": "almacenero-digital",
   "dependencies": {
     "playwright": "^1.60.0"
   }
