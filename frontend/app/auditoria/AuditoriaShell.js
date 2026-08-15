@@ -6,6 +6,7 @@
 //  - muestra estado online/offline y el badge de pendientes (FR-010)
 //  - arranca el motor de sync (flush en `online` y en arranque — FR-017)
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { supabase } from '../../lib/supabase'
 import { getAuditoriaSession } from '../../lib/auditoria/auth'
 import { startSync, pendingCount } from '../../lib/auditoria/offline/syncEngine'
 
@@ -50,6 +51,11 @@ export default function AuditoriaShell({ children }) {
     }
   }, [refreshPending])
 
+  async function cerrarSesion() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
   const value = { session, online, pending, refreshPending }
 
   return (
@@ -77,6 +83,15 @@ export default function AuditoriaShell({ children }) {
               }} />
               {online ? 'En línea' : 'Sin conexión'}
             </span>
+            <button
+              onClick={cerrarSesion}
+              style={{
+                background: 'transparent', border: '1px solid #475569', color: '#fff',
+                borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: '0.75rem',
+              }}
+            >
+              Salir
+            </button>
           </span>
         </header>
         {children}
