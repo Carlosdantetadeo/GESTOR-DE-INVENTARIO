@@ -10,7 +10,7 @@ const PROMPT =
   'Si un dato no está, poné null.'
 
 export async function POST(request) {
-  const key = process.env.GROQ_API_KEY
+  const key = process.env.API_GROQ
   if (!key) {
     return NextResponse.json({ error: 'ocr_no_configurado' }, { status: 501 })
   }

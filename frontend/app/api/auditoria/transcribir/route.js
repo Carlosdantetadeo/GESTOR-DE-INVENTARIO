@@ -1,10 +1,10 @@
 // Proxy de transcripción de voz (Groq Whisper). La API key vive SOLO en el
-// server (GROQ_API_KEY), nunca en el cliente. Si no está configurada, responde
+// server (API_GROQ), nunca en el cliente. Si no está configurada, responde
 // 501 y el cliente cae al registro manual por búsqueda (offline-first).
 import { NextResponse } from 'next/server'
 
 export async function POST(request) {
-  const key = process.env.GROQ_API_KEY
+  const key = process.env.API_GROQ
   if (!key) {
     return NextResponse.json({ error: 'transcripcion_no_configurada' }, { status: 501 })
   }
