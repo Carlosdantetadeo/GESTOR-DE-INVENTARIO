@@ -11,8 +11,8 @@ Sistema de inventario por voz para ferreterías. Versión de producción activa.
 | Capa | Servicio | URL / Referencia |
 |------|----------|-----------------|
 | Frontend | Vercel (Next.js 14) | https://dashboard.almacenero.digital |
-| Base de datos | Supabase (PostgreSQL) | https://sqsqyzqwysygoperjwsd.supabase.co |
-| Edge Functions | Supabase Deno Runtime | https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/ |
+| Base de datos | Supabase (PostgreSQL) | https://nxhkzcuqnmqjtiltoztg.supabase.co |
+| Edge Functions | Supabase Deno Runtime | https://nxhkzcuqnmqjtiltoztg.supabase.co/functions/v1/ |
 | STT | Groq Whisper (`whisper-large-v3-turbo`) | https://api.groq.com |
 | Vision | Groq (`meta-llama/llama-4-scout-17b-16e-instruct`) | https://api.groq.com |
 | NLU | Groq Llama (`llama-3.3-70b-versatile`) | https://api.groq.com |
@@ -27,11 +27,11 @@ Sistema de inventario por voz para ferreterías. Versión de producción activa.
 
 | Variable | Valor |
 |----------|-------|
-| `SUPABASE_URL` | `https://sqsqyzqwysygoperjwsd.supabase.co` |
+| `SUPABASE_URL` | `https://nxhkzcuqnmqjtiltoztg.supabase.co` |
 | `SUPABASE_ANON_KEY` | Ver Supabase Dashboard → Settings → API → `anon public` |
 | `SERVICE_ROLE_KEY` | Ver Supabase Dashboard → Settings → API → `service_role` ⚠️ |
 
-Panel de administración: https://supabase.com/dashboard/project/sqsqyzqwysygoperjwsd
+Panel de administración: https://supabase.com/dashboard/project/nxhkzcuqnmqjtiltoztg
 
 > ⚠️ `SERVICE_ROLE_KEY` bypasea toda RLS. Nunca exponerla en el frontend ni en repositorios públicos.
 
@@ -61,7 +61,7 @@ Configuradas en Vercel Dashboard → Project → Settings → Environment Variab
 
 | Variable | Valor |
 |----------|-------|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://sqsqyzqwysygoperjwsd.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://nxhkzcuqnmqjtiltoztg.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon key pública de Supabase |
 
 Para desarrollo local crear `frontend/.env.local` con las mismas variables.
@@ -72,7 +72,7 @@ Para desarrollo local crear `frontend/.env.local` con las mismas variables.
 
 ### 3.1 `telegram-bot`
 
-- **URL:** `https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/telegram-bot`
+- **URL:** `https://nxhkzcuqnmqjtiltoztg.supabase.co/functions/v1/telegram-bot`
 - **Método:** POST (webhook de Telegram)
 - **Auth:** `--no-verify-jwt` (público), pero autenticado por el header `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET` (fail-closed).
 
@@ -128,7 +128,7 @@ Usuario envía /start TOKEN
 
 ### 3.2 `onboarding`
 
-- **URL:** `https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/onboarding`
+- **URL:** `https://nxhkzcuqnmqjtiltoztg.supabase.co/functions/v1/onboarding`
 - **Método:** POST (llamado desde `/registro`)
 - **Auth:** `--no-verify-jwt` (público)
 
@@ -281,7 +281,7 @@ Ejecutar una vez después de deployar `telegram-bot`. El `secret_token` **debe s
 ```bash
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/telegram-bot","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
+  -d '{"url":"https://nxhkzcuqnmqjtiltoztg.supabase.co/functions/v1/telegram-bot","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
 ```
 
 Verificar:
