@@ -3,7 +3,7 @@
 // Ingreso manual de inventario sin factura (paridad con el bot). Solo
 // supervisor/admin (el auditor/vendedor no toca inventario). Escribe en el
 // ledger movimientos (tipo ingreso); el trigger sube el stock. Deshacer = DELETE.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
@@ -20,7 +20,9 @@ export default function IngresoPage() {
   const [cantidad, setCantidad] = useState('')
   const [costo, setCosto] = useState('')
   const [ultimo, setUltimo] = useState(null)
+  const [grabando, setGrabando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const recorderRef = useRef(null)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
@@ -34,6 +36,75 @@ export default function IngresoPage() {
   async function elegir(p) {
     setPieza(p); setResultados([])
     try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
+  }
+
+  async function grabarVoz() {
+    if (!online) { setAviso('La voz necesita conexión.'); return }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const rec = new MediaRecorder(stream)
+      const chunks = []
+      rec.ondataavailable = (e) => chunks.push(e.data)
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(chunks, { type: rec.mimeType })
+        const fd = new FormData()
+        fd.append('audio', blob)
+        try {
+          const res = await fetch('/api/auditoria/transcribir', { method: 'POST', body: fd })
+          if (res.ok) {
+            const { texto: t } = await res.json()
+            if (t?.trim()) await interpretarIngreso(t)
+            else setAviso('No te entendí. Probá de nuevo o buscá por nombre.')
+          } else if (res.status === 501) {
+            setAviso('La voz no está configurada (falta GROQ_API_KEY en Vercel).')
+          } else {
+            setAviso('No se pudo transcribir el audio. Probá de nuevo.')
+          }
+        } catch { setAviso('No se pudo transcribir.') }
+      }
+      recorderRef.current = rec
+      rec.start()
+      setGrabando(true)
+    } catch { setAviso('No se pudo acceder al micrófono.') }
+  }
+
+  function detenerVoz() { recorderRef.current?.stop(); setGrabando(false) }
+
+  // Voz: interpreta la frase (producto + cantidad + costo), ubica la mejor
+  // coincidencia del catálogo y prellena para registrar o corregir.
+  async function interpretarIngreso(t) {
+    setAviso('Interpretando…')
+    let descripcion = t
+    let cant = null
+    let cost = null
+    try {
+      const res = await fetch('/api/auditoria/parsear-venta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: t }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        if (d.descripcion) descripcion = d.descripcion
+        cant = d.cantidad
+        cost = d.precio
+      }
+      // 501 u otro error → seguimos con el texto crudo (fallback manual).
+    } catch { /* fallback: usamos el texto crudo */ }
+
+    const resultados = await buscarLocal(descripcion)
+    setTexto(descripcion)
+    if (resultados.length > 0) {
+      setResultados([])
+      await elegir(resultados[0].pieza)
+      if (cant != null) setCantidad(String(cant))
+      if (cost != null) setCosto(String(cost))
+      setAviso('')
+    } else {
+      setPieza(null); setStock(null); setResultados([])
+      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto. Corregí el texto o buscá por nombre.`)
+    }
   }
 
   async function registrar() {
@@ -74,7 +145,15 @@ export default function IngresoPage() {
     <Cont>
       <h2 style={{ marginTop: 0 }}>Ingreso de inventario</h2>
 
-      <input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" style={inp} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" style={inp} />
+        <button
+          onClick={grabando ? detenerVoz : grabarVoz}
+          style={{ ...btn, background: grabando ? '#ef4444' : '#0d9488', whiteSpace: 'nowrap' }}
+        >
+          {grabando ? '⏹ Detener' : '🎤 Voz'}
+        </button>
+      </div>
 
       {!pieza && resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
