@@ -126,13 +126,12 @@ export default function IngresoPage() {
     const cant = Number(cantidad)
     if (!pieza || !cant) return
     if (!tiendaId) { setAviso('Elegí una sede.'); return }
-    if (!seccionId) { setAviso('Elegí una sección.'); return }
     if (!online) { setAviso('Registrar ingresos requiere conexión.'); return }
     try {
       const mov = await registrarIngresoManual({
         productoId: pieza.producto_id ?? pieza.id,
         tiendaId: Number(tiendaId),
-        seccionId: Number(seccionId),
+        seccionId: seccionId ? Number(seccionId) : null,
         cantidad: cant,
         costo: costo === '' ? 0 : Number(costo),
         authUid: session.user.id,
@@ -171,16 +170,16 @@ export default function IngresoPage() {
           </select>
         </label>
         {tiendaId && (
-          <label style={lbl}>Sección
+          <label style={lbl}>Sección (opcional)
             <select value={seccionId} onChange={(e) => setSeccionId(e.target.value)} style={inp}>
-              <option value="">{secciones.length ? 'Elegí una sección…' : 'Esta sede no tiene secciones (cargalas en Admin)'}</option>
+              <option value="">{secciones.length ? 'Sin sección' : 'Esta sede no tiene secciones (cargalas en Admin)'}</option>
               {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
           </label>
         )}
       </div>
 
-      {tiendaId && seccionId && (
+      {tiendaId && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" style={inp} />
           <button
@@ -212,8 +211,12 @@ export default function IngresoPage() {
             {stock != null && <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Stock actual: {stock}</div>}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Cantidad" style={inp} autoFocus />
-            <input type="number" min="0" step="0.01" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Costo unit." style={inp} />
+            <label style={lbl}>Cantidad
+              <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Ej: 10" style={inp} autoFocus />
+            </label>
+            <label style={lbl}>Costo unitario
+              <input type="number" min="0" step="0.1" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Ej: 25.50" style={inp} />
+            </label>
           </div>
           <button onClick={registrar} disabled={!cantidad} style={{ ...btn, opacity: cantidad ? 1 : 0.5 }}>📦 Registrar ingreso</button>
         </div>
