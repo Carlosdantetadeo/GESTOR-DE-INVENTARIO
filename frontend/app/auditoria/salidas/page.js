@@ -40,6 +40,42 @@ export default function SalidasPage() {
     try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
   }
 
+  // Voz: interpreta la frase (producto + cantidad + precio), ubica la mejor
+  // coincidencia del catálogo y prellena la tarjeta para registrar o corregir.
+  async function interpretarVenta(t) {
+    setAviso('Interpretando…')
+    let descripcion = t
+    let cant = null
+    let prec = null
+    try {
+      const res = await fetch('/api/auditoria/parsear-venta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: t }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        if (d.descripcion) descripcion = d.descripcion
+        cant = d.cantidad
+        prec = d.precio
+      }
+      // 501 u otro error → seguimos con el texto crudo (fallback manual).
+    } catch { /* fallback: usamos el texto crudo */ }
+
+    const resultados = await buscarLocal(descripcion)
+    setTexto(descripcion)
+    if (resultados.length > 0) {
+      setResultados([])
+      await elegir(resultados[0].pieza)
+      if (cant != null) setCantidad(String(cant))
+      if (prec != null) setPrecio(String(prec))
+      setAviso('')
+    } else {
+      setPieza(null); setStock(null); setResultados([])
+      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto. Corregí el texto o buscá por nombre.`)
+    }
+  }
+
   async function grabarVoz() {
     if (!online) { setAviso('La voz necesita conexión.'); return }
     try {
@@ -56,7 +92,7 @@ export default function SalidasPage() {
           const res = await fetch('/api/auditoria/transcribir', { method: 'POST', body: fd })
           if (res.ok) {
             const { texto: t } = await res.json()
-            if (t?.trim()) buscar(t)
+            if (t?.trim()) await interpretarVenta(t)
             else setAviso('No te entendí. Probá de nuevo o buscá por nombre.')
           } else if (res.status === 501) {
             setAviso('La voz no está configurada (falta GROQ_API_KEY en Vercel).')
@@ -181,6 +217,11 @@ export default function SalidasPage() {
           <label style={lbl}>Precio unitario
             <input type="number" inputMode="decimal" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)} style={inp} />
           </label>
+          {Number(cantidad) > 0 && Number(precio) > 0 && (
+            <div style={{ fontSize: '1rem', fontWeight: 700, textAlign: 'right' }}>
+              Total: {(Number(cantidad) * Number(precio)).toFixed(2)}
+            </div>
+          )}
           <button onClick={registrar} disabled={!cantidad} style={{ ...btnGrande, background: '#0f172a', color: '#fff', opacity: cantidad ? 1 : 0.5 }}>
             💰 Registrar venta
           </button>
