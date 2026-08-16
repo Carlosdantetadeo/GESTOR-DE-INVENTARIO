@@ -10,7 +10,7 @@ Sistema de inventario por voz para ferreterías. Registrá ventas e ingresos en 
 
 ### Paso 1 — Crear tu empresa
 
-1. Entrá a: **https://gestor-de-inventario-one.vercel.app/registro**
+1. Entrá a: **https://dashboard.almacenero.digital/registro**
 2. Completá el formulario:
    - **Nombre de la empresa** — ej: `Ferretería Los Andes`
    - **Email del administrador** — tu email corporativo
@@ -30,7 +30,7 @@ Tu contraseña temporal: GMS-XXXXXXXX
 
 ### Paso 3 — Ingresá al dashboard
 
-1. Andá a: **https://gestor-de-inventario-one.vercel.app/login**
+1. Andá a: **https://dashboard.almacenero.digital/login**
 2. Ingresá con tu email y la contraseña temporal
 3. Para cambiar la contraseña usá **"¿Olvidaste tu contraseña?"** en la pantalla de login: te llega un email con un link para crear una nueva
 
@@ -187,7 +187,7 @@ Si el producto ya existía con otra escritura (mayúsculas, etc.), el bot lo rec
 
 ## 7. Dashboard web
 
-Accedé desde: **https://gestor-de-inventario-one.vercel.app**
+Accedé desde: **https://dashboard.almacenero.digital**
 
 ### Secciones del menú
 

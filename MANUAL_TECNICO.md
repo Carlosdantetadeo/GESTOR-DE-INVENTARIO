@@ -10,7 +10,7 @@ Sistema de inventario por voz para ferreterías. Versión de producción activa.
 
 | Capa | Servicio | URL / Referencia |
 |------|----------|-----------------|
-| Frontend | Vercel (Next.js 14) | https://gestor-de-inventario-one.vercel.app |
+| Frontend | Vercel (Next.js 14) | https://dashboard.almacenero.digital |
 | Base de datos | Supabase (PostgreSQL) | https://sqsqyzqwysygoperjwsd.supabase.co |
 | Edge Functions | Supabase Deno Runtime | https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/ |
 | STT | Groq Whisper (`whisper-large-v3-turbo`) | https://api.groq.com |
@@ -302,8 +302,8 @@ En Supabase Dashboard → Authentication → URL Configuration:
 
 | Campo | Valor |
 |-------|-------|
-| Site URL | `https://gestor-de-inventario-one.vercel.app` |
-| Redirect URLs | `https://gestor-de-inventario-one.vercel.app/**` |
+| Site URL | `https://dashboard.almacenero.digital` |
+| Redirect URLs | `https://dashboard.almacenero.digital/**` |
 
 ---
 
