@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuditoria } from '../AuditoriaShell'
 import { isAdmin } from '../../../lib/auditoria/auth'
-import { importarCatalogo, getEmpresaConfig, updateEmpresaConfig } from '../../../lib/auditoria/queries'
+import { importarCatalogo, getEmpresaConfig, updateEmpresaConfig, getTiendas, getSecciones, crearSeccion } from '../../../lib/auditoria/queries'
 
 const COLUMNAS = ['nombre', 'unidad_medida', 'referencia', 'stock_minimo', 'punto_reorden', 'stock_maximo']
 
@@ -17,6 +17,10 @@ export default function CatalogoPage() {
   const [usuarios, setUsuarios] = useState([])
   const [resultado, setResultado] = useState('')
   const [nuevo, setNuevo] = useState({ email: '', password: '', rol: 'vendedor', tienda_id: '' })
+  const [tiendas, setTiendas] = useState([])
+  const [secTienda, setSecTienda] = useState('')
+  const [secciones, setSecciones] = useState([])
+  const [secNombre, setSecNombre] = useState('')
   const [aviso, setAviso] = useState('')
 
   const cargarUsuarios = useCallback(async () => {
@@ -27,8 +31,27 @@ export default function CatalogoPage() {
   useEffect(() => {
     if (!session || !isAdmin(session.rol)) return
     getEmpresaConfig().then((c) => { setConfig(c); setMeses(c?.meses_stock_muerto ?? 6) }).catch(() => {})
+    getTiendas().then(setTiendas).catch(() => {})
     cargarUsuarios()
   }, [session, cargarUsuarios])
+
+  async function elegirSecTienda(id) {
+    setSecTienda(id); setSecciones([])
+    if (id) { try { setSecciones(await getSecciones(Number(id))) } catch { setSecciones([]) } }
+  }
+
+  async function agregarSeccion(e) {
+    e.preventDefault()
+    if (!secTienda || !secNombre.trim()) return
+    try {
+      await crearSeccion({ empresaId: session.empresaId, tiendaId: Number(secTienda), nombre: secNombre.trim() })
+      setSecNombre('')
+      setSecciones(await getSecciones(Number(secTienda)))
+      setAviso('Sección creada.')
+    } catch {
+      setAviso('No se pudo crear la sección (¿nombre repetido en esa sede?).')
+    }
+  }
 
   async function importar(e) {
     const file = e.target.files?.[0]
@@ -117,6 +140,33 @@ export default function CatalogoPage() {
           </label>
           <button type="submit" style={btnPrimary}>Guardar</button>
         </form>
+      </Seccion>
+
+      <Seccion titulo="Ubicaciones / Secciones">
+        <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
+          Elegí una sede y agregá sus secciones (pasillo, estante, zona…). Se usan al ingresar inventario.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <select value={secTienda} onChange={(e) => elegirSecTienda(e.target.value)} style={inp}>
+            <option value="">Elegí una sede…</option>
+            {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+          </select>
+        </div>
+        {secTienda && (
+          <>
+            <form onSubmit={agregarSeccion} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              <input placeholder="Nombre de la sección (ej: Pasillo 1)" value={secNombre} onChange={(e) => setSecNombre(e.target.value)} style={inp} />
+              <button type="submit" style={btnPrimary}>Agregar</button>
+            </form>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {secciones.length
+                ? secciones.map((s) => (
+                  <li key={s.id} style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 999, fontSize: '0.9rem' }}>{s.nombre}</li>
+                ))
+                : <li style={{ color: '#64748b', fontSize: '0.85rem' }}>Sin secciones todavía.</li>}
+            </ul>
+          </>
+        )}
       </Seccion>
 
       <Seccion titulo={`Usuarios (${usuarios.length})`}>

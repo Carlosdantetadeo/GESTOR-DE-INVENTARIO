@@ -7,12 +7,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
-import { getStock, registrarIngresoManual, deshacerSalida } from '../../../lib/auditoria/queries'
+import { getStock, registrarIngresoManual, deshacerSalida, getTiendas, getSecciones } from '../../../lib/auditoria/queries'
 
 const VENTANA_MS = 5 * 60 * 1000
 
 export default function IngresoPage() {
   const { session, online } = useAuditoria()
+  const [tiendas, setTiendas] = useState([])
+  const [tiendaId, setTiendaId] = useState('')
+  const [secciones, setSecciones] = useState([])
+  const [seccionId, setSeccionId] = useState('')
   const [texto, setTexto] = useState('')
   const [resultados, setResultados] = useState([])
   const [pieza, setPieza] = useState(null)
@@ -26,7 +30,17 @@ export default function IngresoPage() {
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
+    if (session?.empresaId) getTiendas().then(setTiendas).catch(() => {})
   }, [session, online])
+
+  // Al elegir sede: cargar sus secciones y resetear la selección de sección/pieza.
+  async function elegirSede(id) {
+    setTiendaId(id); setSeccionId(''); setSecciones([])
+    setPieza(null); setStock(null)
+    if (id) {
+      try { setSecciones(await getSecciones(Number(id))) } catch { setSecciones([]) }
+    }
+  }
 
   async function buscar(q) {
     setTexto(q); setPieza(null); setStock(null)
@@ -35,7 +49,8 @@ export default function IngresoPage() {
 
   async function elegir(p) {
     setPieza(p); setResultados([])
-    try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
+    if (!tiendaId) { setStock(null); return }
+    try { setStock(await getStock(p.producto_id ?? p.id, Number(tiendaId))) } catch { setStock(null) }
   }
 
   async function grabarVoz() {
@@ -110,11 +125,14 @@ export default function IngresoPage() {
   async function registrar() {
     const cant = Number(cantidad)
     if (!pieza || !cant) return
+    if (!tiendaId) { setAviso('Elegí una sede.'); return }
+    if (!seccionId) { setAviso('Elegí una sección.'); return }
     if (!online) { setAviso('Registrar ingresos requiere conexión.'); return }
     try {
       const mov = await registrarIngresoManual({
         productoId: pieza.producto_id ?? pieza.id,
-        tiendaId: session.tiendaId,
+        tiendaId: Number(tiendaId),
+        seccionId: Number(seccionId),
         cantidad: cant,
         costo: costo === '' ? 0 : Number(costo),
         authUid: session.user.id,
@@ -138,22 +156,41 @@ export default function IngresoPage() {
   }
 
   if (!session) return <Cont><p>Cargando…</p></Cont>
-  if (!session.empresaId || !session.tiendaId) return <Cont><p>Tu cuenta necesita empresa y sede asignadas.</p></Cont>
+  if (!session.empresaId) return <Cont><p>Tu cuenta necesita una empresa asignada.</p></Cont>
   if (!canSupervise(session.rol)) return <Cont><p>Solo supervisor o admin pueden ingresar inventario.</p></Cont>
 
   return (
     <Cont>
       <h2 style={{ marginTop: 0 }}>Ingreso de inventario</h2>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" style={inp} />
-        <button
-          onClick={grabando ? detenerVoz : grabarVoz}
-          style={{ ...btn, background: grabando ? '#ef4444' : '#0d9488', whiteSpace: 'nowrap' }}
-        >
-          {grabando ? '⏹ Detener' : '🎤 Voz'}
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <label style={lbl}>Sede
+          <select value={tiendaId} onChange={(e) => elegirSede(e.target.value)} style={inp}>
+            <option value="">Elegí una sede…</option>
+            {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+          </select>
+        </label>
+        {tiendaId && (
+          <label style={lbl}>Sección
+            <select value={seccionId} onChange={(e) => setSeccionId(e.target.value)} style={inp}>
+              <option value="">{secciones.length ? 'Elegí una sección…' : 'Esta sede no tiene secciones (cargalas en Admin)'}</option>
+              {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </label>
+        )}
       </div>
+
+      {tiendaId && seccionId && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" style={inp} />
+          <button
+            onClick={grabando ? detenerVoz : grabarVoz}
+            style={{ ...btn, background: grabando ? '#ef4444' : '#0d9488', whiteSpace: 'nowrap' }}
+          >
+            {grabando ? '⏹ Detener' : '🎤 Voz'}
+          </button>
+        </div>
+      )}
 
       {!pieza && resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
@@ -198,6 +235,7 @@ function Cont({ children }) {
   return <main style={{ padding: 16, maxWidth: 560, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
 }
 const inp = { flex: 1, width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '1rem' }
+const lbl = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: '#334155' }
 const item = { width: '100%', textAlign: 'left', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', cursor: 'pointer', marginBottom: 6 }
 const btn = { padding: '11px 16px', border: 'none', borderRadius: 10, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
 const linkBtn = { marginLeft: 8, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.8rem' }

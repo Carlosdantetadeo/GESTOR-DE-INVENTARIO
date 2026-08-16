@@ -139,20 +139,46 @@ export async function crearIngreso({ productoId, tiendaId, cantidad, costo, auth
 }
 
 // Ingreso manual de inventario (sin factura). Solo supervisor/admin (rol en UI).
+// seccion_id es la ubicación dentro de la sede (opcional; no afecta el stock).
 // Devuelve el movimiento para poder deshacerlo.
-export async function registrarIngresoManual({ productoId, tiendaId, cantidad, costo, authUid, clientOpId }) {
+export async function registrarIngresoManual({ productoId, tiendaId, seccionId, cantidad, costo, authUid, clientOpId }) {
   const { data, error } = await supabase
     .from('movimientos')
     .insert({
       tipo: 'ingreso',
       producto_id: productoId,
       tienda_destino: tiendaId,
+      seccion_id: seccionId ?? null,
       cantidad,
       costo_unitario: costo ?? 0,
       auth_uid: authUid ?? null,
       client_op_id: clientOpId,
     })
     .select('id, created_at')
+    .single()
+  if (error) throw error
+  return data
+}
+
+// ── Secciones (ubicaciones dentro de una sede) ────────────────────────────────
+
+// Secciones de una sede, ordenadas por nombre. RLS filtra por empresa.
+export async function getSecciones(tiendaId) {
+  const { data, error } = await supabase
+    .from('secciones')
+    .select('id, nombre, tienda_id')
+    .eq('tienda_id', tiendaId)
+    .order('nombre')
+  if (error) throw error
+  return data || []
+}
+
+// Crea una sección en una sede. empresa_id explícito (RLS lo exige en el CHECK).
+export async function crearSeccion({ empresaId, tiendaId, nombre }) {
+  const { data, error } = await supabase
+    .from('secciones')
+    .insert({ empresa_id: empresaId, tienda_id: tiendaId, nombre })
+    .select('id, nombre, tienda_id')
     .single()
   if (error) throw error
   return data
