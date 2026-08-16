@@ -215,7 +215,7 @@ export default function SalidasPage() {
             <input type="number" inputMode="numeric" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} style={inp} autoFocus />
           </label>
           <label style={lbl}>Precio unitario
-            <input type="number" inputMode="decimal" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)} style={inp} />
+            <input type="number" inputMode="decimal" min="0" step="0.1" value={precio} onChange={(e) => setPrecio(e.target.value)} style={inp} />
           </label>
           {Number(cantidad) > 0 && Number(precio) > 0 && (
             <div style={{ fontSize: '1rem', fontWeight: 700, textAlign: 'right' }}>
