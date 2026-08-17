@@ -170,55 +170,38 @@ Deno.serve(async (req) => {
 
 async function procesarUpdate(update: TelegramUpdate) {
   try {
+    // MODO SOLO-REPORTES: el bot ya no registra inventario desde Telegram
+    // (evita doble ingreso y fuga de información). Solo /start (linkeo) y /reporte.
     const cb = update.callback_query
     if (cb?.data) {
-      if (cb.data.startsWith('undo_'))      { await handleUndo(cb);        return }
-      if (cb.data.startsWith('join_'))      { await handleJoin(cb);        return }
-      if (cb.data.startsWith('adminmodo:')) { await handleAdminModo(cb);   return }
-      if (cb.data.startsWith('adminsede:')) { await handleAdminSede(cb);   return }
-      if (cb.data.startsWith('fototipo:'))  { await handleFotoTipo(cb);    return }
-      if (cb.data.startsWith('confirmar:'))  { await handleConfirmarCb(cb);  return }
-      if (cb.data.startsWith('corregir:'))   { await handleCorregirCb(cb);   return }
-      if (cb.data.startsWith('editfield:'))  { await handleEditFieldCb(cb);  return }
-      if (cb.data.startsWith('editcancel:')) { await handleEditCancelCb(cb); return }
-      if (cb.data.startsWith('cancelar:'))   { await handleCancelarCb(cb);   return }
+      // El linkeo de cuenta (parte de /start) sigue vivo.
+      if (cb.data.startsWith('join_'))      { await handleJoin(cb);      return }
+      if (cb.data.startsWith('adminmodo:')) { await handleAdminModo(cb); return }
+      if (cb.data.startsWith('adminsede:')) { await handleAdminSede(cb); return }
+      // Botones de registro viejos (tarjeta/foto/undo) quedan inertes.
+      const cbChatId = (cb.message as { chat?: { id: number } } | undefined)?.chat?.id
+      if (cbChatId) {
+        await tg('sendMessage', {
+          chat_id: cbChatId,
+          text: 'ℹ️ El registro por Telegram está desactivado. Escribí /reporte para el reporte del día.',
+        })
+      }
       return
     }
 
     const msg = update.message
     if (!msg) return
 
-    if (msg.text?.startsWith('/start')) {
-      await handleStart(msg)
-      return
-    }
+    if (msg.text?.startsWith('/start'))   { await handleStart(msg); return }
+    if (msg.text?.startsWith('/reporte')) { await handleReporteDiario(msg.chat.id, msg.from?.id); return }
 
-    // /cancelar universal (decisión #7): prioridad alta, antes de cualquier
-    // interpretación. Por texto exacto acá; por voz se chequea tras transcribir.
-    if (msg.text && esComandoCancelar(msg.text)) {
-      await handleCancelarUniversal(msg.chat.id, msg.from?.id)
-      return
-    }
-
-    // /deshacer (texto): revierte la última registración (reemplaza al botón).
-    if (msg.text && esComandoDeshacer(msg.text)) {
-      await handleDeshacerCmd(msg.chat.id, msg.from?.id)
-      return
-    }
-
-    if (msg.voice) {
-      await handleVoice(msg)
-      return
-    }
-
-    if (msg.text && !msg.text.startsWith('/')) {
-      await handleTextoEntrante(msg)
-      return
-    }
-
-    if (msg.photo?.length) {
-      await handlePhoto(msg)
-      return
+    // Cualquier otro mensaje (voz, foto, texto) → recordatorio de solo-reportes.
+    if (msg.voice || msg.photo?.length || msg.text) {
+      await tg('sendMessage', {
+        chat_id: msg.chat.id,
+        text: 'ℹ️ Este bot ahora solo entrega el *reporte del día*.\n\nEscribí /reporte para verlo. El registro de ventas e inventario se hace desde la app web.',
+        parse_mode: 'Markdown',
+      })
     }
   } catch (err) {
     console.error('[telegram-bot] error no controlado:', err)
@@ -1584,6 +1567,87 @@ async function upsertAdmin(
 const PERU_OFFSET_MS = 5 * 60 * 60 * 1000
 
 // Fecha de HOY en Perú como 'YYYY-MM-DD' (para que el NLU resuelva fechas relativas).
+// Reporte del día (SOLO admin): total + por sede + por vendedor. Incluye ventas
+// de la web (auth_uid) y de Telegram (usuario_id). Modo solo-reportes.
+async function handleReporteDiario(chatId: number, telegramUserId: number | undefined) {
+  const { data: usuario } = await supabase
+    .from('usuarios')
+    .select('id, empresa_id, rol, empresas(nombre, activa)')
+    .eq('telegram_id', telegramUserId)
+    .maybeSingle() as { data: { id: number; empresa_id: string; rol: string; empresas: { nombre: string; activa: boolean } | null } | null }
+
+  if (!usuario) {
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu cuenta de Telegram no está registrada. Pedile al administrador que te agregue.' })
+    return
+  }
+  if (usuario.empresas?.activa === false) {
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contactá al proveedor.' })
+    return
+  }
+  if (usuario.rol !== 'admin') {
+    await tg('sendMessage', { chat_id: chatId, text: '🔒 El reporte del día solo está disponible para el administrador.' })
+    return
+  }
+
+  const empresaId = usuario.empresa_id
+  const { desdeIso, titulo } = inicioPeriodoPeru('hoy')
+
+  const { data: ventas } = await supabase
+    .from('movimientos')
+    .select('cantidad, total, tienda_origen, usuario_id, auth_uid, productos!inner(empresa_id)')
+    .eq('tipo', 'venta')
+    .eq('productos.empresa_id', empresaId)
+    .gte('created_at', desdeIso) as { data: Array<{ total: number | null; cantidad: number | null; tienda_origen: number | null; usuario_id: number | null; auth_uid: string | null }> | null }
+
+  const rows = ventas ?? []
+  if (rows.length === 0) {
+    await tg('sendMessage', { chat_id: chatId, text: `📊 *Reporte del día — ${titulo}*\n\nSin ventas todavía.`, parse_mode: 'Markdown' })
+    return
+  }
+
+  // Nombres: sedes, operarios de Telegram y usuarios web (auth).
+  const [{ data: tiendas }, { data: ops }] = await Promise.all([
+    supabase.from('tiendas').select('id, nombre').eq('empresa_id', empresaId),
+    supabase.from('usuarios').select('id, nombre').eq('empresa_id', empresaId),
+  ])
+  const nombreSede = new Map<number, string>((tiendas ?? []).map((t) => [t.id, t.nombre]))
+  const nombreOp = new Map<number, string>((ops ?? []).map((u) => [u.id, u.nombre ?? `Operario ${u.id}`]))
+
+  const nombreWeb = new Map<string, string>()
+  try {
+    const { data: authList } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 })
+    for (const u of authList?.users ?? []) {
+      const md = (u.app_metadata ?? {}) as { empresa_id?: string; nombre?: string }
+      if (md.empresa_id === empresaId) nombreWeb.set(u.id, md.nombre || u.email || 'Usuario web')
+    }
+  } catch { /* si falla, los vendedores web salen como 'Usuario web' */ }
+
+  let total = 0
+  const porSede = new Map<string, number>()
+  const porVend = new Map<string, number>()
+  for (const v of rows) {
+    const monto = Number(v.total ?? 0)
+    total += monto
+    const sede = v.tienda_origen != null ? (nombreSede.get(v.tienda_origen) ?? `Sede ${v.tienda_origen}`) : 'Sin sede'
+    porSede.set(sede, (porSede.get(sede) ?? 0) + monto)
+    let vend = 'Sin vendedor'
+    if (v.usuario_id != null) vend = '📱 ' + (nombreOp.get(v.usuario_id) ?? `Operario ${v.usuario_id}`)
+    else if (v.auth_uid) vend = nombreWeb.get(v.auth_uid) ?? 'Usuario web'
+    porVend.set(vend, (porVend.get(vend) ?? 0) + monto)
+  }
+
+  const fmt = (m: Map<string, number>) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, val]) => `• ${mdSafe(k)} — S/. ${val.toFixed(2)}`).join('\n')
+
+  const texto =
+    `📊 *Reporte del día — ${titulo}*\n\n` +
+    `💰 *Total vendido:* S/. ${total.toFixed(2)}  ·  ${rows.length} venta(s)\n\n` +
+    `🏪 *Por sede:*\n${fmt(porSede)}\n\n` +
+    `🧑 *Por vendedor:*\n${fmt(porVend)}`
+
+  await tg('sendMessage', { chat_id: chatId, text: texto, parse_mode: 'Markdown' })
+}
+
 function hoyPeruISO(): string {
   const p = new Date(Date.now() - PERU_OFFSET_MS)
   return `${p.getUTCFullYear()}-${String(p.getUTCMonth() + 1).padStart(2, '0')}-${String(p.getUTCDate()).padStart(2, '0')}`
