@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
-import { getStock, registrarIngresoManual, deshacerSalida, getTiendas, getSecciones } from '../../../lib/auditoria/queries'
+import { getStock, registrarIngresoManual, deshacerSalida, getTiendas, getSecciones, buscarSemantico } from '../../../lib/auditoria/queries'
 
 const VENTANA_MS = 5 * 60 * 1000
 
@@ -108,7 +108,9 @@ export default function IngresoPage() {
       // 501 u otro error → seguimos con el texto crudo (fallback manual).
     } catch { /* fallback: usamos el texto crudo */ }
 
-    const resultados = await buscarLocal(descripcion)
+    // Online: búsqueda semántica (embeddings). Si no hay red o falla, trigram local.
+    let resultados = online ? await buscarSemantico(descripcion) : null
+    if (!resultados || !resultados.length) resultados = await buscarLocal(descripcion)
     setTexto(descripcion)
     if (resultados.length > 0) {
       setResultados([])

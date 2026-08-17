@@ -10,6 +10,7 @@ import {
   importarCatalogo, getEmpresaConfig, updateEmpresaConfig,
   getTiendas, crearTienda, renombrarTienda, setTiendaActiva,
   getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
+  productosSinEmbedding, guardarEmbedding,
 } from '../../../lib/auditoria/queries'
 
 const COLUMNAS = ['nombre', 'unidad_medida', 'referencia', 'stock_minimo', 'punto_reorden', 'stock_maximo']
@@ -118,6 +119,35 @@ export default function CatalogoPage() {
     XLSX.writeFile(wb, 'plantilla-catalogo.xlsx')
   }
 
+  // Genera los embeddings de los productos que no lo tienen (base para la
+  // búsqueda semántica). Procesa en lotes; muestra progreso.
+  async function generarEmbeddings() {
+    setResultado('Buscando productos sin embedding…')
+    try {
+      const pend = await productosSinEmbedding()
+      if (!pend.length) { setResultado('Todos los productos ya tienen embedding. ✅'); return }
+      let hechos = 0
+      const lote = 16
+      for (let i = 0; i < pend.length; i += lote) {
+        const grupo = pend.slice(i, i + lote)
+        const textos = grupo.map((p) => [p.nombre, p.referencia].filter(Boolean).join(' '))
+        const res = await fetch('/api/auditoria/embeddings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ textos }),
+        })
+        if (!res.ok) { setResultado(`Error generando embeddings (HTTP ${res.status}).`); return }
+        const { vectores } = await res.json()
+        for (let j = 0; j < grupo.length; j++) {
+          if (vectores[j]?.length) { await guardarEmbedding(grupo[j].id, vectores[j]); hechos++ }
+        }
+        setResultado(`Generando embeddings… ${hechos}/${pend.length}`)
+      }
+      setResultado(`Listo: ${hechos} producto(s) con embedding. 🧠`)
+    } catch {
+      setResultado('No se pudieron generar los embeddings.')
+    }
+  }
+
   async function importar(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -204,7 +234,11 @@ export default function CatalogoPage() {
             📄 Elegir archivo
             <input type="file" accept=".xlsx,.xls,.csv" onChange={importar} style={{ display: 'none' }} />
           </label>
+          <button onClick={generarEmbeddings} style={botonSecundario}>🧠 Generar embeddings</button>
         </div>
+        <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '4px 0 0' }}>
+          "Generar embeddings" alimenta la búsqueda inteligente por voz/foto. Corrélo después de importar productos nuevos.
+        </p>
         {resultado && <p style={{ fontSize: '0.85rem', color: '#0d9488' }}>{resultado}</p>}
       </Seccion>
 

@@ -327,6 +327,48 @@ export async function updateEmpresaConfig({ empresaId, mesesStockMuerto }) {
   if (error) throw error
 }
 
+// ── Búsqueda semántica de productos (embeddings, online) ──────────────────────
+
+// Devuelve [{ pieza, score }] usando embeddings (HuggingFace) + pgvector.
+// Requiere conexión. Si algo falla, devuelve null para que el caller caiga al
+// matching por trigramas (offline). Mismo formato de salida que buscarLocal.
+export async function buscarSemantico(texto, limite = 5) {
+  try {
+    const res = await fetch('/api/auditoria/embeddings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textos: texto }),
+    })
+    if (!res.ok) return null
+    const emb = (await res.json()).vectores?.[0]
+    if (!emb?.length) return null
+    const { data, error } = await supabase.rpc('buscar_productos_semantico', {
+      query_embedding: `[${emb.join(',')}]`,
+      match_count: limite,
+    })
+    if (error || !data) return null
+    return data.map((p) => ({
+      pieza: { id: p.id, producto_id: p.id, nombre: p.nombre, referencia: p.referencia },
+      score: 1 - p.distancia,
+    }))
+  } catch {
+    return null
+  }
+}
+
+// Productos sin embedding (para el backfill del admin).
+export async function productosSinEmbedding() {
+  const { data, error } = await supabase.from('productos').select('id, nombre, referencia').is('embedding', null)
+  if (error) throw error
+  return data || []
+}
+
+// Guarda el embedding de un producto (formato texto de pgvector: '[...]').
+export async function guardarEmbedding(id, emb) {
+  const { error } = await supabase.from('productos').update({ embedding: `[${emb.join(',')}]` }).eq('id', id)
+  if (error) throw error
+}
+
 // ── Salidas / ventas (FR-021) ─────────────────────────────────────────────────
 
 // Stock actual de una pieza en una sede (tabla derivada por trigger).

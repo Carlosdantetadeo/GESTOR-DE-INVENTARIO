@@ -13,10 +13,11 @@ export async function POST(request) {
   const inputs = Array.isArray(textos) ? textos : textos ? [textos] : []
   if (!inputs.length) return NextResponse.json({ error: 'sin_texto' }, { status: 400 })
 
-  const res = await fetch(`https://api-inference.huggingface.co/pipeline/feature-extraction/${MODEL}`, {
+  // HF migró la Inference API al router (api-inference.huggingface.co ya no resuelve).
+  const res = await fetch(`https://router.huggingface.co/hf-inference/models/${MODEL}/pipeline/feature-extraction`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs, options: { wait_for_model: true } }),
+    body: JSON.stringify({ inputs }),
   })
 
   if (!res.ok) {
