@@ -184,6 +184,42 @@ export async function crearSeccion({ empresaId, tiendaId, nombre }) {
   return data
 }
 
+export async function renombrarSeccion({ id, nombre }) {
+  const { error } = await supabase.from('secciones').update({ nombre }).eq('id', id)
+  if (error) throw error
+}
+
+// Borra una sección. La FK ON DELETE SET NULL (migración 035) desvincula los
+// movimientos que la usaban (conserva el historial).
+export async function borrarSeccion(id) {
+  const { error } = await supabase.from('secciones').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Sedes (tiendas) ───────────────────────────────────────────────────────────
+
+export async function crearTienda({ empresaId, nombre }) {
+  const { data, error } = await supabase
+    .from('tiendas')
+    .insert({ empresa_id: empresaId, nombre })
+    .select('id, nombre, activa')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function renombrarTienda({ id, nombre }) {
+  const { error } = await supabase.from('tiendas').update({ nombre }).eq('id', id)
+  if (error) throw error
+}
+
+// "Quitar" una sede = desactivarla (soft-delete). No se borra para no romper
+// movimientos/stock/usuarios históricos; se oculta de los selectores de carga.
+export async function setTiendaActiva({ id, activa }) {
+  const { error } = await supabase.from('tiendas').update({ activa }).eq('id', id)
+  if (error) throw error
+}
+
 // Pieza de factura sin match en el catálogo: queda pendiente de aprobación (FR-007).
 export async function crearPiezaPendiente({ empresaId, tiendaId, descripcion, unidad, cantidad, precio, recepcionRef }) {
   const { error } = await supabase.from('piezas_pendientes').insert({
@@ -382,9 +418,10 @@ export async function getUsuariosTelegram() {
   return data || []
 }
 
-// Nombres de las sedes (para el resumen de ventas por tienda).
+// Nombres de las sedes (para el resumen de ventas por tienda y los selectores).
+// Incluye `activa` para poder filtrar sedes desactivadas en la carga.
 export async function getTiendas() {
-  const { data, error } = await supabase.from('tiendas').select('id, nombre')
+  const { data, error } = await supabase.from('tiendas').select('id, nombre, activa').order('nombre')
   if (error) throw error
   return data || []
 }

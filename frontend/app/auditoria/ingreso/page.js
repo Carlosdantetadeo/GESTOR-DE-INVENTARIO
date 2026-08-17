@@ -166,7 +166,7 @@ export default function IngresoPage() {
         <label style={lbl}>Sede
           <select value={tiendaId} onChange={(e) => elegirSede(e.target.value)} style={inp}>
             <option value="">Elegí una sede…</option>
-            {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            {tiendas.filter((t) => t.activa !== false).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </select>
         </label>
         {tiendaId && (

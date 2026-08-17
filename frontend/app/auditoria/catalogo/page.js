@@ -6,7 +6,11 @@ import { useCallback, useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuditoria } from '../AuditoriaShell'
 import { isAdmin } from '../../../lib/auditoria/auth'
-import { importarCatalogo, getEmpresaConfig, updateEmpresaConfig, getTiendas, getSecciones, crearSeccion } from '../../../lib/auditoria/queries'
+import {
+  importarCatalogo, getEmpresaConfig, updateEmpresaConfig,
+  getTiendas, crearTienda, renombrarTienda, setTiendaActiva,
+  getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
+} from '../../../lib/auditoria/queries'
 
 const COLUMNAS = ['nombre', 'unidad_medida', 'referencia', 'stock_minimo', 'punto_reorden', 'stock_maximo']
 
@@ -18,6 +22,7 @@ export default function CatalogoPage() {
   const [resultado, setResultado] = useState('')
   const [nuevo, setNuevo] = useState({ email: '', password: '', nombre: '', rol: 'vendedor', tienda_id: '' })
   const [tiendas, setTiendas] = useState([])
+  const [tiendaNueva, setTiendaNueva] = useState('')
   const [secTienda, setSecTienda] = useState('')
   const [secciones, setSecciones] = useState([])
   const [secNombre, setSecNombre] = useState('')
@@ -51,6 +56,50 @@ export default function CatalogoPage() {
     } catch {
       setAviso('No se pudo crear la sección (¿nombre repetido en esa sede?).')
     }
+  }
+
+  async function guardarSeccion(id, nombre) {
+    try {
+      await renombrarSeccion({ id, nombre: nombre.trim() })
+      setSecciones(await getSecciones(Number(secTienda)))
+      setAviso('Sección actualizada.')
+    } catch { setAviso('No se pudo actualizar la sección (¿nombre repetido?).') }
+  }
+
+  async function eliminarSeccion(id) {
+    try {
+      await borrarSeccion(id)
+      setSecciones(await getSecciones(Number(secTienda)))
+      setAviso('Sección borrada.')
+    } catch { setAviso('No se pudo borrar la sección.') }
+  }
+
+  // ── Sedes ──
+  async function agregarTienda(e) {
+    e.preventDefault()
+    if (!tiendaNueva.trim()) return
+    try {
+      await crearTienda({ empresaId: session.empresaId, nombre: tiendaNueva.trim() })
+      setTiendaNueva('')
+      setTiendas(await getTiendas())
+      setAviso('Sede creada.')
+    } catch { setAviso('No se pudo crear la sede.') }
+  }
+
+  async function guardarTienda(id, nombre) {
+    try {
+      await renombrarTienda({ id, nombre: nombre.trim() })
+      setTiendas(await getTiendas())
+      setAviso('Sede actualizada.')
+    } catch { setAviso('No se pudo actualizar la sede.') }
+  }
+
+  async function toggleTienda(id, activa) {
+    try {
+      await setTiendaActiva({ id, activa })
+      setTiendas(await getTiendas())
+      setAviso(activa ? 'Sede activada.' : 'Sede desactivada.')
+    } catch { setAviso('No se pudo cambiar el estado de la sede.') }
   }
 
   // Baja un Excel modelo con las columnas correctas y una fila de ejemplo.
@@ -173,6 +222,19 @@ export default function CatalogoPage() {
         </form>
       </Seccion>
 
+      <Seccion titulo="Sedes">
+        <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
+          Agregá o renombrá tus sucursales. "Desactivar" la oculta de la carga sin borrar el historial.
+        </p>
+        <form onSubmit={agregarTienda} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <input placeholder="Nombre de la sede (ej: Sucursal Centro)" value={tiendaNueva} onChange={(e) => setTiendaNueva(e.target.value)} style={inp} />
+          <button type="submit" style={btnPrimary}>Agregar sede</button>
+        </form>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {tiendas.map((t) => <TiendaRow key={t.id} t={t} onGuardar={guardarTienda} onToggle={toggleTienda} />)}
+        </ul>
+      </Seccion>
+
       <Seccion titulo="Ubicaciones / Secciones">
         <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
           Elegí una sede y agregá sus secciones (pasillo, estante, zona…). Se usan al ingresar inventario.
@@ -189,11 +251,9 @@ export default function CatalogoPage() {
               <input placeholder="Nombre de la sección (ej: Pasillo 1)" value={secNombre} onChange={(e) => setSecNombre(e.target.value)} style={inp} />
               <button type="submit" style={btnPrimary}>Agregar</button>
             </form>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {secciones.length
-                ? secciones.map((s) => (
-                  <li key={s.id} style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 999, fontSize: '0.9rem' }}>{s.nombre}</li>
-                ))
+                ? secciones.map((s) => <SeccionEditRow key={s.id} s={s} onGuardar={guardarSeccion} onBorrar={eliminarSeccion} />)
                 : <li style={{ color: '#64748b', fontSize: '0.85rem' }}>Sin secciones todavía.</li>}
             </ul>
           </>
@@ -282,6 +342,34 @@ function UsuarioRow({ u, onGuardar }) {
   )
 }
 
+// Fila de sede con nombre editable + activar/desactivar (soft-delete).
+function TiendaRow({ t, onGuardar, onToggle }) {
+  const [nombre, setNombre] = useState(t.nombre || '')
+  const activa = t.activa !== false
+  const cambiado = nombre.trim() && nombre.trim() !== t.nombre
+  return (
+    <li style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, opacity: activa ? 1 : 0.6 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inp, flex: 1, minWidth: 140 }} />
+      {!activa && <span style={{ fontSize: '0.72rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 999 }}>desactivada</span>}
+      {cambiado && <button onClick={() => onGuardar(t.id, nombre)} style={btnPrimary}>Guardar</button>}
+      <button onClick={() => onToggle(t.id, !activa)} style={activa ? botonSecundario : btnPrimary}>{activa ? 'Desactivar' : 'Activar'}</button>
+    </li>
+  )
+}
+
+// Fila de sección con nombre editable + borrar.
+function SeccionEditRow({ s, onGuardar, onBorrar }) {
+  const [nombre, setNombre] = useState(s.nombre || '')
+  const cambiado = nombre.trim() && nombre.trim() !== s.nombre
+  return (
+    <li style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inp, flex: 1, minWidth: 120 }} />
+      {cambiado && <button onClick={() => onGuardar(s.id, nombre)} style={btnPrimary}>Guardar</button>}
+      <button onClick={() => onBorrar(s.id)} style={botonPeligro}>Borrar</button>
+    </li>
+  )
+}
+
 function Cont({ children }) {
   return <main style={{ padding: 16, maxWidth: 680, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
 }
@@ -299,3 +387,4 @@ const label = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8
 const btnPrimary = { padding: '9px 16px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
 const botonFile = { display: 'inline-block', padding: '10px 16px', background: '#0d9488', color: '#fff', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }
 const botonSecundario = { display: 'inline-block', padding: '10px 16px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }
+const botonPeligro = { padding: '9px 14px', border: '1px solid #fecaca', borderRadius: 8, background: '#fff', color: '#dc2626', cursor: 'pointer', fontWeight: 600 }
