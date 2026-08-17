@@ -319,6 +319,17 @@ export async function getEmpresaConfig() {
   return data
 }
 
+// Tokens de conexión al bot de Telegram de la empresa (read-only; RLS por empresa).
+export async function getTelegramTokens(empresaId) {
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('telegram_token, telegram_token_admin')
+    .eq('id', empresaId)
+    .single()
+  if (error) throw error
+  return { operario: data?.telegram_token ?? '', admin: data?.telegram_token_admin ?? '' }
+}
+
 export async function updateEmpresaConfig({ empresaId, mesesStockMuerto }) {
   const { error } = await supabase
     .from('empresas')

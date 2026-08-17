@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx'
 import { useAuditoria } from '../AuditoriaShell'
 import { isAdmin } from '../../../lib/auditoria/auth'
 import {
-  importarCatalogo, getEmpresaConfig, updateEmpresaConfig,
+  importarCatalogo, getEmpresaConfig, updateEmpresaConfig, getTelegramTokens,
   getTiendas, crearTienda, renombrarTienda, setTiendaActiva,
   getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
   productosSinEmbedding, guardarEmbedding,
@@ -28,6 +28,7 @@ export default function CatalogoPage() {
   const [secTienda, setSecTienda] = useState('')
   const [secciones, setSecciones] = useState([])
   const [secNombre, setSecNombre] = useState('')
+  const [tokens, setTokens] = useState({ operario: '', admin: '' })
   const [aviso, setAviso] = useState('')
 
   const cargarUsuarios = useCallback(async () => {
@@ -39,8 +40,15 @@ export default function CatalogoPage() {
     if (!session || !isAdmin(session.rol)) return
     getEmpresaConfig().then((c) => { setConfig(c); setMeses(c?.meses_stock_muerto ?? 6) }).catch(() => {})
     getTiendas().then(setTiendas).catch(() => {})
+    getTelegramTokens(session.empresaId).then(setTokens).catch(() => {})
     cargarUsuarios()
   }, [session, cargarUsuarios])
+
+  async function copiar(texto) {
+    if (!texto) return
+    try { await navigator.clipboard.writeText(texto); setAviso('Token copiado.') }
+    catch { setAviso('No se pudo copiar (copialo a mano).') }
+  }
 
   async function elegirSecTienda(id) {
     setSecTienda(id); setSecciones([])
@@ -308,6 +316,22 @@ export default function CatalogoPage() {
           </div>
           <Button variant="primary" type="submit">Guardar</Button>
         </form>
+      </Panel>
+
+      <Panel titulo="Bot de Telegram (reportes)">
+        <p style={muted}>
+          El bot ahora <strong>solo entrega el reporte del día</strong>. Vinculá tu Telegram una vez
+          con el token de admin (comando <code>/start</code>) y después escribí <code>/reporte</code>.
+        </p>
+        <Field label="Token de administrador (para /start)">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Input value={tokens.admin} readOnly onFocus={(e) => e.target.select()} style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }} />
+            <Button variant="secondary" onClick={() => copiar(tokens.admin)}>Copiar</Button>
+          </div>
+        </Field>
+        <p style={{ ...muted, fontSize: '0.75rem', color: T.faint, margin: '8px 0 0' }}>
+          🔒 No lo compartas: quien tenga este token puede vincularse como admin y ver los reportes.
+        </p>
       </Panel>
 
       <Note>{aviso}</Note>
