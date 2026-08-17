@@ -8,6 +8,7 @@ import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { getStock, registrarIngresoManual, deshacerSalida, getTiendas, getSecciones, buscarSemantico } from '../../../lib/auditoria/queries'
+import { Page, Title, Button, Field, Input, Select, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
 
@@ -156,49 +157,49 @@ export default function IngresoPage() {
     catch { setAviso('No se pudo revertir.') }
   }
 
-  if (!session) return <Cont><p>Cargando…</p></Cont>
-  if (!session.empresaId) return <Cont><p>Tu cuenta necesita una empresa asignada.</p></Cont>
-  if (!canSupervise(session.rol)) return <Cont><p>Solo supervisor o admin pueden ingresar inventario.</p></Cont>
+  if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
+  if (!session.empresaId) return <Page><p style={{ color: T.muted }}>Tu cuenta necesita una empresa asignada.</p></Page>
+  if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>Solo supervisor o admin pueden ingresar inventario.</p></Page>
 
   return (
-    <Cont>
-      <h2 style={{ marginTop: 0 }}>Ingreso de inventario</h2>
+    <Page>
+      <Title>Ingreso de inventario</Title>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <label style={lbl}>Sede
-          <select value={tiendaId} onChange={(e) => elegirSede(e.target.value)} style={inp}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="Sede">
+          <Select value={tiendaId} onChange={(e) => elegirSede(e.target.value)}>
             <option value="">Elegí una sede…</option>
             {tiendas.filter((t) => t.activa !== false).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </label>
+          </Select>
+        </Field>
         {tiendaId && (
-          <label style={lbl}>Sección (opcional)
-            <select value={seccionId} onChange={(e) => setSeccionId(e.target.value)} style={inp}>
+          <Field label="Sección (opcional)">
+            <Select value={seccionId} onChange={(e) => setSeccionId(e.target.value)}>
               <option value="">{secciones.length ? 'Sin sección' : 'Esta sede no tiene secciones (cargalas en Admin)'}</option>
               {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Field>
         )}
       </div>
 
       {tiendaId && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" style={inp} />
-          <button
+          <Input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" />
+          <Button
             onClick={grabando ? detenerVoz : grabarVoz}
-            style={{ ...btn, background: grabando ? '#ef4444' : '#0d9488', whiteSpace: 'nowrap' }}
+            style={{ whiteSpace: 'nowrap', ...(grabando ? { background: '#ef4444' } : null) }}
           >
             {grabando ? '⏹ Detener' : '🎤 Voz'}
-          </button>
+          </Button>
         </div>
       )}
 
       {!pieza && resultados.length > 0 && (
-        <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {resultados.map(({ pieza: p }) => (
             <li key={p.producto_id ?? p.id}>
-              <button onClick={() => elegir(p)} style={item}>
-                <strong>{p.nombre}</strong>{p.referencia ? <span style={{ color: '#64748b' }}> · {p.referencia}</span> : null}
+              <button onClick={() => elegir(p)} style={resultItem}>
+                <strong style={{ color: T.ink }}>{p.nombre}</strong>{p.referencia ? <span style={{ color: T.muted }}> · {p.referencia}</span> : null}
               </button>
             </li>
           ))}
@@ -206,41 +207,41 @@ export default function IngresoPage() {
       )}
 
       {pieza && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Card style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <strong>{pieza.nombre}</strong>
-            <button onClick={() => setPieza(null)} style={linkBtn}>cambiar</button>
-            {stock != null && <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Stock actual: {stock}</div>}
+            <strong style={{ fontSize: '1.05rem', color: T.ink }}>{pieza.nombre}</strong>
+            <Button variant="ghost" onClick={() => setPieza(null)} style={{ marginLeft: 10 }}>cambiar</Button>
+            {stock != null && <div style={{ fontSize: '0.85rem', color: T.muted, marginTop: 2 }}>Stock actual: {stock}</div>}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <label style={lbl}>Cantidad
-              <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Ej: 10" style={inp} autoFocus />
-            </label>
-            <label style={lbl}>Costo unitario
-              <input type="number" min="0" step="0.1" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Ej: 25.50" style={inp} />
-            </label>
+            <div style={{ flex: 1 }}>
+              <Field label="Cantidad">
+                <Input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Ej: 10" autoFocus />
+              </Field>
+            </div>
+            <div style={{ flex: 1 }}>
+              <Field label="Costo unitario">
+                <Input type="number" min="0" step="0.1" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Ej: 25.50" />
+              </Field>
+            </div>
           </div>
-          <button onClick={registrar} disabled={!cantidad} style={{ ...btn, opacity: cantidad ? 1 : 0.5 }}>📦 Registrar ingreso</button>
-        </div>
+          <Button variant="dark" full disabled={!cantidad} onClick={registrar}>📦 Registrar ingreso</Button>
+        </Card>
       )}
 
       {ultimo && (
-        <div style={{ marginTop: 16, padding: 12, border: '1px solid #e2e8f0', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.9rem' }}>Último: {ultimo.nombre} × {ultimo.cantidad}</span>
-          <button onClick={deshacer} style={{ ...btn, background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1' }}>↩️ Deshacer</button>
-        </div>
+        <Card style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '0.9rem' }}>Último: <strong>{ultimo.nombre}</strong> × {ultimo.cantidad}</span>
+          <Button variant="secondary" onClick={deshacer} style={{ minHeight: 'auto', padding: '8px 14px' }}>↩️ Deshacer</Button>
+        </Card>
       )}
 
-      {aviso && <p style={{ marginTop: 12, color: '#0d9488', fontSize: '0.85rem' }}>{aviso}</p>}
-    </Cont>
+      <Note>{aviso}</Note>
+    </Page>
   )
 }
 
-function Cont({ children }) {
-  return <main style={{ padding: 16, maxWidth: 560, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
+const resultItem = {
+  width: '100%', textAlign: 'left', padding: '12px 14px',
+  border: `1px solid ${T.line}`, borderRadius: 12, background: '#fff', cursor: 'pointer', fontSize: '1rem',
 }
-const inp = { flex: 1, width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '1rem' }
-const lbl = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: '#334155' }
-const item = { width: '100%', textAlign: 'left', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', cursor: 'pointer', marginBottom: 6 }
-const btn = { padding: '11px 16px', border: 'none', borderRadius: 10, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
-const linkBtn = { marginLeft: 8, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.8rem' }
