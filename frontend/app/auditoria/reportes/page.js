@@ -8,6 +8,7 @@ import { useAuditoria } from '../AuditoriaShell'
 import { isAdmin } from '../../../lib/auditoria/auth'
 import { getVentas, getUsuariosTelegram, getTiendas } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
 function hace(dias) {
   const d = new Date()
@@ -21,6 +22,7 @@ export default function ReportesPage() {
   const [hasta, setHasta] = useState(new Date().toISOString().slice(0, 10))
   const [porTienda, setPorTienda] = useState([])
   const [porVendedor, setPorVendedor] = useState([])
+  const [porDia, setPorDia] = useState([])
   const [total, setTotal] = useState(0)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
@@ -63,9 +65,20 @@ export default function ReportesPage() {
         av.ventas += 1; av.unidades += v.cantidad || 0; av.total += monto
         aggV.set(vKey, av)
       }
+      // Serie diaria (para el gráfico de ventas en el tiempo).
+      const aggD = new Map()
+      for (const v of ventas) {
+        const dia = (v.created_at || '').slice(0, 10)
+        if (dia) aggD.set(dia, (aggD.get(dia) || 0) + Number(v.total || 0))
+      }
+      const dias = [...aggD.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([dia, t]) => ({ dia: dia.slice(5), total: Number(t.toFixed(2)) }))
+
       const ordenar = (m) => [...m.values()].sort((a, b) => b.total - a.total)
       setPorTienda(ordenar(aggT))
       setPorVendedor(ordenar(aggV))
+      setPorDia(dias)
       setTotal(tot)
     } catch {
       setError('No se pudo generar el reporte.')
@@ -103,8 +116,34 @@ export default function ReportesPage() {
             <div style={{ fontSize: '1.9rem', fontWeight: 800 }}>{total.toFixed(2)}</div>
           </Card>
 
-          <Tabla titulo="Por tienda" filas={porTienda} col1="Tienda" />
-          <Tabla titulo="Por vendedor" filas={porVendedor} col1="Vendedor" />
+          {porDia.length > 0 && (
+            <ChartCard titulo="Ventas en el tiempo">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={porDia} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                  <XAxis dataKey="dia" tick={{ fontSize: 11, fill: T.muted }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11, fill: T.muted }} width={46} />
+                  <Tooltip formatter={(v) => v.toFixed(2)} labelStyle={{ color: T.ink }} />
+                  <Bar dataKey="total" fill={T.primary} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          )}
+
+          {porTienda.length > 0 && (
+            <ChartCard titulo="Ventas por sede">
+              <BarrasHorizontales data={porTienda} />
+            </ChartCard>
+          )}
+
+          {porVendedor.length > 0 && (
+            <ChartCard titulo="Ventas por vendedor">
+              <BarrasHorizontales data={porVendedor} />
+            </ChartCard>
+          )}
+
+          <Tabla titulo="Por tienda (detalle)" filas={porTienda} col1="Tienda" />
+          <Tabla titulo="Por vendedor (detalle)" filas={porVendedor} col1="Vendedor" />
         </>
       )}
     </Page>
@@ -138,6 +177,30 @@ function Tabla({ titulo, filas, col1 }) {
         </table>
       )}
     </section>
+  )
+}
+
+function ChartCard({ titulo, children }) {
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: '1.02rem', color: T.ink }}>{titulo}</h3>
+      {children}
+    </Card>
+  )
+}
+
+function BarrasHorizontales({ data }) {
+  const alto = Math.max(120, data.length * 44)
+  return (
+    <ResponsiveContainer width="100%" height={alto}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 11, fill: T.muted }} />
+        <YAxis type="category" dataKey="etiqueta" width={100} tick={{ fontSize: 11, fill: T.ink }} />
+        <Tooltip formatter={(v) => v.toFixed(2)} />
+        <Bar dataKey="total" fill={T.primary} radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
   )
 }
 
