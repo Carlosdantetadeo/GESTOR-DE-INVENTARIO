@@ -16,6 +16,7 @@ import {
   rechazarPieza,
   urlEvidencia,
 } from '../../../lib/auditoria/queries'
+import { Page, Title, Button, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const COLOR_BG = { verde: '#16a34a', amarillo: '#f59e0b', rojo: '#ef4444' }
 
@@ -96,114 +97,103 @@ export default function SupervisorPage() {
     }
   }
 
-  if (!session) return <Cont><p>Cargando…</p></Cont>
-  if (!canSupervise(session.rol)) {
-    return <Cont><p>No tenés permiso para ver el panel del supervisor.</p></Cont>
-  }
-  if (cargando) return <Cont><p>Cargando panel…</p></Cont>
+  if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
+  if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>No tenés permiso para ver el panel del supervisor.</p></Page>
+  if (cargando) return <Page><p style={{ color: T.muted }}>Cargando panel…</p></Page>
 
   const porColor = { verde: 0, amarillo: 0, rojo: 0 }
   conteos.forEach((c) => { porColor[c.semaforo_color] += 1 })
   const rojos = conteos.filter((c) => c.semaforo_color === 'rojo')
 
   return (
-    <Cont>
-      <h2 style={{ marginTop: 0 }}>Panel del supervisor</h2>
-      {error && <p style={{ color: '#dc2626' }}>{error}</p>}
+    <Page>
+      <Title>Panel del supervisor</Title>
+      {error && <Note tone="error">{error}</Note>}
 
       {/* Contadores por color */}
       <div style={{ display: 'flex', gap: 10 }}>
         {['rojo', 'amarillo', 'verde'].map((color) => (
-          <div key={color} style={{ flex: 1, background: COLOR_BG[color], color: '#fff', borderRadius: 10, padding: 14, textAlign: 'center' }}>
+          <div key={color} style={{ flex: 1, background: COLOR_BG[color], color: '#fff', borderRadius: 14, padding: 14, textAlign: 'center' }}>
             <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{porColor[color]}</div>
-            <div style={{ textTransform: 'capitalize', fontSize: '0.8rem' }}>{color}</div>
+            <div style={{ textTransform: 'capitalize', fontSize: '0.8rem', opacity: 0.9 }}>{color}</div>
           </div>
         ))}
       </div>
 
-      {/* Alertas críticas */}
-      <Seccion titulo={`Alertas críticas (${rojos.length})`}>
+      <Panel titulo={`Alertas críticas (${rojos.length})`}>
         {rojos.length === 0 ? <Vacio>Sin piezas en rojo.</Vacio> : (
-          <ul style={listaStyle}>
+          <ul style={lista}>
             {rojos.map((c) => (
-              <li key={c.id} style={filaStyle}>
+              <li key={c.id} style={{ ...fila, flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span><strong>{c.productos?.nombre ?? 'Pieza'}</strong> · {c.cantidad}</span>
+                  <span><strong style={{ color: T.ink }}>{c.productos?.nombre ?? 'Pieza'}</strong> · {c.cantidad}</span>
                   {c.evidencias?.length > 0 && (
-                    <button onClick={() => verFoto(c.evidencias[0].storage_path)} style={btnFoto}>📷 Ver foto</button>
+                    <Button variant="secondary" onClick={() => verFoto(c.evidencias[0].storage_path)} style={mini}>📷 Ver foto</Button>
                   )}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{c.semaforo_razon}</div>
+                <div style={{ fontSize: '0.8rem', color: T.muted }}>{c.semaforo_razon}</div>
               </li>
             ))}
           </ul>
         )}
-      </Seccion>
+      </Panel>
 
-      {/* Sesiones abiertas */}
-      <Seccion titulo={`Sesiones abiertas (${sesiones.length})`}>
+      <Panel titulo={`Sesiones abiertas (${sesiones.length})`}>
         {sesiones.length === 0 ? <Vacio>No hay sesiones abiertas.</Vacio> : (
-          <ul style={listaStyle}>
+          <ul style={lista}>
             {sesiones.map((s) => {
               const total = conteos.filter((c) => c.sesion_id === s.id).length
               return (
-                <li key={s.id} style={{ ...filaStyle, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <li key={s.id} style={{ ...fila, justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <strong>{s.tiendas?.nombre ?? `Sede ${s.tienda_id}`}</strong>
-                    <span style={{ color: '#64748b', fontSize: '0.85rem' }}> · {total} conteos</span>
+                    <strong style={{ color: T.ink }}>{s.tiendas?.nombre ?? `Sede ${s.tienda_id}`}</strong>
+                    <span style={{ color: T.muted, fontSize: '0.85rem' }}> · {total} conteos</span>
                   </div>
-                  <button onClick={() => cerrar(s)} style={btnCerrar}>Cerrar sesión</button>
+                  <Button variant="dark" onClick={() => cerrar(s)} style={mini}>Cerrar sesión</Button>
                 </li>
               )
             })}
           </ul>
         )}
-      </Seccion>
+      </Panel>
 
-      {/* Piezas pendientes de aprobación */}
-      <Seccion titulo={`Piezas pendientes de aprobación (${pendientes.length})`}>
+      <Panel titulo={`Piezas pendientes de aprobación (${pendientes.length})`}>
         {pendientes.length === 0 ? <Vacio>Sin piezas pendientes.</Vacio> : (
-          <ul style={listaStyle}>
+          <ul style={lista}>
             {pendientes.map((p) => (
-              <li key={p.id} style={filaStyle}>
-                <strong>{p.descripcion_extraida}</strong>
+              <li key={p.id} style={{ ...fila, flexDirection: 'column', gap: 6 }}>
+                <strong style={{ color: T.ink }}>{p.descripcion_extraida}</strong>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  <span style={{ fontSize: '0.8rem', color: T.muted }}>
                     {p.cantidad ?? '—'} {p.unidad_sugerida ?? ''}
                     {p.precio_unitario != null ? ` · ${p.precio_unitario}` : ''}
                   </span>
                   <span style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => aprobar(p)} style={btnAprobar}>Aprobar</button>
-                    <button onClick={() => rechazar(p)} style={btnRechazar}>Rechazar</button>
+                    <Button onClick={() => aprobar(p)} style={{ ...mini, background: '#16a34a', color: '#fff' }}>Aprobar</Button>
+                    <Button variant="secondary" onClick={() => rechazar(p)} style={mini}>Rechazar</Button>
                   </span>
                 </div>
               </li>
             ))}
           </ul>
         )}
-      </Seccion>
-    </Cont>
+      </Panel>
+    </Page>
   )
 }
 
-function Cont({ children }) {
-  return <main style={{ padding: 16, maxWidth: 640, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
-}
-function Seccion({ titulo, children }) {
+function Panel({ titulo, children }) {
   return (
-    <section style={{ marginTop: 20 }}>
-      <h3 style={{ fontSize: '1rem', marginBottom: 8 }}>{titulo}</h3>
+    <Card style={{ marginTop: 14 }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: '1.02rem', color: T.ink }}>{titulo}</h3>
       {children}
-    </section>
+    </Card>
   )
 }
 function Vacio({ children }) {
-  return <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{children}</p>
+  return <p style={{ color: T.faint, fontSize: '0.85rem', margin: 0 }}>{children}</p>
 }
 
-const listaStyle = { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }
-const filaStyle = { display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff' }
-const btnCerrar = { padding: '6px 12px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }
-const btnAprobar = { padding: '6px 12px', border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: '0.8rem' }
-const btnRechazar = { padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', color: '#334155', cursor: 'pointer', fontSize: '0.8rem' }
-const btnFoto = { padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', color: '#0f172a', cursor: 'pointer', fontSize: '0.75rem' }
+const lista = { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }
+const fila = { display: 'flex', padding: '10px 12px', border: `1px solid ${T.line}`, borderRadius: 10, background: '#fff' }
+const mini = { minHeight: 'auto', padding: '6px 12px', fontSize: '0.8rem' }
