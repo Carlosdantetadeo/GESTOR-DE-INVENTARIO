@@ -53,6 +53,22 @@ export default function CatalogoPage() {
     }
   }
 
+  // Baja un Excel modelo con las columnas correctas y una fila de ejemplo.
+  function descargarPlantilla() {
+    const ejemplo = {
+      nombre: 'Tornillo hexagonal 1/2"',
+      unidad_medida: 'unidad',
+      referencia: 'TH-12',
+      stock_minimo: 5,
+      punto_reorden: 10,
+      stock_maximo: 100,
+    }
+    const ws = XLSX.utils.json_to_sheet([ejemplo], { header: COLUMNAS })
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'catalogo')
+    XLSX.writeFile(wb, 'plantilla-catalogo.xlsx')
+  }
+
   async function importar(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -133,10 +149,13 @@ export default function CatalogoPage() {
         <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
           Columnas: {COLUMNAS.join(', ')}. <code>nombre</code> es obligatorio; los umbrales deben ser numéricos.
         </p>
-        <label style={botonFile}>
-          📄 Elegir archivo
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={importar} style={{ display: 'none' }} />
-        </label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={descargarPlantilla} style={botonSecundario}>⬇️ Descargar plantilla</button>
+          <label style={botonFile}>
+            📄 Elegir archivo
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={importar} style={{ display: 'none' }} />
+          </label>
+        </div>
         {resultado && <p style={{ fontSize: '0.85rem', color: '#0d9488' }}>{resultado}</p>}
       </Seccion>
 
@@ -279,3 +298,4 @@ const inp = { padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: 8,
 const label = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: '#334155' }
 const btnPrimary = { padding: '9px 16px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
 const botonFile = { display: 'inline-block', padding: '10px 16px', background: '#0d9488', color: '#fff', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }
+const botonSecundario = { display: 'inline-block', padding: '10px 16px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }
