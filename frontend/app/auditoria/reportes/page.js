@@ -1,12 +1,13 @@
 'use client'
 
 // Reportes de ventas (solo admin): total del período, con desglose por TIENDA y
-// por VENDEDOR. Distingue usuarios web (auth_uid → email) y operarios de Telegram
-// (usuario_id → nombre). Datos vía RLS por empresa.
+// por VENDEDOR. Distingue usuarios web (auth_uid → nombre/email) y operarios de
+// Telegram (usuario_id → nombre). Datos vía RLS por empresa.
 import { useCallback, useEffect, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { isAdmin } from '../../../lib/auditoria/auth'
 import { getVentas, getUsuariosTelegram, getTiendas } from '../../../lib/auditoria/queries'
+import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 function hace(dias) {
   const d = new Date()
@@ -77,43 +78,47 @@ export default function ReportesPage() {
     if (session && isAdmin(session.rol)) generar()
   }, [session, generar])
 
-  if (!session) return <Cont><p>Cargando…</p></Cont>
-  if (!isAdmin(session.rol)) return <Cont><p>Solo un administrador puede ver los reportes.</p></Cont>
+  if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
+  if (!isAdmin(session.rol)) return <Page><p style={{ color: T.muted }}>Solo un administrador puede ver los reportes.</p></Page>
 
   return (
-    <Cont>
-      <h2 style={{ marginTop: 0 }}>Reporte de ventas</h2>
+    <Page>
+      <Title>Reporte de ventas</Title>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
-        <label style={label}>Desde<input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={inp} /></label>
-        <label style={label}>Hasta<input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={inp} /></label>
-        <button onClick={generar} style={btn}>Generar</button>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <Field label="Desde"><Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></Field>
+        </div>
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <Field label="Hasta"><Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></Field>
+        </div>
+        <Button variant="dark" onClick={generar}>Generar</Button>
       </div>
 
-      {error && <p style={{ color: '#dc2626' }}>{error}</p>}
-      {cargando ? <p>Calculando…</p> : (
+      {error && <Note tone="error">{error}</Note>}
+      {cargando ? <p style={{ color: T.muted }}>Calculando…</p> : (
         <>
-          <div style={{ background: '#0f172a', color: '#fff', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <Card style={{ background: T.ink, color: '#fff', border: 'none', marginBottom: 16 }}>
             <div style={{ fontSize: '0.85rem', opacity: 0.8 }}>Total vendido en el período</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{total.toFixed(2)}</div>
-          </div>
+            <div style={{ fontSize: '1.9rem', fontWeight: 800 }}>{total.toFixed(2)}</div>
+          </Card>
 
           <Tabla titulo="Por tienda" filas={porTienda} col1="Tienda" />
           <Tabla titulo="Por vendedor" filas={porVendedor} col1="Vendedor" />
         </>
       )}
-    </Cont>
+    </Page>
   )
 }
 
 function Tabla({ titulo, filas, col1 }) {
   return (
-    <section style={{ marginTop: 8, marginBottom: 20 }}>
-      <h3 style={{ fontSize: '1rem', marginBottom: 8 }}>{titulo}</h3>
-      {filas.length === 0 ? <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Sin ventas en el rango.</p> : (
+    <section style={{ marginTop: 8, marginBottom: 22 }}>
+      <h3 style={{ fontSize: '1.02rem', marginBottom: 8, color: T.ink }}>{titulo}</h3>
+      {filas.length === 0 ? <p style={{ color: T.faint, fontSize: '0.85rem' }}>Sin ventas en el rango.</p> : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
           <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
+            <tr style={{ textAlign: 'left', borderBottom: `2px solid ${T.line}`, color: T.muted }}>
               <th style={th}>{col1}</th>
               <th style={{ ...th, textAlign: 'right' }}>Ventas</th>
               <th style={{ ...th, textAlign: 'right' }}>Unidades</th>
@@ -123,10 +128,10 @@ function Tabla({ titulo, filas, col1 }) {
           <tbody>
             {filas.map((f, i) => (
               <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={td}>{f.etiqueta}</td>
+                <td style={{ ...td, fontWeight: 600, color: T.ink }}>{f.etiqueta}</td>
                 <td style={{ ...td, textAlign: 'right' }}>{f.ventas}</td>
                 <td style={{ ...td, textAlign: 'right' }}>{f.unidades}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{f.total.toFixed(2)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{f.total.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -136,11 +141,5 @@ function Tabla({ titulo, filas, col1 }) {
   )
 }
 
-function Cont({ children }) {
-  return <main style={{ padding: 16, maxWidth: 680, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
-}
-const inp = { padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.95rem' }
-const label = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: '#334155' }
-const btn = { padding: '9px 16px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
-const th = { padding: '8px 6px' }
-const td = { padding: '8px 6px' }
+const th = { padding: '8px 6px', fontSize: '0.78rem', fontWeight: 600 }
+const td = { padding: '10px 6px' }
