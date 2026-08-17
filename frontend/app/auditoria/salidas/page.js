@@ -9,6 +9,7 @@ import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
 import { getStock, registrarSalida, deshacerSalida, buscarSemantico } from '../../../lib/auditoria/queries'
+import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
 
@@ -166,28 +167,25 @@ export default function SalidasPage() {
     catch { setAviso('No se pudo revertir.') }
   }
 
-  if (!session) return <Cont><p>Cargando…</p></Cont>
-  if (!session.empresaId || !session.tiendaId) return <Cont><p>Tu cuenta necesita empresa y sede asignadas.</p></Cont>
+  if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
+  if (!session.empresaId || !session.tiendaId) return <Page><p style={{ color: T.muted }}>Tu cuenta necesita empresa y sede asignadas.</p></Page>
+
+  const total = Number(cantidad) > 0 && Number(precio) > 0 ? Number(cantidad) * Number(precio) : null
 
   return (
-    <Cont>
-      <h2 style={{ marginTop: 0 }}>Registrar venta</h2>
+    <Page>
+      <Title>Registrar venta</Title>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <input
-          value={texto}
-          onChange={(e) => buscar(e.target.value)}
-          placeholder="Buscar producto por nombre…"
-          style={inp}
-        />
+        <Input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar producto por nombre…" />
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
+          <Button
             onClick={grabando ? detenerVoz : grabarVoz}
-            style={{ ...btnGrande, flex: 1, background: grabando ? '#ef4444' : '#0d9488', color: '#fff' }}
+            style={{ flex: 1, ...(grabando ? { background: '#ef4444' } : null) }}
           >
             {grabando ? '⏹ Detener' : '🎤 Voz'}
-          </button>
-          <label style={{ ...btnGrande, flex: 1, background: '#0d9488', color: '#fff', textAlign: 'center' }}>
+          </Button>
+          <label style={fotoBtn}>
             {procesando ? '…' : '📷 Foto'}
             <input type="file" accept="image/*" capture="environment" onChange={procesarFoto} style={{ display: 'none' }} disabled={procesando} />
           </label>
@@ -195,11 +193,11 @@ export default function SalidasPage() {
       </div>
 
       {!pieza && resultados.length > 0 && (
-        <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {resultados.map(({ pieza: p }) => (
             <li key={p.producto_id ?? p.id}>
-              <button onClick={() => elegir(p)} style={item}>
-                <strong>{p.nombre}</strong>{p.referencia ? <span style={{ color: '#64748b' }}> · {p.referencia}</span> : null}
+              <button onClick={() => elegir(p)} style={resultItem}>
+                <strong style={{ color: T.ink }}>{p.nombre}</strong>{p.referencia ? <span style={{ color: T.muted }}> · {p.referencia}</span> : null}
               </button>
             </li>
           ))}
@@ -207,48 +205,46 @@ export default function SalidasPage() {
       )}
 
       {pieza && (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Card style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <strong style={{ fontSize: '1.05rem' }}>{pieza.nombre}</strong>
-            <button onClick={() => setPieza(null)} style={linkBtn}>cambiar</button>
-            {stock != null && <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Stock disponible: {stock}</div>}
+            <strong style={{ fontSize: '1.05rem', color: T.ink }}>{pieza.nombre}</strong>
+            <Button variant="ghost" onClick={() => setPieza(null)} style={{ marginLeft: 10 }}>cambiar</Button>
+            {stock != null && <div style={{ fontSize: '0.85rem', color: T.muted, marginTop: 2 }}>Stock disponible: {stock}</div>}
           </div>
-          <label style={lbl}>Cantidad
-            <input type="number" inputMode="numeric" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} style={inp} autoFocus />
-          </label>
-          <label style={lbl}>Precio unitario
-            <input type="number" inputMode="decimal" min="0" step="0.1" value={precio} onChange={(e) => setPrecio(e.target.value)} style={inp} />
-          </label>
-          {Number(cantidad) > 0 && Number(precio) > 0 && (
-            <div style={{ fontSize: '1rem', fontWeight: 700, textAlign: 'right' }}>
-              Total: {(Number(cantidad) * Number(precio)).toFixed(2)}
+          <Field label="Cantidad">
+            <Input type="number" inputMode="numeric" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} autoFocus />
+          </Field>
+          <Field label="Precio unitario">
+            <Input type="number" inputMode="decimal" min="0" step="0.1" value={precio} onChange={(e) => setPrecio(e.target.value)} />
+          </Field>
+          {total != null && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 8, borderTop: `1px solid ${T.line}` }}>
+              <span style={{ color: T.muted, fontSize: '0.9rem' }}>Total</span>
+              <span style={{ fontSize: '1.3rem', fontWeight: 800, color: T.ink }}>{total.toFixed(2)}</span>
             </div>
           )}
-          <button onClick={registrar} disabled={!cantidad} style={{ ...btnGrande, background: '#0f172a', color: '#fff', opacity: cantidad ? 1 : 0.5 }}>
-            💰 Registrar venta
-          </button>
-        </div>
+          <Button variant="dark" full disabled={!cantidad} onClick={registrar}>💰 Registrar venta</Button>
+        </Card>
       )}
 
       {ultima && (
-        <div style={{ marginTop: 16, padding: 12, border: '1px solid #e2e8f0', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: '0.9rem' }}>Última: {ultima.nombre} × {ultima.cantidad}</span>
-          <button onClick={deshacer} style={{ ...btnGrande, background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', padding: '8px 14px' }}>↩️ Deshacer</button>
-        </div>
+        <Card style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '0.9rem' }}>Última: <strong>{ultima.nombre}</strong> × {ultima.cantidad}</span>
+          <Button variant="secondary" onClick={deshacer} style={{ minHeight: 'auto', padding: '8px 14px' }}>↩️ Deshacer</Button>
+        </Card>
       )}
 
-      {aviso && <p style={{ marginTop: 14, color: '#0d9488', fontSize: '0.9rem' }}>{aviso}</p>}
-    </Cont>
+      <Note>{aviso}</Note>
+    </Page>
   )
 }
 
-function Cont({ children }) {
-  return <main style={{ padding: 16, maxWidth: 480, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
+const fotoBtn = {
+  flex: 1, minHeight: 46, padding: '11px 18px', borderRadius: T.radius,
+  background: T.primary, color: '#fff', fontWeight: 600, fontSize: '1rem',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
 }
-
-// fontSize 16 evita el zoom automático en iOS; botones altos para el dedo.
-const inp = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: 10, fontSize: '16px' }
-const btnGrande = { minHeight: 48, padding: '12px 16px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: '1rem', fontWeight: 600 }
-const item = { width: '100%', textAlign: 'left', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', cursor: 'pointer', marginBottom: 8, fontSize: '1rem' }
-const lbl = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: '#334155' }
-const linkBtn = { marginLeft: 10, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.85rem' }
+const resultItem = {
+  width: '100%', textAlign: 'left', padding: '12px 14px',
+  border: `1px solid ${T.line}`, borderRadius: 12, background: '#fff', cursor: 'pointer', fontSize: '1rem',
+}
