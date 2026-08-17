@@ -16,6 +16,7 @@ import { encolarAudio, listAudios, removeAudio, flushAudios } from '../../../lib
 import { getOrCreateSesionActiva, subirConteo } from '../../../lib/auditoria/queries'
 import { evaluarSemaforo } from '../../../lib/auditoria/semaforo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
+import { Page, Title, Button, Field, Input, Select, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const ESTADOS = [
   { v: 'integra', l: 'Íntegra' },
@@ -221,50 +222,35 @@ export default function CapturaPage() {
     setAviso('Conteo registrado.')
   }
 
-  if (!session) return <Contenedor><p>Cargando…</p></Contenedor>
-  if (!session.empresaId) return <Contenedor><p>Tu cuenta no tiene empresa asignada.</p></Contenedor>
-  if (!canSupervise(session.rol)) return <Contenedor><p>Solo supervisor o admin pueden contar inventario.</p></Contenedor>
+  if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
+  if (!session.empresaId) return <Page><p style={{ color: T.muted }}>Tu cuenta no tiene empresa asignada.</p></Page>
+  if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>Solo supervisor o admin pueden contar inventario.</p></Page>
   if (!sesionId) {
     return (
-      <Contenedor>
-        <p>
-          {online
-            ? 'Preparando sesión de auditoría…'
-            : 'No hay una sesión activa guardada. Conectate una vez para abrirla.'}
+      <Page>
+        <p style={{ color: T.muted }}>
+          {online ? 'Preparando sesión de auditoría…' : 'No hay una sesión activa guardada. Conectate una vez para abrirla.'}
         </p>
-      </Contenedor>
+      </Page>
     )
   }
 
   return (
-    <Contenedor>
-      <h2 style={{ marginTop: 0 }}>Contar pieza</h2>
-      {catalogoInfo && (
-        <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: -8 }}>
-          Catálogo: {catalogoInfo.total} piezas
-        </p>
-      )}
+    <Page>
+      <Title sub={catalogoInfo ? `Catálogo: ${catalogoInfo.total} piezas` : null}>Contar pieza</Title>
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={texto}
-          onChange={(e) => buscar(e.target.value)}
-          placeholder="Buscar pieza por nombre o referencia…"
-          style={inputStyle}
-        />
-        <button
-          onClick={grabando ? detenerVoz : grabarVoz}
-          style={{ ...btnStyle, background: grabando ? '#ef4444' : '#0d9488', color: '#fff' }}
-        >
-          {grabando ? 'Detener' : '🎤 Voz'}
-        </button>
+        <Input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar pieza por nombre o referencia…" />
+        <Button onClick={grabando ? detenerVoz : grabarVoz} style={{ whiteSpace: 'nowrap', ...(grabando ? { background: '#ef4444' } : null) }}>
+          {grabando ? '⏹ Detener' : '🎤 Voz'}
+        </Button>
       </div>
 
       {audios.length > 0 && (
-        <section style={{ marginTop: 12, padding: 10, border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc' }}>
+        <Card style={{ marginTop: 12, background: T.bg }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <strong style={{ fontSize: '0.9rem' }}>Notas de voz pendientes ({audios.length})</strong>
-            {online && audios.some((a) => !a.transcripcion) && <button onClick={procesarAudios} style={miniBtn}>Procesar</button>}
+            {online && audios.some((a) => !a.transcripcion) && <Button variant="primary" onClick={procesarAudios} style={mini}>Procesar</Button>}
           </div>
           <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {audios.map((a) => (
@@ -273,29 +259,29 @@ export default function CapturaPage() {
                   <>
                     <span>“{a.transcripcion}”</span>
                     <span style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => usarAudio(a)} style={miniBtn}>Usar</button>
-                      <button onClick={() => descartarAudio(a)} style={miniBtnGhost}>×</button>
+                      <Button variant="primary" onClick={() => usarAudio(a)} style={mini}>Usar</Button>
+                      <Button variant="secondary" onClick={() => descartarAudio(a)} style={mini}>×</Button>
                     </span>
                   </>
                 ) : (
                   <>
-                    <span style={{ color: '#64748b' }}>🎤 Grabada, pendiente de transcribir</span>
-                    <button onClick={() => descartarAudio(a)} style={miniBtnGhost}>×</button>
+                    <span style={{ color: T.muted }}>🎤 Grabada, pendiente de transcribir</span>
+                    <Button variant="secondary" onClick={() => descartarAudio(a)} style={mini}>×</Button>
                   </>
                 )}
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
 
       {!pieza && resultados.length > 0 && (
-        <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {resultados.map(({ pieza: p }) => (
             <li key={p.producto_id ?? p.id}>
-              <button onClick={() => { setPieza(p); setResultados([]) }} style={itemStyle}>
-                <strong>{p.nombre}</strong>
-                {p.referencia ? <span style={{ color: '#64748b' }}> · {p.referencia}</span> : null}
+              <button onClick={() => { setPieza(p); setResultados([]) }} style={resultItem}>
+                <strong style={{ color: T.ink }}>{p.nombre}</strong>
+                {p.referencia ? <span style={{ color: T.muted }}> · {p.referencia}</span> : null}
               </button>
             </li>
           ))}
@@ -303,31 +289,25 @@ export default function CapturaPage() {
       )}
 
       {pieza && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Card style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <strong>{pieza.nombre}</strong>
-            {pieza.referencia ? <span style={{ color: '#64748b' }}> · {pieza.referencia}</span> : null}
-            <button onClick={() => setPieza(null)} style={linkBtn}>cambiar</button>
+            <strong style={{ color: T.ink }}>{pieza.nombre}</strong>
+            {pieza.referencia ? <span style={{ color: T.muted }}> · {pieza.referencia}</span> : null}
+            <Button variant="ghost" onClick={() => setPieza(null)} style={{ marginLeft: 10 }}>cambiar</Button>
           </div>
 
-          <label style={labelStyle}>
-            Cantidad ({pieza.unidad_medida || 'unidad'})
-            <input
-              type="number" min="0" value={cantidad}
-              onChange={(e) => setCantidad(e.target.value)}
-              style={inputStyle} autoFocus
-            />
-          </label>
+          <Field label={`Cantidad (${pieza.unidad_medida || 'unidad'})`}>
+            <Input type="number" min="0" value={cantidad} onChange={(e) => setCantidad(e.target.value)} autoFocus />
+          </Field>
 
-          <label style={labelStyle}>
-            Estado físico
-            <select value={estado} onChange={(e) => setEstado(e.target.value)} style={inputStyle}>
+          <Field label="Estado físico">
+            <Select value={estado} onChange={(e) => setEstado(e.target.value)}>
               {ESTADOS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Field>
 
           {semaforo && (
-            <div style={{ background: COLOR_BG[semaforo.color], color: '#fff', padding: 14, borderRadius: 10 }}>
+            <div style={{ background: COLOR_BG[semaforo.color], color: '#fff', padding: 14, borderRadius: 12 }}>
               <div style={{ fontWeight: 700, textTransform: 'uppercase' }}>{semaforo.color}</div>
               <div>{semaforo.razon}</div>
               {semaforo.accion && <div style={{ fontSize: '0.85rem', marginTop: 4 }}>→ {semaforo.accion}</div>}
@@ -336,7 +316,7 @@ export default function CapturaPage() {
           )}
 
           <div>
-            <label style={{ ...btnStyle, background: '#e2e8f0', color: '#0f172a', display: 'inline-block', fontSize: '0.9rem' }}>
+            <label style={adjuntarBtn}>
               📷 Adjuntar foto
               <input type="file" accept="image/*" capture="environment" onChange={agregarFoto} style={{ display: 'none' }} />
             </label>
@@ -345,39 +325,28 @@ export default function CapturaPage() {
                 {fotos.map((f, i) => (
                   <div key={i} style={{ position: 'relative' }}>
                     <img src={f.url} alt="evidencia" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8 }} />
-                    <button
-                      onClick={() => quitarFoto(i)}
-                      style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 999, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', lineHeight: 1 }}
-                    >×</button>
+                    <button onClick={() => quitarFoto(i)} style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 999, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', lineHeight: 1 }}>×</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <button
-            onClick={confirmar}
-            disabled={cantidad === ''}
-            style={{ ...btnStyle, background: '#0f172a', color: '#fff', opacity: cantidad === '' ? 0.5 : 1 }}
-          >
-            ✅ Confirmar conteo
-          </button>
-        </div>
+          <Button variant="dark" full disabled={cantidad === ''} onClick={confirmar}>✅ Confirmar conteo</Button>
+        </Card>
       )}
 
-      {aviso && <p style={{ marginTop: 12, color: '#0d9488', fontSize: '0.85rem' }}>{aviso}</p>}
-    </Contenedor>
+      <Note>{aviso}</Note>
+    </Page>
   )
 }
 
-function Contenedor({ children }) {
-  return <main style={{ padding: 16, maxWidth: 560, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
+const resultItem = {
+  width: '100%', textAlign: 'left', padding: '12px 14px',
+  border: `1px solid ${T.line}`, borderRadius: 12, background: '#fff', cursor: 'pointer', fontSize: '1rem',
 }
-
-const inputStyle = { flex: 1, padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '1rem', width: '100%' }
-const btnStyle = { padding: '10px 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '1rem' }
-const itemStyle = { width: '100%', textAlign: 'left', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', cursor: 'pointer', marginBottom: 6 }
-const labelStyle = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: '#334155' }
-const linkBtn = { marginLeft: 8, background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: '0.8rem' }
-const miniBtn = { padding: '4px 10px', border: 'none', borderRadius: 6, background: '#0d9488', color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }
-const miniBtnGhost = { padding: '4px 8px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: '0.75rem' }
+const mini = { minHeight: 'auto', padding: '5px 10px', fontSize: '0.78rem' }
+const adjuntarBtn = {
+  display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px',
+  background: '#e2e8f0', color: T.ink, borderRadius: 10, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
+}
