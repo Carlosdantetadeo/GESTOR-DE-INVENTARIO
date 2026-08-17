@@ -35,7 +35,8 @@ export default function ReportesPage() {
         fetch('/api/auditoria/usuarios').then((r) => (r.ok ? r.json() : { usuarios: [] })),
       ])
       const nombreTg = new Map(tg.map((u) => [u.id, u.nombre || `Telegram ${u.id}`]))
-      const emailWeb = new Map((resWeb.usuarios || []).map((u) => [u.id, u.email]))
+      // Nombre del vendedor web (app_metadata.nombre); si no tiene, cae al email.
+      const emailWeb = new Map((resWeb.usuarios || []).map((u) => [u.id, u.nombre || u.email]))
       const nombreTienda = new Map(tiendas.map((t) => [t.id, t.nombre || `Sede ${t.id}`]))
 
       const aggT = new Map()
@@ -54,7 +55,7 @@ export default function ReportesPage() {
 
         // Por vendedor (web o Telegram)
         let vKey, vEtq
-        if (v.auth_uid) { vKey = `web:${v.auth_uid}`; vEtq = emailWeb.get(v.auth_uid) || 'Usuario web' }
+        if (v.auth_uid) { vKey = `web:${v.auth_uid}`; vEtq = emailWeb.get(v.auth_uid) || 'Usuario web (sin nombre)' }
         else if (v.usuario_id) { vKey = `tg:${v.usuario_id}`; vEtq = `📱 ${nombreTg.get(v.usuario_id) || v.usuario_id}` }
         else { vKey = 'sin'; vEtq = 'Sin vendedor' }
         const av = aggV.get(vKey) || { etiqueta: vEtq, ventas: 0, unidades: 0, total: 0 }

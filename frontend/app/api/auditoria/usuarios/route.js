@@ -36,8 +36,32 @@ export async function GET() {
 
   const usuarios = data.users
     .filter((u) => u.app_metadata?.empresa_id === empresaId)
-    .map((u) => ({ id: u.id, email: u.email, rol: u.app_metadata?.rol ?? null, tienda_id: u.app_metadata?.tienda_id ?? null }))
+    .map((u) => ({ id: u.id, email: u.email, nombre: u.app_metadata?.nombre ?? null, rol: u.app_metadata?.rol ?? null, tienda_id: u.app_metadata?.tienda_id ?? null }))
   return NextResponse.json({ usuarios })
+}
+
+// PATCH → actualiza el nombre visible de un usuario de la empresa del admin.
+export async function PATCH(request) {
+  const caller = await getCaller()
+  if (!caller) return NextResponse.json({ error: 'no_autenticado' }, { status: 401 })
+  const empresaId = caller.app_metadata?.empresa_id
+  if (caller.app_metadata?.rol !== 'admin') return NextResponse.json({ error: 'no_admin' }, { status: 403 })
+
+  const body = await request.json().catch(() => ({}))
+  const { id, nombre } = body
+  if (!id) return NextResponse.json({ error: 'faltan_datos' }, { status: 400 })
+
+  const admin = getAdminClient()
+  const { data: target, error: e0 } = await admin.auth.admin.getUserById(id)
+  if (e0 || !target?.user) return NextResponse.json({ error: 'no_encontrado' }, { status: 404 })
+  // No dejar tocar usuarios de otra empresa.
+  if (target.user.app_metadata?.empresa_id !== empresaId) return NextResponse.json({ error: 'otra_empresa' }, { status: 403 })
+
+  const { error } = await admin.auth.admin.updateUserById(id, {
+    app_metadata: { ...target.user.app_metadata, nombre: (nombre ?? '').trim() || null },
+  })
+  if (error) return NextResponse.json({ error: 'actualizar_error', detalle: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
 }
 
 // POST → crea un usuario en la empresa del admin.
@@ -48,7 +72,7 @@ export async function POST(request) {
   if (caller.app_metadata?.rol !== 'admin') return NextResponse.json({ error: 'no_admin' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
-  const { email, password, rol, tienda_id } = body
+  const { email, password, nombre, rol, tienda_id } = body
   if (!email || !password) return NextResponse.json({ error: 'faltan_datos' }, { status: 400 })
   if (!ROLES.includes(rol)) return NextResponse.json({ error: 'rol_invalido' }, { status: 400 })
 
@@ -57,7 +81,7 @@ export async function POST(request) {
     email,
     password,
     email_confirm: true,
-    app_metadata: { empresa_id: empresaId, rol, tienda_id: tienda_id ?? null },
+    app_metadata: { empresa_id: empresaId, rol, tienda_id: tienda_id ?? null, nombre: (nombre ?? '').trim() || null },
   })
   if (error) return NextResponse.json({ error: 'crear_error', detalle: error.message }, { status: 400 })
   return NextResponse.json({ ok: true, id: data.user.id })

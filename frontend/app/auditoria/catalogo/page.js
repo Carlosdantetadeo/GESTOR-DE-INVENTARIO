@@ -16,7 +16,7 @@ export default function CatalogoPage() {
   const [meses, setMeses] = useState(6)
   const [usuarios, setUsuarios] = useState([])
   const [resultado, setResultado] = useState('')
-  const [nuevo, setNuevo] = useState({ email: '', password: '', rol: 'vendedor', tienda_id: '' })
+  const [nuevo, setNuevo] = useState({ email: '', password: '', nombre: '', rol: 'vendedor', tienda_id: '' })
   const [tiendas, setTiendas] = useState([])
   const [secTienda, setSecTienda] = useState('')
   const [secciones, setSecciones] = useState([])
@@ -96,18 +96,30 @@ export default function CatalogoPage() {
       body: JSON.stringify({
         email: nuevo.email,
         password: nuevo.password,
+        nombre: nuevo.nombre,
         rol: nuevo.rol,
         tienda_id: nuevo.tienda_id === '' ? null : Number(nuevo.tienda_id),
       }),
     })
     if (res.ok) {
-      setNuevo({ email: '', password: '', rol: 'vendedor', tienda_id: '' })
+      setNuevo({ email: '', password: '', nombre: '', rol: 'vendedor', tienda_id: '' })
       setAviso('Usuario creado.')
       cargarUsuarios()
     } else {
       const err = await res.json().catch(() => ({}))
       setAviso(`No se pudo crear el usuario (${err.error || res.status}).`)
     }
+  }
+
+  // Guarda el nombre visible de un usuario existente (para identificarlo en reportes).
+  async function guardarNombre(id, nombre) {
+    const res = await fetch('/api/auditoria/usuarios', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, nombre }),
+    })
+    if (res.ok) { setAviso('Nombre guardado.'); cargarUsuarios() }
+    else setAviso('No se pudo guardar el nombre.')
   }
 
   if (!session) return <Cont><p>Cargando…</p></Cont>
@@ -172,6 +184,7 @@ export default function CatalogoPage() {
       <Seccion titulo={`Usuarios (${usuarios.length})`}>
         <form onSubmit={crearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input placeholder="Nombre del vendedor" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} style={inp} />
             <input type="email" required placeholder="Email" value={nuevo.email} onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })} style={inp} />
             <input type="password" required placeholder="Contraseña" value={nuevo.password} onChange={(e) => setNuevo({ ...nuevo, password: e.target.value })} style={inp} />
           </div>
@@ -185,12 +198,12 @@ export default function CatalogoPage() {
             <button type="submit" style={btnPrimary}>Crear usuario</button>
           </div>
         </form>
+        <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 6px' }}>
+          Poné un nombre a cada vendedor para identificarlo en los reportes.
+        </p>
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {usuarios.map((u) => (
-            <li key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-              <span>{u.email}</span>
-              <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{u.rol}{u.tienda_id ? ` · sede ${u.tienda_id}` : ''}</span>
-            </li>
+            <UsuarioRow key={u.id} u={u} onGuardar={guardarNombre} />
           ))}
         </ul>
       </Seccion>
@@ -228,6 +241,26 @@ function validar(rows) {
     })
   })
   return { filas, errores }
+}
+
+// Fila de usuario con nombre editable (para identificar al vendedor en reportes).
+function UsuarioRow({ u, onGuardar }) {
+  const [nombre, setNombre] = useState(u.nombre || '')
+  const cambiado = ((nombre.trim() || null)) !== (u.nombre || null)
+  return (
+    <li style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+      <input
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        placeholder="Nombre del vendedor"
+        style={{ ...inp, flex: 1, minWidth: 140 }}
+      />
+      <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
+        {u.email} · {u.rol}{u.tienda_id ? ` · sede ${u.tienda_id}` : ''}
+      </span>
+      {cambiado && <button onClick={() => onGuardar(u.id, nombre)} style={btnPrimary}>Guardar</button>}
+    </li>
+  )
 }
 
 function Cont({ children }) {
