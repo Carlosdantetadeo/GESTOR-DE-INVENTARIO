@@ -1,7 +1,7 @@
 'use client'
 
-// Administración (US6): carga de catálogo (Excel/CSV), gestión de usuarios web
-// y configuración del tenant. Solo admin.
+// Administración (US6): carga de catálogo (Excel/CSV), embeddings, sedes,
+// secciones, usuarios y configuración del tenant. Solo admin.
 import { useCallback, useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuditoria } from '../AuditoriaShell'
@@ -12,6 +12,7 @@ import {
   getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
   productosSinEmbedding, guardarEmbedding,
 } from '../../../lib/auditoria/queries'
+import { Page, Title, Button, Field, Input, Select, Card, Note, T, inputStyle } from '../../../lib/auditoria/ui'
 
 const COLUMNAS = ['nombre', 'unidad_medida', 'referencia', 'stock_minimo', 'punto_reorden', 'stock_maximo']
 
@@ -217,112 +218,100 @@ export default function CatalogoPage() {
     else setAviso('No se pudo guardar el nombre.')
   }
 
-  if (!session) return <Cont><p>Cargando…</p></Cont>
-  if (!isAdmin(session.rol)) return <Cont><p>Solo un administrador puede gestionar catálogo y usuarios.</p></Cont>
+  if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
+  if (!isAdmin(session.rol)) return <Page><p style={{ color: T.muted }}>Solo un administrador puede gestionar catálogo y usuarios.</p></Page>
 
   return (
-    <Cont>
-      <h2 style={{ marginTop: 0 }}>Administración</h2>
+    <Page>
+      <Title>Administración</Title>
 
-      <Seccion titulo="Cargar catálogo (Excel/CSV)">
-        <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
+      <Panel titulo="Cargar catálogo (Excel/CSV)">
+        <p style={muted}>
           Columnas: {COLUMNAS.join(', ')}. <code>nombre</code> es obligatorio; los umbrales deben ser numéricos.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={descargarPlantilla} style={botonSecundario}>⬇️ Descargar plantilla</button>
-          <label style={botonFile}>
+          <Button variant="secondary" onClick={descargarPlantilla}>⬇️ Plantilla</Button>
+          <label style={fileBtn}>
             📄 Elegir archivo
             <input type="file" accept=".xlsx,.xls,.csv" onChange={importar} style={{ display: 'none' }} />
           </label>
-          <button onClick={generarEmbeddings} style={botonSecundario}>🧠 Generar embeddings</button>
+          <Button variant="secondary" onClick={generarEmbeddings}>🧠 Generar embeddings</Button>
         </div>
-        <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '4px 0 0' }}>
+        <p style={{ ...muted, fontSize: '0.75rem', color: T.faint, margin: '6px 0 0' }}>
           "Generar embeddings" alimenta la búsqueda inteligente por voz/foto. Corrélo después de importar productos nuevos.
         </p>
-        {resultado && <p style={{ fontSize: '0.85rem', color: '#0d9488' }}>{resultado}</p>}
-      </Seccion>
+        {resultado && <p style={{ fontSize: '0.85rem', color: T.primary, margin: '8px 0 0' }}>{resultado}</p>}
+      </Panel>
 
-      <Seccion titulo="Configuración">
-        <form onSubmit={guardarConfig} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={label}>
-            Rubro
-            <input value={config?.rubro ?? ''} disabled style={{ ...inp, background: '#f1f5f9' }} />
-          </label>
-          <label style={label}>
-            Meses para "stock muerto"
-            <input type="number" min="1" value={meses} onChange={(e) => setMeses(e.target.value)} style={inp} />
-          </label>
-          <button type="submit" style={btnPrimary}>Guardar</button>
-        </form>
-      </Seccion>
-
-      <Seccion titulo="Sedes">
-        <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
-          Agregá o renombrá tus sucursales. "Desactivar" la oculta de la carga sin borrar el historial.
-        </p>
+      <Panel titulo="Sedes">
+        <p style={muted}>Agregá o renombrá tus sucursales. "Desactivar" la oculta de la carga sin borrar el historial.</p>
         <form onSubmit={agregarTienda} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-          <input placeholder="Nombre de la sede (ej: Sucursal Centro)" value={tiendaNueva} onChange={(e) => setTiendaNueva(e.target.value)} style={inp} />
-          <button type="submit" style={btnPrimary}>Agregar sede</button>
+          <Input placeholder="Nombre de la sede (ej: Sucursal Centro)" value={tiendaNueva} onChange={(e) => setTiendaNueva(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+          <Button variant="primary" type="submit">Agregar sede</Button>
         </form>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <ul style={lista}>
           {tiendas.map((t) => <TiendaRow key={t.id} t={t} onGuardar={guardarTienda} onToggle={toggleTienda} />)}
         </ul>
-      </Seccion>
+      </Panel>
 
-      <Seccion titulo="Ubicaciones / Secciones">
-        <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
-          Elegí una sede y agregá sus secciones (pasillo, estante, zona…). Se usan al ingresar inventario.
-        </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          <select value={secTienda} onChange={(e) => elegirSecTienda(e.target.value)} style={inp}>
-            <option value="">Elegí una sede…</option>
-            {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </div>
+      <Panel titulo="Ubicaciones / Secciones">
+        <p style={muted}>Elegí una sede y agregá sus secciones (pasillo, estante, zona…). Se usan al ingresar inventario.</p>
+        <Select value={secTienda} onChange={(e) => elegirSecTienda(e.target.value)} style={{ marginBottom: 10 }}>
+          <option value="">Elegí una sede…</option>
+          {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+        </Select>
         {secTienda && (
           <>
             <form onSubmit={agregarSeccion} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-              <input placeholder="Nombre de la sección (ej: Pasillo 1)" value={secNombre} onChange={(e) => setSecNombre(e.target.value)} style={inp} />
-              <button type="submit" style={btnPrimary}>Agregar</button>
+              <Input placeholder="Nombre de la sección (ej: Pasillo 1)" value={secNombre} onChange={(e) => setSecNombre(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+              <Button variant="primary" type="submit">Agregar</Button>
             </form>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <ul style={lista}>
               {secciones.length
                 ? secciones.map((s) => <SeccionEditRow key={s.id} s={s} onGuardar={guardarSeccion} onBorrar={eliminarSeccion} />)
-                : <li style={{ color: '#64748b', fontSize: '0.85rem' }}>Sin secciones todavía.</li>}
+                : <li style={{ color: T.muted, fontSize: '0.85rem' }}>Sin secciones todavía.</li>}
             </ul>
           </>
         )}
-      </Seccion>
+      </Panel>
 
-      <Seccion titulo={`Usuarios (${usuarios.length})`}>
+      <Panel titulo={`Usuarios (${usuarios.length})`}>
         <form onSubmit={crearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input placeholder="Nombre del vendedor" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} style={inp} />
-            <input type="email" required placeholder="Email" value={nuevo.email} onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })} style={inp} />
-            <input type="password" required placeholder="Contraseña" value={nuevo.password} onChange={(e) => setNuevo({ ...nuevo, password: e.target.value })} style={inp} />
+            <Input placeholder="Nombre del vendedor" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
+            <Input type="email" required placeholder="Email" value={nuevo.email} onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
+            <Input type="password" required placeholder="Contraseña" value={nuevo.password} onChange={(e) => setNuevo({ ...nuevo, password: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })} style={inp}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })} style={{ flex: 1, minWidth: 120 }}>
               <option value="vendedor">Vendedor</option>
               <option value="supervisor">Supervisor</option>
               <option value="admin">Admin</option>
-            </select>
-            <input type="number" placeholder="Sede (id, opcional)" value={nuevo.tienda_id} onChange={(e) => setNuevo({ ...nuevo, tienda_id: e.target.value })} style={inp} />
-            <button type="submit" style={btnPrimary}>Crear usuario</button>
+            </Select>
+            <Input type="number" placeholder="Sede (id, opcional)" value={nuevo.tienda_id} onChange={(e) => setNuevo({ ...nuevo, tienda_id: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
+            <Button variant="primary" type="submit">Crear usuario</Button>
           </div>
         </form>
-        <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 6px' }}>
-          Poné un nombre a cada vendedor para identificarlo en los reportes.
-        </p>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {usuarios.map((u) => (
-            <UsuarioRow key={u.id} u={u} onGuardar={guardarNombre} />
-          ))}
+        <p style={{ ...muted, margin: '0 0 6px' }}>Poné un nombre a cada vendedor para identificarlo en los reportes.</p>
+        <ul style={lista}>
+          {usuarios.map((u) => <UsuarioRow key={u.id} u={u} onGuardar={guardarNombre} />)}
         </ul>
-      </Seccion>
+      </Panel>
 
-      {aviso && <p style={{ marginTop: 12, color: '#0d9488', fontSize: '0.85rem' }}>{aviso}</p>}
-    </Cont>
+      <Panel titulo="Configuración">
+        <form onSubmit={guardarConfig} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 120 }}>
+            <Field label="Rubro"><Input value={config?.rubro ?? ''} disabled style={{ background: '#f1f5f9' }} /></Field>
+          </div>
+          <div style={{ flex: 1, minWidth: 120 }}>
+            <Field label={'Meses para "stock muerto"'}><Input type="number" min="1" value={meses} onChange={(e) => setMeses(e.target.value)} /></Field>
+          </div>
+          <Button variant="primary" type="submit">Guardar</Button>
+        </form>
+      </Panel>
+
+      <Note>{aviso}</Note>
+    </Page>
   )
 }
 
@@ -359,19 +348,12 @@ function validar(rows) {
 // Fila de usuario con nombre editable (para identificar al vendedor en reportes).
 function UsuarioRow({ u, onGuardar }) {
   const [nombre, setNombre] = useState(u.nombre || '')
-  const cambiado = ((nombre.trim() || null)) !== (u.nombre || null)
+  const cambiado = (nombre.trim() || null) !== (u.nombre || null)
   return (
-    <li style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-      <input
-        value={nombre}
-        onChange={(e) => setNombre(e.target.value)}
-        placeholder="Nombre del vendedor"
-        style={{ ...inp, flex: 1, minWidth: 140 }}
-      />
-      <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
-        {u.email} · {u.rol}{u.tienda_id ? ` · sede ${u.tienda_id}` : ''}
-      </span>
-      {cambiado && <button onClick={() => onGuardar(u.id, nombre)} style={btnPrimary}>Guardar</button>}
+    <li style={fila}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre del vendedor" style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
+      <span style={{ color: T.muted, fontSize: '0.8rem' }}>{u.email} · {u.rol}{u.tienda_id ? ` · sede ${u.tienda_id}` : ''}</span>
+      {cambiado && <Button variant="primary" onClick={() => onGuardar(u.id, nombre)}>Guardar</Button>}
     </li>
   )
 }
@@ -382,11 +364,11 @@ function TiendaRow({ t, onGuardar, onToggle }) {
   const activa = t.activa !== false
   const cambiado = nombre.trim() && nombre.trim() !== t.nombre
   return (
-    <li style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, opacity: activa ? 1 : 0.6 }}>
-      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inp, flex: 1, minWidth: 140 }} />
+    <li style={{ ...fila, opacity: activa ? 1 : 0.6 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
       {!activa && <span style={{ fontSize: '0.72rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 999 }}>desactivada</span>}
-      {cambiado && <button onClick={() => onGuardar(t.id, nombre)} style={btnPrimary}>Guardar</button>}
-      <button onClick={() => onToggle(t.id, !activa)} style={activa ? botonSecundario : btnPrimary}>{activa ? 'Desactivar' : 'Activar'}</button>
+      {cambiado && <Button variant="primary" onClick={() => onGuardar(t.id, nombre)}>Guardar</Button>}
+      <Button variant={activa ? 'secondary' : 'primary'} onClick={() => onToggle(t.id, !activa)}>{activa ? 'Desactivar' : 'Activar'}</Button>
     </li>
   )
 }
@@ -396,29 +378,28 @@ function SeccionEditRow({ s, onGuardar, onBorrar }) {
   const [nombre, setNombre] = useState(s.nombre || '')
   const cambiado = nombre.trim() && nombre.trim() !== s.nombre
   return (
-    <li style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inp, flex: 1, minWidth: 120 }} />
-      {cambiado && <button onClick={() => onGuardar(s.id, nombre)} style={btnPrimary}>Guardar</button>}
-      <button onClick={() => onBorrar(s.id)} style={botonPeligro}>Borrar</button>
+    <li style={fila}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 120 }} />
+      {cambiado && <Button variant="primary" onClick={() => onGuardar(s.id, nombre)}>Guardar</Button>}
+      <Button variant="danger" onClick={() => onBorrar(s.id)}>Borrar</Button>
     </li>
   )
 }
 
-function Cont({ children }) {
-  return <main style={{ padding: 16, maxWidth: 680, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>{children}</main>
-}
-function Seccion({ titulo, children }) {
+function Panel({ titulo, children }) {
   return (
-    <section style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
-      <h3 style={{ fontSize: '1rem', marginBottom: 8 }}>{titulo}</h3>
+    <Card style={{ marginTop: 14 }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: '1.02rem', color: T.ink }}>{titulo}</h3>
       {children}
-    </section>
+    </Card>
   )
 }
 
-const inp = { padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.95rem' }
-const label = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', color: '#334155' }
-const btnPrimary = { padding: '9px 16px', border: 'none', borderRadius: 8, background: '#0f172a', color: '#fff', cursor: 'pointer', fontWeight: 600 }
-const botonFile = { display: 'inline-block', padding: '10px 16px', background: '#0d9488', color: '#fff', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }
-const botonSecundario = { display: 'inline-block', padding: '10px 16px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }
-const botonPeligro = { padding: '9px 14px', border: '1px solid #fecaca', borderRadius: 8, background: '#fff', color: '#dc2626', cursor: 'pointer', fontWeight: 600 }
+const muted = { fontSize: '0.8rem', color: T.muted, margin: '0 0 10px' }
+const lista = { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }
+const fila = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 10px', border: `1px solid ${T.line}`, borderRadius: 10 }
+const fileBtn = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  minHeight: 46, padding: '11px 18px', borderRadius: T.radius,
+  background: T.primary, color: '#fff', fontWeight: 600, fontSize: '1rem', cursor: 'pointer',
+}
