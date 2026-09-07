@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { Building2, Mail, MapPin, Tag, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react'
 
 // URL hardcodeada — no depende del env var que tiene /rest/v1 de más
-const EDGE_URL = 'https://sqsqyzqwysygoperjwsd.supabase.co/functions/v1/onboarding'
+const EDGE_URL = 'https://nxhkzcuqnmqjtiltoztg.supabase.co/functions/v1/onboarding'
 
 const MAX_SEDES = 20
 
