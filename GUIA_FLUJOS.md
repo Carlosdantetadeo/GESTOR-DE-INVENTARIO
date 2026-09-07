@@ -1,4 +1,4 @@
-# Guía de Flujos — Agent GMS (bot de Telegram)
+# Guía de Flujos — Almacenero Digital (bot de Telegram)
 
 > Mapa de los flujos del bot tal como quedan tras el **sprint 018 (UX unificada)**.
 > Fuente: `supabase/functions/telegram-bot/index.ts` + `tarjeta.ts` y la migración

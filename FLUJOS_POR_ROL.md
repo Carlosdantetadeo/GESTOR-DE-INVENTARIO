@@ -1,4 +1,4 @@
-# Flujos por Rol — Agent GMS
+# Flujos por Rol — Almacenero Digital
 
 > Documento de referencia. Flujos por rol (Operador / Administrador) y por canal
 > (Telegram / Web), **actualizado al sprint 018 (UX unificada)**.

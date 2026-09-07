@@ -1,4 +1,4 @@
-# Manual Técnico — Agent GMS
+# Manual Técnico — Almacenero Digital
 
 Sistema de inventario por voz para ferreterías. Versión de producción activa.
 
@@ -49,7 +49,7 @@ supabase secrets set NOMBRE=valor
 | `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram | @BotFather en Telegram → `/mybots` |
 | `TELEGRAM_WEBHOOK_SECRET` | **Obligatorio.** String aleatorio (1-256 chars de `A-Za-z0-9_-`). El bot rechaza todo request cuyo header `X-Telegram-Bot-Api-Secret-Token` no coincida. **Fail-closed:** si no está configurado, el bot rechaza todo. Debe ser igual al `secret_token` usado en setWebhook (sección 6). | Generarlo: `openssl rand -hex 32` |
 | `RESEND_API_KEY` | API Key de Resend (emails) | https://resend.com/api-keys |
-| `RESEND_FROM_EMAIL` | Sender verificado | `Agent GMS <onboarding@clarocomunica.com>` |
+| `RESEND_FROM_EMAIL` | Sender verificado | `Almacenero Digital <onboarding@clarocomunica.com>` |
 | `ANTHROPIC_API_KEY` | API Key de Anthropic (solo si alguna empresa usa NLU `anthropic-*`) | https://console.anthropic.com → API Keys |
 | `SERVICE_ROLE_KEY` | Service role de Supabase. **No se auto-inyecta con este nombre** — hay que setearlo manualmente (el código lee `SERVICE_ROLE_KEY`, no `SUPABASE_SERVICE_ROLE_KEY`). | Supabase Dashboard → Settings → API |
 

@@ -1,4 +1,4 @@
-# Guía de Obtención de Credenciales — Agent GMS
+# Guía de Obtención de Credenciales — Almacenero Digital
 
 > Última actualización: 2026-06-12
 >
@@ -27,7 +27,7 @@ Panel: https://supabase.com/dashboard → tu proyecto.
 
 1. Entrar a https://console.groq.com y crear cuenta o iniciar sesión.
 2. Menú **API Keys** → **Create API Key**.
-3. Nombre identificable (ej. `agent-gms-prod`) → copiar la key (`gsk_...`) inmediatamente — no se vuelve a mostrar.
+3. Nombre identificable (ej. `almacenero-digital-prod`) → copiar la key (`gsk_...`) inmediatamente — no se vuelve a mostrar.
 4. Setearla como secret: `supabase secrets set GROQ_API_KEY=gsk_...`
 
 > ⚠️ Una key de Groq estuvo commiteada en este repo (removida en `ebfe6a3`,
@@ -60,7 +60,7 @@ Setearlo **dos veces con el mismo valor**: como secret `TELEGRAM_WEBHOOK_SECRET`
 3. Setear:
    ```bash
    supabase secrets set RESEND_API_KEY=re_...
-   supabase secrets set RESEND_FROM_EMAIL="Agent GMS <no-reply@tudominio.com>"
+   supabase secrets set RESEND_FROM_EMAIL="Almacenero Digital <no-reply@tudominio.com>"
    ```
    El remitente debe pertenecer al dominio verificado.
 

@@ -1,4 +1,4 @@
-# Guía de Despliegue — Agent GMS
+# Guía de Despliegue — Almacenero Digital
 
 > Última actualización: 2026-06-12
 >
@@ -39,7 +39,7 @@ supabase secrets set TELEGRAM_BOT_TOKEN=123456:ABC...
 supabase secrets set TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)
 supabase secrets set SERVICE_ROLE_KEY=eyJ...    # Dashboard → Settings → API → service_role
 supabase secrets set RESEND_API_KEY=re_...
-supabase secrets set RESEND_FROM_EMAIL="Agent GMS <no-reply@tudominio.com>"
+supabase secrets set RESEND_FROM_EMAIL="Almacenero Digital <no-reply@tudominio.com>"
 # Solo si alguna empresa usará NLU de Anthropic:
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 ```

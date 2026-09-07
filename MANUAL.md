@@ -1,4 +1,4 @@
-# Manual Técnico Extendido — Agent GMS
+# Manual Técnico Extendido — Almacenero Digital
 
 > Sistema de inventario por voz para ferreterías. Versión actual: producción activa.
 > Última actualización: 2026-06-12
@@ -10,7 +10,7 @@
 
 ## Tabla de Contenidos
 
-1. [¿Qué es Agent GMS?](#1-qué-es-agent-gms)
+1. [¿Qué es Almacenero Digital?](#1-qué-es-almacenero-digital)
 2. [Stack tecnológico](#2-stack-tecnológico)
 3. [Estructura de directorios](#3-estructura-de-directorios)
 4. [Arquitectura y flujo de datos](#4-arquitectura-y-flujo-de-datos)
@@ -24,9 +24,9 @@
 
 ---
 
-## 1. ¿Qué es Agent GMS?
+## 1. ¿Qué es Almacenero Digital?
 
-Agent GMS es un sistema de gestión de inventario de **fricción cero** diseñado para ferreterías con múltiples sucursales. El operario registra ventas, ingresos, gastos y traslados **enviando un mensaje de voz de ~2 segundos por Telegram**. La IA transcribe, interpreta y guarda el movimiento automáticamente. Si la IA comete un error, el operario pulsa un botón "↩️ Deshacer" directamente en Telegram.
+Almacenero Digital es un sistema de gestión de inventario de **fricción cero** diseñado para ferreterías con múltiples sucursales. El operario registra ventas, ingresos, gastos y traslados **enviando un mensaje de voz de ~2 segundos por Telegram**. La IA transcribe, interpreta y guarda el movimiento automáticamente. Si la IA comete un error, el operario pulsa un botón "↩️ Deshacer" directamente en Telegram.
 
 ### Casos de uso principales
 
@@ -92,7 +92,7 @@ Agent GMS es un sistema de gestión de inventario de **fricción cero** diseñad
 ## 3. Estructura de directorios
 
 ```
-AGENT GMS/
+ALMACENERO DIGITAL/
 │
 ├── MANUAL.md                          ← Este archivo (manual técnico extendido)
 ├── MANUAL_TECNICO.md                  ← Manual técnico resumido (producción)
@@ -586,7 +586,7 @@ supabase secrets set GROQ_API_KEY=...
 | `TELEGRAM_WEBHOOK_SECRET` | `telegram-bot` | **Obligatorio.** String aleatorio (1-256 chars de `A-Za-z0-9_-`). Debe ser idéntico al `secret_token` registrado en setWebhook. **Fail-closed:** si falta, el bot rechaza todos los mensajes. |
 | `ANTHROPIC_API_KEY` | `telegram-bot` | Clave Anthropic (solo si alguna empresa usa NLU `anthropic-*`) |
 | `RESEND_API_KEY` | `onboarding` | Clave Resend para emails de bienvenida |
-| `RESEND_FROM_EMAIL` | `onboarding` | Remitente verificado, ej: `Agent GMS <no-reply@tudominio.com>` |
+| `RESEND_FROM_EMAIL` | `onboarding` | Remitente verificado, ej: `Almacenero Digital <no-reply@tudominio.com>` |
 | `SUPABASE_URL` | ambos | **Auto-inyectado** por Supabase — no configurar manualmente |
 | `SERVICE_ROLE_KEY` | `telegram-bot` | ⚠️ **NO se auto-inyecta con este nombre** — configurarlo manualmente. El código lee `Deno.env.get('SERVICE_ROLE_KEY')`, no `SUPABASE_SERVICE_ROLE_KEY`. |
 
@@ -618,7 +618,7 @@ supabase secrets set TELEGRAM_BOT_TOKEN=123456:ABC...
 supabase secrets set TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)
 supabase secrets set SERVICE_ROLE_KEY=eyJ...   # Settings → API → service_role
 supabase secrets set RESEND_API_KEY=re_...
-supabase secrets set RESEND_FROM_EMAIL="Agent GMS <no-reply@tudominio.com>"
+supabase secrets set RESEND_FROM_EMAIL="Almacenero Digital <no-reply@tudominio.com>"
 # Anthropic es opcional (solo para NLU anthropic-*):
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 ```
