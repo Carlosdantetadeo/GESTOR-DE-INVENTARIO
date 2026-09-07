@@ -17,6 +17,8 @@ supabase/.temp/
 .env.test.local
 .env.production.local
 *.env
+.env.*
+*.bak
 
 # Keys and credentials
 *.pem
