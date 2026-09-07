@@ -25,7 +25,7 @@ El **bot de Telegram** se usa solo para recibir el **reporte del día**.
 Al registrarte exitosamente verás en pantalla tu **contraseña temporal**:
 
 ```
-Tu contraseña temporal: GMS-XXXXXXXX
+Tu contraseña temporal: AD-XXXXXXXX
 ```
 
 > ⚠️ Guardala ahora: no se vuelve a mostrar.
@@ -47,7 +47,7 @@ Hay dos formas de entrar al sistema y cuatro tipos de acceso:
 
 | Acceso | Para qué | Cómo se obtiene |
 |---|---|---|
-| **Administrador** (app web) | Configurar todo, ver reportes, crear usuarios | Se crea al registrar la empresa. Usuario = email, clave = `GMS-XXXXXXXX` |
+| **Administrador** (app web) | Configurar todo, ver reportes, crear usuarios | Se crea al registrar la empresa. Usuario = email, clave = `AD-XXXXXXXX` |
 | **Supervisor** (app web) | Ingresos, conteos, recepción y panel de una sede | El administrador lo crea en **Administración → Usuarios** |
 | **Vendedor** (app web) | Registrar ventas de su sede | El administrador lo crea en **Administración → Usuarios** |
 | **Reporte por Telegram** (admin) | Recibir el reporte del día en el celular | El admin vincula su Telegram con el **token admin** (ver sección 6) |

@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
   //                        como claim "app_metadata". RLS lo lee vía
   //                        get_my_empresa_id(); el dashboard vía user.app_metadata.
 
-  const tempPassword = `GMS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+  const tempPassword = `AD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
 
   const { error: authErr } = await supabase.auth.admin.createUser({
     email:         admin_email.trim(),
@@ -155,7 +155,7 @@ async function sendOnboardingEmail(opts: {
   sedes:                string[]
 }): Promise<boolean> {
   const resendKey  = Deno.env.get('RESEND_API_KEY')
-  const fromEmail  = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Agent GMS <onboarding@agentgms.com>'
+  const fromEmail  = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Almacenero Digital <onboarding@almacenero.digital>'
 
   if (!resendKey) {
     console.warn('[onboarding] RESEND_API_KEY no configurada — email omitido')
@@ -166,7 +166,7 @@ async function sendOnboardingEmail(opts: {
 
   const texto = `Hola,
 
-Tu empresa "${opts.empresa_nombre}" ya está registrada en Agent GMS.
+Tu empresa "${opts.empresa_nombre}" ya está registrada en Almacenero Digital.
 
 SEDES CREADAS:
 ${sedes_lista}
@@ -195,7 +195,7 @@ CONECTARTE VOS COMO ADMINISTRADOR:
   Este token ADMIN es distinto del de los empleados — no lo compartas.
 
 ---
-Agent GMS · Sistema de inventario por voz
+Almacenero Digital · Sistema de inventario
 `
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -207,7 +207,7 @@ Agent GMS · Sistema de inventario por voz
     body: JSON.stringify({
       from:    fromEmail,
       to:      opts.to,
-      subject: `Tu empresa "${opts.empresa_nombre}" está lista en Agent GMS`,
+      subject: `Tu empresa "${opts.empresa_nombre}" está lista en Almacenero Digital`,
       text:    texto,
     }),
   })

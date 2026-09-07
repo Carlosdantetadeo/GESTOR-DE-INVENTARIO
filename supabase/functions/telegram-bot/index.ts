@@ -1,5 +1,5 @@
 // supabase/functions/telegram-bot/index.ts
-// Bot de Telegram para Agent GMS.
+// Bot de Telegram para Almacenero Digital.
 //
 // Soporta: voz (Groq Whisper STT) · texto · foto (Groq Vision)
 // NLU multi-modelo dinámico (tabla modelos_nlu): proveedores groq · anthropic · openrouter.
@@ -1967,8 +1967,8 @@ async function callNLU(
     }
     if (esOR) {
       // Recomendados por OpenRouter para atribución (opcionales).
-      headers['HTTP-Referer'] = DASHBOARD_BASE_URL || 'https://agent-gms'
-      headers['X-Title'] = 'Agent GMS'
+      headers['HTTP-Referer'] = DASHBOARD_BASE_URL || 'https://almacenero.digital'
+      headers['X-Title'] = 'Almacenero Digital'
     }
     const resp = await fetch(url, {
       method: 'POST',
