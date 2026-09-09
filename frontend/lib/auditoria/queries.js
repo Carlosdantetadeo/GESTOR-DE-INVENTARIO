@@ -478,3 +478,83 @@ export async function getTiendas() {
   if (error) throw error
   return data || []
 }
+
+// ── Consignaciones ────────────────────────────────────────────────────────────
+
+// Registra una consignación sin tocar el stock.
+export async function crearConsignacion({ empresaId, tiendaId, productoId, cantidad, precioUnitario, cliente, authUid }) {
+  const { data, error } = await supabase
+    .from('consignaciones')
+    .insert({
+      empresa_id: empresaId,
+      tienda_id: tiendaId,
+      producto_id: productoId,
+      cantidad,
+      precio_unitario: precioUnitario ?? 0,
+      cliente: cliente.trim(),
+      auth_uid: authUid,
+    })
+    .select('id, created_at')
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Pendientes de una tienda. authUid filtra solo las del vendedor; sin él trae todas (supervisor).
+export async function getConsignacionesPendientes(tiendaId, authUid = null) {
+  let q = supabase
+    .from('consignaciones')
+    .select('id, cantidad, precio_unitario, cliente, auth_uid, created_at, productos(nombre)')
+    .eq('tienda_id', tiendaId)
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: false })
+  if (authUid) q = q.eq('auth_uid', authUid)
+  const { data, error } = await q
+  if (error) throw error
+  return data || []
+}
+
+// Confirma como venta: crea movimiento (trigger descuenta stock) y cierra la consignación.
+export async function confirmarConsignacion({ consignacionId, productoId, tiendaId, cantidad, precioUnitario, authUid }) {
+  const { data: mov, error: movErr } = await supabase
+    .from('movimientos')
+    .insert({
+      tipo: 'venta',
+      producto_id: productoId,
+      tienda_origen: tiendaId,
+      cantidad,
+      precio_unitario: precioUnitario ?? 0,
+      auth_uid: authUid ?? null,
+      client_op_id: crypto.randomUUID(),
+    })
+    .select('id')
+    .single()
+  if (movErr) throw movErr
+
+  const { error } = await supabase
+    .from('consignaciones')
+    .update({ estado: 'confirmada', cerrada_at: new Date().toISOString(), cerrada_por: authUid, movimiento_id: mov.id })
+    .eq('id', consignacionId)
+  if (error) throw error
+}
+
+// Devuelve la mercadería: cierra sin crear movimiento (stock queda intacto).
+export async function devolverConsignacion({ consignacionId, authUid }) {
+  const { error } = await supabase
+    .from('consignaciones')
+    .update({ estado: 'devuelta', cerrada_at: new Date().toISOString(), cerrada_por: authUid })
+    .eq('id', consignacionId)
+  if (error) throw error
+}
+
+// Para el reporte de admin: consignaciones en un rango de fechas.
+export async function getConsignacionesReporte({ desde, hasta }) {
+  const { data, error } = await supabase
+    .from('consignaciones')
+    .select('id, cantidad, precio_unitario, cliente, estado, auth_uid, tienda_id, created_at, cerrada_at, productos(nombre), tiendas(nombre)')
+    .gte('created_at', desde)
+    .lte('created_at', hasta)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}

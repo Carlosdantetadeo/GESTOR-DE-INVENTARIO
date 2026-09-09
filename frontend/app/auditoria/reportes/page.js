@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { isAdmin } from '../../../lib/auditoria/auth'
-import { getVentas, getUsuariosTelegram, getTiendas } from '../../../lib/auditoria/queries'
+import { getVentas, getUsuariosTelegram, getTiendas, getConsignacionesReporte } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
@@ -25,6 +25,7 @@ export default function ReportesPage() {
   const [porVendedor, setPorVendedor] = useState([])
   const [porDia, setPorDia] = useState([])
   const [total, setTotal] = useState(0)
+  const [consignaciones, setConsignaciones] = useState([])
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,11 +33,12 @@ export default function ReportesPage() {
     setCargando(true)
     setError('')
     try {
-      const [ventas, tg, tiendas, resWeb] = await Promise.all([
+      const [ventas, tg, tiendas, resWeb, consigs] = await Promise.all([
         getVentas({ desde: `${desde}T00:00:00`, hasta: `${hasta}T23:59:59` }),
         getUsuariosTelegram(),
         getTiendas(),
         fetch('/api/auditoria/usuarios').then((r) => (r.ok ? r.json() : { usuarios: [] })),
+        getConsignacionesReporte({ desde: `${desde}T00:00:00`, hasta: `${hasta}T23:59:59` }),
       ])
       const nombreTg = new Map(tg.map((u) => [u.id, u.nombre || `Telegram ${u.id}`]))
       // Nombre del vendedor web (app_metadata.nombre); si no tiene, cae al email.
@@ -81,6 +83,7 @@ export default function ReportesPage() {
       setPorVendedor(ordenar(aggV))
       setPorDia(dias)
       setTotal(tot)
+      setConsignaciones(consigs || [])
     } catch {
       setError('No se pudo generar el reporte.')
     } finally {
@@ -150,6 +153,47 @@ export default function ReportesPage() {
 
           <Tabla titulo="Por tienda (detalle)" filas={porTienda} col1="Tienda" />
           <Tabla titulo="Por vendedor (detalle)" filas={porVendedor} col1="Vendedor" />
+
+          {consignaciones.length > 0 && (
+            <section style={{ marginTop: 8, marginBottom: 22 }}>
+              <h3 style={{ fontSize: '1.02rem', marginBottom: 8, color: T.ink }}>
+                Consignaciones del período ({consignaciones.length})
+              </h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: `2px solid ${T.line}`, color: T.muted }}>
+                    {['Producto','Cliente','Qty','Precio','Estado','Fecha'].map((h) => (
+                      <th key={h} style={{ padding: '8px 6px', fontSize: '0.78rem', fontWeight: 600 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {consignaciones.map((c) => (
+                    <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '9px 6px', fontWeight: 600, color: T.ink }}>{c.productos?.nombre ?? '—'}</td>
+                      <td style={{ padding: '9px 6px' }}>{c.cliente}</td>
+                      <td style={{ padding: '9px 6px' }}>{c.cantidad}</td>
+                      <td style={{ padding: '9px 6px' }}>
+                        {c.precio_unitario > 0 ? `S/ ${(c.cantidad * c.precio_unitario).toFixed(2)}` : '—'}
+                      </td>
+                      <td style={{ padding: '9px 6px' }}>
+                        <span style={{
+                          fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                          background: c.estado === 'confirmada' ? '#dcfce7' : c.estado === 'devuelta' ? '#fee2e2' : '#fef3c7',
+                          color: c.estado === 'confirmada' ? '#166534' : c.estado === 'devuelta' ? '#991b1b' : '#92400e',
+                        }}>
+                          {c.estado}
+                        </span>
+                      </td>
+                      <td style={{ padding: '9px 6px', color: T.muted, whiteSpace: 'nowrap' }}>
+                        {new Date(c.created_at).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
         </>
       )}
     </Page>
