@@ -504,7 +504,7 @@ export async function crearConsignacion({ empresaId, tiendaId, productoId, canti
 export async function getConsignacionesPendientes(tiendaId, authUid = null) {
   let q = supabase
     .from('consignaciones')
-    .select('id, cantidad, precio_unitario, cliente, auth_uid, created_at, productos(nombre)')
+    .select('id, producto_id, cantidad, precio_unitario, cliente, auth_uid, created_at, productos(id, nombre)')
     .eq('tienda_id', tiendaId)
     .eq('estado', 'pendiente')
     .order('created_at', { ascending: false })

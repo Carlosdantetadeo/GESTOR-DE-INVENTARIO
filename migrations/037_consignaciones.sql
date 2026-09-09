@@ -15,7 +15,7 @@ CREATE TABLE public.consignaciones (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   empresa_id      UUID    NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
   tienda_id       BIGINT  NOT NULL REFERENCES public.tiendas(id),
-  producto_id     UUID    NOT NULL REFERENCES public.productos(id),
+  producto_id     BIGINT  NOT NULL REFERENCES public.productos(id),
   cantidad        INTEGER NOT NULL CHECK (cantidad > 0),
   precio_unitario NUMERIC(12,2) NOT NULL DEFAULT 0,
   cliente         TEXT    NOT NULL,
