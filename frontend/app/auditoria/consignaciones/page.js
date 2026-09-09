@@ -61,8 +61,16 @@ export default function ConsignacionesPage() {
   }
 
   function extraerRegex(texto) {
-    const m = texto.match(/(\d+(?:[.,]\d+)?)\s*(?:[a-záéíóúñ]+\s+)?(?:a|por|x)\s*(\d+(?:[.,]\d+)?)/i)
+    const NUMS = { uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,
+      diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,veinte:20,treinta:30,
+      cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90,cien:100 }
+    let t = texto.toLowerCase()
+    for (const [p, n] of Object.entries(NUMS)) t = t.replace(new RegExp(`\\b${p}\\b`, 'g'), String(n))
+    const m = t.match(/(\d+(?:[.,]\d+)?)\s*[a-záéíóúñ\s]*?\s+(?:a|por|x|cada)\s+(\d+(?:[.,]\d+)?)/)
     if (m) return { cantidad: parseFloat(m[1].replace(',','.')), precio: parseFloat(m[2].replace(',','.')) }
+    const nums = [...t.matchAll(/\d+(?:[.,]\d+)?/g)].map(x => parseFloat(x[0].replace(',','.')))
+    if (nums.length >= 2) return { cantidad: nums[0], precio: nums[1] }
+    if (nums.length === 1) return { cantidad: nums[0], precio: null }
     return { cantidad: null, precio: null }
   }
 
@@ -200,7 +208,7 @@ export default function ConsignacionesPage() {
           onContextMenu={(e) => e.preventDefault()}
           style={{ touchAction: 'none', userSelect: 'none', ...(grabando ? { background: '#ef4444' } : null) }}
         >
-          {grabando ? '🔴 Grabando…' : '🎤 Mantené'}
+          {grabando ? '🔴 Voz' : '🎤 Voz'}
         </Button>
 
         {!pieza && resultados.length > 0 && (

@@ -42,10 +42,22 @@ export default function SalidasPage() {
     try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
   }
 
-  // Extrae cantidad y precio de frases como "5 bolsas a 10 soles" cuando el NLU no responde.
+  // Extrae cantidad y precio de frases de venta. Convierte palabras numéricas a dígitos
+  // antes de buscar (Whisper a veces transcribe "cinco" en vez de "5").
   function extraerRegex(texto) {
-    const m = texto.match(/(\d+(?:[.,]\d+)?)\s*(?:[a-záéíóúñ]+\s+)?(?:a|por|x)\s*(\d+(?:[.,]\d+)?)/i)
+    const NUMS = { uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,
+      diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,dieciséis:16,diecisiete:17,
+      dieciocho:18,diecinueve:19,veinte:20,veintiuno:21,treinta:30,cuarenta:40,
+      cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90,cien:100,ciento:100 }
+    let t = texto.toLowerCase()
+    for (const [p, n] of Object.entries(NUMS)) t = t.replace(new RegExp(`\\b${p}\\b`, 'g'), String(n))
+    // "X [palabras] a/por/x Y"
+    const m = t.match(/(\d+(?:[.,]\d+)?)\s*[a-záéíóúñ\s]*?\s+(?:a|por|x|cada)\s+(\d+(?:[.,]\d+)?)/)
     if (m) return { cantidad: parseFloat(m[1].replace(',','.')), precio: parseFloat(m[2].replace(',','.')) }
+    // Si hay exactamente 2 números → primero=cantidad, segundo=precio
+    const nums = [...t.matchAll(/\d+(?:[.,]\d+)?/g)].map(x => parseFloat(x[0].replace(',','.')))
+    if (nums.length >= 2) return { cantidad: nums[0], precio: nums[1] }
+    if (nums.length === 1) return { cantidad: nums[0], precio: null }
     return { cantidad: null, precio: null }
   }
 
@@ -204,7 +216,7 @@ export default function SalidasPage() {
             onContextMenu={(e) => e.preventDefault()}
             style={{ flex: 1, touchAction: 'none', userSelect: 'none', ...(grabando ? { background: '#ef4444' } : null) }}
           >
-            {grabando ? '🔴 Grabando…' : '🎤 Mantené'}
+            {grabando ? '🔴 Voz' : '🎤 Voz'}
           </Button>
           <label style={fotoBtn}>
             {procesando ? '…' : '📷 Foto'}
