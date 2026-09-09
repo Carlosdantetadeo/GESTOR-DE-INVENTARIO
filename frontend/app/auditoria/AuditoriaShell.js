@@ -6,6 +6,8 @@
 //  - muestra estado online/offline y el badge de pendientes (FR-010)
 //  - arranca el motor de sync (flush en `online` y en arranque — FR-017)
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 import { getAuditoriaSession } from '../../lib/auditoria/auth'
 import { startSync, pendingCount } from '../../lib/auditoria/offline/syncEngine'
@@ -17,6 +19,8 @@ export function useAuditoria() {
 }
 
 export default function AuditoriaShell({ children }) {
+  const pathname = usePathname()
+  const enHome = pathname === '/auditoria'
   const [session, setSession] = useState(null)
   const [online, setOnline] = useState(true)
   const [pending, setPending] = useState(0)
@@ -66,7 +70,17 @@ export default function AuditoriaShell({ children }) {
           padding: '10px 16px', background: '#0f172a', color: '#fff',
           position: 'sticky', top: 0, zIndex: 10,
         }}>
-          <strong>Almacenero Digital</strong>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {!enHome && (
+              <Link href="/auditoria" style={{
+                color: '#94a3b8', textDecoration: 'none', fontSize: '1.1rem',
+                lineHeight: 1, padding: '4px 2px',
+              }} aria-label="Volver al panel">
+                ←
+              </Link>
+            )}
+            <strong>Almacenero Digital</strong>
+          </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.8rem' }}>
             {pending > 0 && (
               <span style={{
