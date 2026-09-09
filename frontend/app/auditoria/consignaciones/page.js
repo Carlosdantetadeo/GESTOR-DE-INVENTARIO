@@ -235,7 +235,7 @@ export default function ConsignacionesPage() {
           <Card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <strong style={{ fontSize: '1.05rem', color: T.ink }}>{pieza.nombre}</strong>
-              <Button variant="ghost" onClick={() => { setPieza(null); setResultados([]) }} style={{ marginLeft: 10 }}>
+              <Button variant="ghost" onClick={() => { setPieza(null); setResultados([]); setTexto('') }} style={{ marginLeft: 10 }}>
                 cambiar producto
               </Button>
             </div>

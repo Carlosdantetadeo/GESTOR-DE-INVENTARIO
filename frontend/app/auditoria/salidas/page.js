@@ -251,7 +251,7 @@ export default function SalidasPage() {
         <Card style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <strong style={{ fontSize: '1.05rem', color: T.ink }}>{pieza.nombre}</strong>
-            <Button variant="ghost" onClick={() => { setPieza(null); setStock(null); setResultados([]) }} style={{ marginLeft: 10 }}>cambiar producto</Button>
+            <Button variant="ghost" onClick={() => { setPieza(null); setStock(null); setResultados([]); setTexto('') }} style={{ marginLeft: 10 }}>cambiar producto</Button>
             {stock != null && <div style={{ fontSize: '0.85rem', color: T.muted, marginTop: 2 }}>Stock disponible: {stock}</div>}
           </div>
           <Field label="Cantidad">
