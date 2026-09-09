@@ -26,6 +26,7 @@ export default function SalidasPage() {
   const [procesando, setProcesando] = useState(false)
   const [aviso, setAviso] = useState('')
   const recorderRef = useRef(null)
+  const canceladoRef = useRef(false)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
@@ -41,10 +42,15 @@ export default function SalidasPage() {
     try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
   }
 
-  // Voz: interpreta la frase (producto + cantidad + precio), ubica la mejor
-  // coincidencia del catálogo y prellena la tarjeta para registrar o corregir.
+  // Extrae cantidad y precio de frases como "5 bolsas a 10 soles" cuando el NLU no responde.
+  function extraerRegex(texto) {
+    const m = texto.match(/(\d+(?:[.,]\d+)?)\s*(?:[a-záéíóúñ]+\s+)?(?:a|por|x)\s*(\d+(?:[.,]\d+)?)/i)
+    if (m) return { cantidad: parseFloat(m[1].replace(',','.')), precio: parseFloat(m[2].replace(',','.')) }
+    return { cantidad: null, precio: null }
+  }
+
   async function interpretarVenta(t) {
-    setAviso('Interpretando…')
+    setAviso(`Escuché: "${t}"`)
     let descripcion = t
     let cant = null
     let prec = null
@@ -60,10 +66,15 @@ export default function SalidasPage() {
         cant = d.cantidad
         prec = d.precio
       }
-      // 501 u otro error → seguimos con el texto crudo (fallback manual).
-    } catch { /* fallback: usamos el texto crudo */ }
+    } catch { /* fallback */ }
 
-    // Online: búsqueda semántica (embeddings). Si no hay red o falla, trigram local.
+    // Si el NLU no extrajo números, intentar con regex sobre el texto original.
+    if (cant == null && prec == null) {
+      const r = extraerRegex(t)
+      cant = r.cantidad
+      prec = r.precio
+    }
+
     let resultados = online ? await buscarSemantico(descripcion) : null
     if (!resultados || !resultados.length) resultados = await buscarLocal(descripcion)
     setTexto(descripcion)
@@ -81,8 +92,10 @@ export default function SalidasPage() {
 
   async function grabarVoz() {
     if (!online) { setAviso('La voz necesita conexión.'); return }
+    canceladoRef.current = false
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (canceladoRef.current) { stream.getTracks().forEach((t) => t.stop()); return }
       const rec = new MediaRecorder(stream)
       const chunks = []
       rec.ondataavailable = (e) => chunks.push(e.data)
@@ -98,7 +111,7 @@ export default function SalidasPage() {
             if (t?.trim()) await interpretarVenta(t)
             else setAviso('No te entendí. Probá de nuevo o buscá por nombre.')
           } else if (res.status === 501) {
-            setAviso('La voz no está configurada (falta GROQ_API_KEY en Vercel).')
+            setAviso('La voz no está configurada (falta API_GROQ en Vercel).')
           } else {
             setAviso('No se pudo transcribir el audio. Probá de nuevo.')
           }
@@ -110,7 +123,12 @@ export default function SalidasPage() {
     } catch { setAviso('No se pudo acceder al micrófono.') }
   }
 
-  function detenerVoz() { recorderRef.current?.stop(); setGrabando(false) }
+  function detenerVoz() {
+    canceladoRef.current = true
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+    recorderRef.current = null
+    setGrabando(false)
+  }
 
   async function procesarFoto(e) {
     const file = e.target.files?.[0]
@@ -180,10 +198,13 @@ export default function SalidasPage() {
         <Input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar producto por nombre…" />
         <div style={{ display: 'flex', gap: 10 }}>
           <Button
-            onClick={grabando ? detenerVoz : grabarVoz}
-            style={{ flex: 1, ...(grabando ? { background: '#ef4444' } : null) }}
+            onPointerDown={grabarVoz}
+            onPointerUp={detenerVoz}
+            onPointerLeave={detenerVoz}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ flex: 1, touchAction: 'none', userSelect: 'none', ...(grabando ? { background: '#ef4444' } : null) }}
           >
-            {grabando ? '⏹ Detener' : '🎤 Voz'}
+            {grabando ? '🔴 Grabando…' : '🎤 Mantené'}
           </Button>
           <label style={fotoBtn}>
             {procesando ? '…' : '📷 Foto'}

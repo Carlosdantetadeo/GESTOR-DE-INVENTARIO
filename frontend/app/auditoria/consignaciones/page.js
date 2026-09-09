@@ -26,6 +26,7 @@ export default function ConsignacionesPage() {
   // Voz
   const [grabando, setGrabando] = useState(false)
   const recorderRef = useRef(null)
+  const canceladoRef = useRef(false)
 
   // Lista de pendientes
   const [pendientes, setPendientes] = useState([])
@@ -59,10 +60,18 @@ export default function ConsignacionesPage() {
     setTexto(p.nombre)
   }
 
+  function extraerRegex(texto) {
+    const m = texto.match(/(\d+(?:[.,]\d+)?)\s*(?:[a-záéíóúñ]+\s+)?(?:a|por|x)\s*(\d+(?:[.,]\d+)?)/i)
+    if (m) return { cantidad: parseFloat(m[1].replace(',','.')), precio: parseFloat(m[2].replace(',','.')) }
+    return { cantidad: null, precio: null }
+  }
+
   async function grabarVoz() {
     if (!online) { setAviso('La voz necesita conexión.'); return }
+    canceladoRef.current = false
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (canceladoRef.current) { stream.getTracks().forEach((t) => t.stop()); return }
       const rec = new MediaRecorder(stream)
       const chunks = []
       rec.ondataavailable = (e) => chunks.push(e.data)
@@ -76,7 +85,7 @@ export default function ConsignacionesPage() {
           if (res.ok) {
             const { texto: t } = await res.json()
             if (t?.trim()) {
-              // Intentar parsear producto + datos de la frase
+              setAviso(`Escuché: "${t}"`)
               const parseRes = await fetch('/api/auditoria/parsear-venta', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ texto: t }),
@@ -86,6 +95,9 @@ export default function ConsignacionesPage() {
                 const d = await parseRes.json()
                 if (d.descripcion) desc = d.descripcion
                 cant = d.cantidad; prec = d.precio
+              }
+              if (cant == null && prec == null) {
+                const r = extraerRegex(t); cant = r.cantidad; prec = r.precio
               }
               let res2 = online ? await buscarSemantico(desc) : null
               if (!res2?.length) res2 = await buscarLocal(desc)
@@ -108,7 +120,12 @@ export default function ConsignacionesPage() {
     } catch { setAviso('No se pudo acceder al micrófono.') }
   }
 
-  function detenerVoz() { recorderRef.current?.stop(); setGrabando(false) }
+  function detenerVoz() {
+    canceladoRef.current = true
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+    recorderRef.current = null
+    setGrabando(false)
+  }
 
   async function registrar() {
     if (!pieza || !cliente.trim() || !cantidad) return
@@ -177,10 +194,13 @@ export default function ConsignacionesPage() {
 
         <Input value={texto} onChange={(e) => buscar(e.target.value)} placeholder="Buscar producto por nombre…" />
         <Button
-          onClick={grabando ? detenerVoz : grabarVoz}
-          style={{ ...(grabando ? { background: '#ef4444' } : null) }}
+          onPointerDown={grabarVoz}
+          onPointerUp={detenerVoz}
+          onPointerLeave={detenerVoz}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ touchAction: 'none', userSelect: 'none', ...(grabando ? { background: '#ef4444' } : null) }}
         >
-          {grabando ? '⏹ Detener' : '🎤 Voz'}
+          {grabando ? '🔴 Grabando…' : '🎤 Mantené'}
         </Button>
 
         {!pieza && resultados.length > 0 && (
