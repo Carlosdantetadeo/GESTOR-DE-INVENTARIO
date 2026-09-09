@@ -547,6 +547,37 @@ export async function devolverConsignacion({ consignacionId, authUid }) {
   if (error) throw error
 }
 
+// ── Búsqueda de stock por sede ("¿dónde está?") ──────────────────────────────
+
+// Busca productos por nombre (ilike) y devuelve el stock en cada sede activa.
+// Útil para cadenas multi-sede: ver qué sede tiene la pieza disponible.
+export async function buscarStockPorSede(texto) {
+  const { data: prods, error: e1 } = await supabase
+    .from('productos')
+    .select('id, nombre, referencia')
+    .ilike('nombre', `%${texto}%`)
+    .limit(12)
+  if (e1) throw e1
+  if (!prods?.length) return []
+
+  const ids = prods.map((p) => p.id)
+  const { data: stocks, error: e2 } = await supabase
+    .from('stock')
+    .select('producto_id, cantidad, tienda_id, tiendas(nombre, activa)')
+    .in('producto_id', ids)
+  if (e2) throw e2
+
+  return prods.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    referencia: p.referencia,
+    sedes: (stocks || [])
+      .filter((s) => s.producto_id === p.id && s.tiendas?.activa !== false)
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .map((s) => ({ tiendaId: s.tienda_id, nombre: s.tiendas?.nombre ?? `Sede ${s.tienda_id}`, cantidad: s.cantidad })),
+  }))
+}
+
 // Para el reporte de admin: consignaciones en un rango de fechas.
 export async function getConsignacionesReporte({ desde, hasta }) {
   const { data, error } = await supabase

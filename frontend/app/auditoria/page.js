@@ -18,6 +18,7 @@ export default function AuditoriaHome() {
   const accesos = [
     vendedor && { href: '/auditoria/salidas', icon: '💰', label: 'Venta', desc: 'Registrar una venta' },
     (vendedor || supervisa) && { href: '/auditoria/consignaciones', icon: '🤝', label: 'Consignación', desc: 'Dar producto a cuenta' },
+    { href: '/auditoria/buscar', icon: '📍', label: '¿Dónde está?', desc: 'Stock de la pieza por sede' },
     supervisa && { href: '/auditoria/ingreso', icon: '📦', label: 'Ingreso', desc: 'Cargar mercadería' },
     supervisa && { href: '/auditoria/captura', icon: '🎤', label: 'Contar', desc: 'Auditar stock por voz' },
     supervisa && { href: '/auditoria/recepcion', icon: '📷', label: 'Recepción', desc: 'Leer una factura' },
