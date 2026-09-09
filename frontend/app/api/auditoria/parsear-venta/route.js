@@ -4,12 +4,21 @@
 import { NextResponse } from 'next/server'
 
 const PROMPT =
-  'Sos un asistente que interpreta frases de venta de una ferretería/repuestos en español. ' +
-  'De la frase del vendedor extraé UN producto y devolvé SOLO un JSON (sin texto extra, sin markdown): ' +
-  '{"descripcion": string, "cantidad": number|null, "precio": number|null}. ' +
-  'Reglas: "descripcion" es SOLO el nombre del producto (sin verbos como "vendí", sin cantidades ni precios). ' +
-  '"cantidad" es cuántas unidades. "precio" es el precio por unidad (individual), nunca el total. ' +
-  'Si un dato no aparece, poné null. Interpretá números escritos en palabras (ej: "tres" → 3).'
+  'Sos un asistente que interpreta frases de venta de una ferretería/mayorista en español latinoamericano. ' +
+  'De la frase del vendedor extraé el producto, la cantidad y el precio unitario. ' +
+  'Devolvé SOLO un JSON sin texto extra ni markdown: {"descripcion": string, "cantidad": number|null, "precio": number|null}.\n' +
+  'EJEMPLOS:\n' +
+  '"vendí tres bolsas de cemento a quince soles" → {"descripcion":"bolsa de cemento","cantidad":3,"precio":15}\n' +
+  '"cinco metros de cable por veinte" → {"descripcion":"cable","cantidad":5,"precio":20}\n' +
+  '"salida de dos cajas de tornillos a diez cincuenta" → {"descripcion":"caja de tornillos","cantidad":2,"precio":10.5}\n' +
+  '"una llave francesa" → {"descripcion":"llave francesa","cantidad":1,"precio":null}\n' +
+  '"pintura blanca" → {"descripcion":"pintura blanca","cantidad":null,"precio":null}\n' +
+  'REGLAS:\n' +
+  '- "descripcion": solo el nombre limpio del producto, sin verbos, cantidades ni precios.\n' +
+  '- "cantidad": unidades vendidas. Si dice "un/una" → 1.\n' +
+  '- "precio": valor UNITARIO. Si dice "cinco a diez soles" → cantidad=5, precio=10.\n' +
+  '- Convertí números escritos en palabras: uno→1, dos→2, tres→3, diez→10, veinte→20, etc.\n' +
+  '- Si un dato no está en la frase, poné null.'
 
 export async function POST(request) {
   const key = process.env.API_GROQ

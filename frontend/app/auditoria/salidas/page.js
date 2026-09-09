@@ -142,7 +142,7 @@ export default function SalidasPage() {
     const cant = Number(cantidad)
     if (!pieza || !cant) return
     if (!online) { setAviso('Registrar ventas requiere conexión.'); return }
-    if (stock != null && cant > stock) { setAviso(`Stock insuficiente (disponible: ${stock}).`); return }
+    if (stock != null && cant > stock) setAviso(`⚠️ Stock actual: ${stock}. La venta quedará en negativo.`)
     try {
       const mov = await registrarSalida({
         productoId: pieza.producto_id ?? pieza.id,

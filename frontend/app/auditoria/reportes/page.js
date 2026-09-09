@@ -18,8 +18,9 @@ function hace(dias) {
 
 export default function ReportesPage() {
   const { session } = useAuditoria()
+  const hoy = new Date().toISOString().slice(0, 10)
   const [desde, setDesde] = useState(hace(30))
-  const [hasta, setHasta] = useState(new Date().toISOString().slice(0, 10))
+  const [hasta, setHasta] = useState(hoy)
   const [porTienda, setPorTienda] = useState([])
   const [porVendedor, setPorVendedor] = useState([])
   const [porDia, setPorDia] = useState([])
@@ -98,7 +99,7 @@ export default function ReportesPage() {
     <Page>
       <Title>Reporte de ventas</Title>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ flex: 1, minWidth: 130 }}>
           <Field label="Desde"><Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></Field>
         </div>
@@ -106,6 +107,11 @@ export default function ReportesPage() {
           <Field label="Hasta"><Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></Field>
         </div>
         <Button variant="dark" onClick={generar}>Generar</Button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <Button variant="secondary" onClick={() => { setDesde(hoy); setHasta(hoy) }}>Hoy</Button>
+        <Button variant="secondary" onClick={() => { setDesde(hace(7)); setHasta(hoy) }}>Últimos 7 días</Button>
+        <Button variant="secondary" onClick={() => { setDesde(hace(30)); setHasta(hoy) }}>Últimos 30 días</Button>
       </div>
 
       {error && <Note tone="error">{error}</Note>}
