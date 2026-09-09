@@ -61,12 +61,13 @@ export default function ConsignacionesPage() {
   }
 
   function extraerRegex(texto) {
-    const NUMS = { uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,
-      diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,veinte:20,treinta:30,
-      cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90,cien:100 }
+    const NUMS = { dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,
+      diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,veinte:20,
+      treinta:30,cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90,cien:100 }
     let t = texto.toLowerCase()
+    t = t.replace(/cada\s+(?:uno|una|\d+)/g, '')
     for (const [p, n] of Object.entries(NUMS)) t = t.replace(new RegExp(`\\b${p}\\b`, 'g'), String(n))
-    const m = t.match(/(\d+(?:[.,]\d+)?)\s*[a-záéíóúñ\s]*?\s+(?:a|por|x|cada)\s+(\d+(?:[.,]\d+)?)/)
+    const m = t.match(/(\d+(?:[.,]\d+)?)\s*[a-záéíóúñ\s]*?\s+(?:a|por|x)\s+(\d+(?:[.,]\d+)?)/)
     if (m) return { cantidad: parseFloat(m[1].replace(',','.')), precio: parseFloat(m[2].replace(',','.')) }
     const nums = [...t.matchAll(/\d+(?:[.,]\d+)?/g)].map(x => parseFloat(x[0].replace(',','.')))
     if (nums.length >= 2) return { cantidad: nums[0], precio: nums[1] }
@@ -227,8 +228,8 @@ export default function ConsignacionesPage() {
           <Card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <strong style={{ fontSize: '1.05rem', color: T.ink }}>{pieza.nombre}</strong>
-              <Button variant="ghost" onClick={() => { setPieza(null); setTexto('') }} style={{ marginLeft: 10 }}>
-                cambiar
+              <Button variant="ghost" onClick={() => { setPieza(null); setResultados([]) }} style={{ marginLeft: 10 }}>
+                cambiar producto
               </Button>
             </div>
             <Field label="Cliente / Razón social *">
