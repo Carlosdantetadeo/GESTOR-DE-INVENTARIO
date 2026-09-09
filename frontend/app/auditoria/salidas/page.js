@@ -34,11 +34,20 @@ export default function SalidasPage() {
 
   async function buscar(q) {
     setTexto(q); setPieza(null); setStock(null)
-    setResultados(q.trim() ? await buscarLocal(q) : [])
+    if (!q.trim()) { setResultados([]); return }
+    const locales = await buscarLocal(q)
+    setResultados(locales)
+    // Enriquecer con semántica si hay red y pocos resultados locales
+    if (online && locales.length < 4) {
+      const sem = await buscarSemantico(q).catch(() => null)
+      if (sem?.length) setResultados(sem)
+    }
   }
 
   async function elegir(p) {
-    setPieza(p); setResultados([])
+    setPieza(p)
+    setTexto(p.nombre)   // llena el input con el nombre → el usuario puede editarlo
+    setResultados([])
     try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
   }
 
@@ -226,7 +235,7 @@ export default function SalidasPage() {
         </div>
       </div>
 
-      {!pieza && resultados.length > 0 && (
+      {resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {resultados.map(({ pieza: p }) => (
             <li key={p.producto_id ?? p.id}>

@@ -52,12 +52,19 @@ export default function ConsignacionesPage() {
 
   async function buscar(q) {
     setTexto(q); setPieza(null)
-    setResultados(q.trim() ? await buscarLocal(q) : [])
+    if (!q.trim()) { setResultados([]); return }
+    const locales = await buscarLocal(q)
+    setResultados(locales)
+    if (online && locales.length < 4) {
+      const sem = await buscarSemantico(q).catch(() => null)
+      if (sem?.length) setResultados(sem)
+    }
   }
 
   async function elegir(p) {
-    setPieza(p); setResultados([])
+    setPieza(p)
     setTexto(p.nombre)
+    setResultados([])
   }
 
   function extraerRegex(texto) {
@@ -212,7 +219,7 @@ export default function ConsignacionesPage() {
           {grabando ? '🔴 Voz' : '🎤 Voz'}
         </Button>
 
-        {!pieza && resultados.length > 0 && (
+        {resultados.length > 0 && (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {resultados.map(({ pieza: p }) => (
               <li key={p.producto_id ?? p.id}>
