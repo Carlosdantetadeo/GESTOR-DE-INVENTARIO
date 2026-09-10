@@ -6,7 +6,7 @@
 // pendiente para los que no (FR-006/FR-007).
 import { useEffect, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
-import { canSupervise } from '../../../lib/auditoria/auth'
+import { canSupervise, isVendedor } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { crearIngreso, crearPiezaPendiente } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Input, Select, Card, Note, T } from '../../../lib/auditoria/ui'
@@ -117,7 +117,7 @@ export default function RecepcionPage() {
 
   if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
   if (!session.empresaId || !session.tiendaId) return <Page><p style={{ color: T.muted }}>Tu cuenta necesita empresa y sede asignadas.</p></Page>
-  if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>Solo supervisor o admin pueden recibir mercadería.</p></Page>
+  if (!canSupervise(session.rol) && !isVendedor(session.rol)) return <Page><p style={{ color: T.muted }}>Solo supervisor, admin o vendedor pueden recibir mercadería.</p></Page>
 
   return (
     <Page>

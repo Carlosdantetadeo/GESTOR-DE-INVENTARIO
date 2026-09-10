@@ -8,6 +8,20 @@ El **bot de Telegram** se usa solo para recibir el **reporte del día**.
 
 ---
 
+## Acceso rápido
+
+| | |
+|---|---|
+| **App** | https://dashboard.almacenero.digital |
+| **Ingresar** | https://dashboard.almacenero.digital/login — con tu **email** y **contraseña** |
+| **Empresa nueva** | https://dashboard.almacenero.digital/registro — genera tu usuario y una contraseña temporal `AD-XXXXXXXX` |
+| **Olvidé mi contraseña** | En `/login` → **"¿Olvidaste tu contraseña?"** → te llega un email con el link |
+| **No tengo usuario** | Te lo crea el **administrador** de tu empresa (Administración → Usuarios) |
+
+> Tu **usuario es tu email**. La contraseña la definís vos (o te la entrega el administrador). Nadie puede ver tu contraseña: si la perdés, se recupera con el link de `/login`.
+
+---
+
 ## 1. Registro de la empresa (administrador)
 
 ### Paso 1 — Crear tu empresa
