@@ -7,22 +7,90 @@ import { encryptApiKey } from './cryptoModelo'
 
 export const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
+// UUID fijo para el actor superadmin en la tabla de auditoría (único actor de este panel).
+const SUPERADMIN_ACTOR = '00000000-0000-0000-0000-000000000001'
+
 // Fallback mínimo por si la tabla todavía no fue migrada (evita romper la UI).
 const MODELOS_FALLBACK = [
-  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true, tiene_api_key: false, tipo_hosting: 'cloud', rol: 'conversacion', ultima_prueba_at: null, ultima_prueba_latencia_ms: null },
+  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', estado: 'activo', tiene_api_key: false, tipo_hosting: 'cloud', rol: 'conversacion', ultima_prueba_at: null, ultima_prueba_latencia_ms: null, empresas_count: 0 },
 ]
 
 export async function getModelosNlu({ soloActivos = false } = {}) {
   const supa = getAdminClient()
   let q = supa.from('modelos_nlu')
-    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, activo, tipo_hosting, rol, ultima_prueba_at, ultima_prueba_latencia_ms, created_at, api_key_enc')
+    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, estado, tipo_hosting, rol, ultima_prueba_at, ultima_prueba_latencia_ms, created_at, api_key_enc')
     .order('created_at', { ascending: true })
-  if (soloActivos) q = q.eq('activo', true)
+  if (soloActivos) q = q.eq('estado', 'activo')
   const { data, error } = await q
   if (error || !data) return MODELOS_FALLBACK
   if (!data.length) return MODELOS_FALLBACK
-  // Nunca exponer el blob cifrado al cliente; solo un flag de si hay key propia.
-  return data.map(({ api_key_enc, ...rest }) => ({ ...rest, tiene_api_key: !!api_key_enc }))
+
+  // Contar empresas por modelo en una sola query.
+  const { data: empresasRows } = await supa.from('empresas').select('nlu_model').not('nlu_model', 'is', null)
+  const countMap = {}
+  for (const e of empresasRows ?? []) {
+    if (e.nlu_model) countMap[e.nlu_model] = (countMap[e.nlu_model] || 0) + 1
+  }
+
+  return data.map(({ api_key_enc, ...rest }) => ({
+    ...rest,
+    tiene_api_key: !!api_key_enc,
+    empresas_count: countMap[rest.id] || 0,
+  }))
+}
+
+// Retorna las empresas que usan un modelo específico.
+export async function getEmpresasByModelo(modeloId) {
+  const supa = getAdminClient()
+  const { data } = await supa.from('empresas')
+    .select('id, nombre, rubro, activa')
+    .eq('nlu_model', modeloId)
+    .order('nombre', { ascending: true })
+  return data ?? []
+}
+
+// Reasigna todas las empresas de `fromId` al modelo `toId` en una transacción.
+// Registra en auditoría.
+export async function migrarEmpresasModelo(fromId, toId) {
+  const supa = getAdminClient()
+
+  // Verificar que el modelo destino existe y es activo.
+  const { data: dest } = await supa.from('modelos_nlu').select('id, label, estado').eq('id', toId).maybeSingle()
+  if (!dest) return { ok: false, message: 'El modelo destino no existe.' }
+  if (dest.estado === 'deprecado') return { ok: false, message: 'No se puede migrar a un modelo deprecado.' }
+
+  const { data: afectadas } = await supa.from('empresas').select('id').eq('nlu_model', fromId)
+  const ids = (afectadas ?? []).map(e => e.id)
+  if (!ids.length) return { ok: false, message: 'El modelo origen no tiene empresas asignadas.' }
+
+  const { error } = await supa.from('empresas').update({ nlu_model: toId }).eq('nlu_model', fromId)
+  if (error) return { ok: false, message: error.message }
+
+  await writeAuditLog(supa, 'migrar', fromId, null, { de: fromId, a: toId, empresas: ids.length })
+  return { ok: true, empresas: ids.length }
+}
+
+// Últimos N eventos de auditoría del catálogo NLU.
+export async function getAuditLog(limit = 200) {
+  const supa = getAdminClient()
+  const { data } = await supa.from('nlu_model_audit')
+    .select('id, accion, modelo_id, empresa_id, payload, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return data ?? []
+}
+
+// Escribe una fila en nlu_model_audit. Fire-and-forget: nunca bloquea la operación principal.
+async function writeAuditLog(supa, accion, modeloId, empresaId, payload) {
+  try {
+    await supa.from('nlu_model_audit').insert({
+      actor_id: SUPERADMIN_ACTOR,
+      accion,
+      modelo_id: modeloId ?? null,
+      empresa_id: empresaId ?? null,
+      payload: payload ?? null,
+    })
+  } catch { /* silencioso */ }
 }
 
 // Etiqueta legible de un modelo. Recibe el catálogo ya cargado (las páginas son
@@ -79,9 +147,11 @@ export async function crearModelo(input) {
     badge: badge?.trim() || null,
     tipo_hosting: tipoHosting,
     rol: rolModelo,
+    estado: 'activo',
     ...(api_key_enc ? { api_key_enc } : {}),
   })
   if (error) return { ok: false, message: error.code === '23505' ? 'Ya existe un modelo con ese id.' : error.message }
+  await writeAuditLog(supa, 'crear', finalId, null, { label: label.trim(), proveedor })
   return { ok: true, id: finalId }
 }
 
@@ -98,7 +168,10 @@ export async function actualizarModelo(id, patch) {
   if (patch.costo_in !== undefined)     allowed.costo_in = Number(patch.costo_in) || 0
   if (patch.costo_out !== undefined)    allowed.costo_out = Number(patch.costo_out) || 0
   if (patch.badge !== undefined)        allowed.badge = patch.badge?.trim() || null
-  if (patch.activo !== undefined)       allowed.activo = !!patch.activo
+  if (patch.estado !== undefined) {
+    const ESTADOS = ['activo', 'inactivo', 'deprecado']
+    if (ESTADOS.includes(patch.estado)) allowed.estado = patch.estado
+  }
   if (patch.tipo_hosting !== undefined) {
     const TIPOS = ['cloud', 'local', 'self_hosted']
     if (TIPOS.includes(patch.tipo_hosting)) allowed.tipo_hosting = patch.tipo_hosting
@@ -118,6 +191,8 @@ export async function actualizarModelo(id, patch) {
   }
   const { error } = await supa.from('modelos_nlu').update(allowed).eq('id', id)
   if (error) return { ok: false, message: error.message }
+  const accion = allowed.estado ?? 'editar'
+  await writeAuditLog(supa, accion, id, null, { campos: Object.keys(allowed) })
   return { ok: true }
 }
 
@@ -130,6 +205,7 @@ export async function eliminarModelo(id) {
   }
   const { error } = await supa.from('modelos_nlu').delete().eq('id', id)
   if (error) return { ok: false, message: error.message }
+  await writeAuditLog(supa, 'eliminar', id, null, null)
   return { ok: true }
 }
 

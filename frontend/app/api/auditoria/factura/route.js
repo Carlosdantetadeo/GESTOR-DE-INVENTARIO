@@ -23,7 +23,7 @@ export async function POST(request) {
 
   const base64 = Buffer.from(await imagen.arrayBuffer()).toString('base64')
   const dataUrl = `data:${imagen.type || 'image/jpeg'};base64,${base64}`
-  const model = process.env.GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct'
+  const model = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b'
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -31,6 +31,7 @@ export async function POST(request) {
     body: JSON.stringify({
       model,
       temperature: 0,
+      max_tokens: 1024,
       messages: [
         {
           role: 'user',
@@ -44,7 +45,9 @@ export async function POST(request) {
   })
 
   if (!res.ok) {
-    return NextResponse.json({ error: 'groq_error' }, { status: 502 })
+    const errBody = await res.text().catch(() => '')
+    console.error('[factura] groq error', res.status, errBody)
+    return NextResponse.json({ error: 'groq_error', detail: errBody, groq_status: res.status }, { status: 502 })
   }
 
   const data = await res.json()

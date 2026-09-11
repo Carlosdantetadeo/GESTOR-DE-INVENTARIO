@@ -164,7 +164,9 @@ export default function SalidasPage() {
       fd.append('imagen', blob, 'boleta.jpg')
       const res = await fetch('/api/auditoria/factura', { method: 'POST', body: fd })
       if (!res.ok) {
-        setAviso(res.status === 501 ? 'La lectura de fotos no está configurada.' : 'No se pudo leer la foto.')
+        if (res.status === 501) { setAviso('La lectura de fotos no está configurada.'); return }
+        const err = await res.json().catch(() => ({}))
+        setAviso(`No se pudo leer la foto. (${err.groq_status ?? res.status}${err.detail ? ': ' + err.detail.slice(0, 300) : ''})`)
         return
       }
       const { items } = await res.json()
