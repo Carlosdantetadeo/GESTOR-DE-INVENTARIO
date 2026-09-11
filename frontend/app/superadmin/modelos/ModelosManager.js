@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, Power, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, Power, ChevronDown, ChevronUp, Zap, CheckCircle, XCircle, Loader } from 'lucide-react'
 
 const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
@@ -29,6 +29,8 @@ const th = { padding: '9px 12px', textAlign: 'left', fontWeight: 600, color: 'hs
 const td = { padding: '10px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }
 const hint = { margin: '3px 0 0', fontSize: '0.72rem', color: 'hsl(var(--text-muted))', fontWeight: 400 }
 const errInline = { margin: '3px 0 0', fontSize: '0.72rem', color: 'hsl(var(--color-gasto))', fontWeight: 400 }
+
+const SPIN_STYLE = `@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`
 
 const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', base_url: '', costo_in: '', costo_out: '', badge: '', api_key: '', tipo_hosting: 'cloud', rol: 'conversacion' }
 
@@ -58,6 +60,9 @@ export default function ModelosManager({ inicial }) {
   const [form, setForm]               = useState(VACIO)
   const [formAbierto, setFormAbierto] = useState(false)
   const [saving, setSaving]           = useState(false)
+  const [testing, setTesting]         = useState(false)   // prueba en el form
+  const [testingRowId, setTestingRowId] = useState(null)  // prueba en la tabla
+  const [testResult, setTestResult]   = useState(null)    // { ok, latencia_ms, error, validFor }
   const [errorForm, setErrorForm]     = useState('')
   const [errApiId, setErrApiId]       = useState('')
   const [busyId, setBusyId]           = useState(null)
@@ -68,9 +73,58 @@ export default function ModelosManager({ inicial }) {
     if (data.ok) setModelos(data.modelos)
   }
 
+  // Clave que identifica la combinación que fue probada. Si proveedor o api_model_id
+  // cambian, el resultado anterior ya no es válido.
+  const testKey = (f) => `${f.proveedor}|${f.api_model_id.trim()}`
+
   const set = (k) => (e) => {
-    setForm(f => ({ ...f, [k]: e.target.value }))
+    setForm(f => {
+      const next = { ...f, [k]: e.target.value }
+      // Invalida el resultado de prueba si cambia proveedor o api_model_id.
+      if (k === 'proveedor' || k === 'api_model_id') setTestResult(null)
+      return next
+    })
     if (k === 'api_model_id') setErrApiId('')
+  }
+
+  const probarConexion = async () => {
+    const apiErr = validarApiModelId(form.api_model_id)
+    if (apiErr) { setErrApiId(apiErr); return }
+    setTesting(true); setTestResult(null); setErrorForm('')
+    try {
+      const res = await fetch('/api/superadmin/modelos/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          proveedor: form.proveedor,
+          api_model_id: form.api_model_id.trim(),
+          api_key: form.api_key.trim() || undefined,
+          base_url: form.base_url.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      setTestResult({ ...data, validFor: testKey(form) })
+    } catch {
+      setTestResult({ ok: false, error: 'Error de conexión.', validFor: testKey(form) })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const probarFila = async (m) => {
+    setTestingRowId(m.id)
+    try {
+      const res = await fetch('/api/superadmin/modelos/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proveedor: m.proveedor, api_model_id: m.api_model_id, base_url: m.base_url || undefined, modelo_id: m.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (data.ok) await refrescar()
+      else setErrorForm(`Prueba fallida para "${m.label}": ${data.error || 'Error desconocido.'}`)
+    } finally {
+      setTestingRowId(null)
+    }
   }
 
   const crear = async (e) => {
@@ -78,6 +132,13 @@ export default function ModelosManager({ inicial }) {
 
     const apiErr = validarApiModelId(form.api_model_id)
     if (apiErr) { setErrApiId(apiErr); return }
+
+    // Verificar que la prueba de conexión fue exitosa para esta combinación
+    const testValido = testResult?.ok && testResult.validFor === testKey(form)
+    if (!testValido) {
+      setErrorForm('Probá la conexión antes de guardar el modelo.')
+      return
+    }
 
     // Verificar unicidad del slug en cliente antes de llamar al servidor
     const slug = slugify(form.id || form.label)
@@ -139,6 +200,7 @@ export default function ModelosManager({ inicial }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <style>{SPIN_STYLE}</style>
 
       {/* Botón para abrir/cerrar el formulario */}
       <div>
@@ -311,14 +373,39 @@ export default function ModelosManager({ inicial }) {
 
           {errorForm && <span style={{ fontSize: '0.82rem', color: 'hsl(var(--color-gasto))' }}>⚠️ {errorForm}</span>}
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn btn-primary"
-            style={{ alignSelf: 'flex-start', padding: '9px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Plus size={15} /> {saving ? 'Agregando…' : 'Agregar modelo'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={probarConexion}
+              disabled={testing || !form.api_model_id.trim()}
+              className="btn btn-secondary"
+              style={{ padding: '9px 16px', display: 'flex', alignItems: 'center', gap: '7px' }}
+            >
+              {testing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Zap size={14} />}
+              {testing ? 'Probando…' : 'Probar conexión'}
+            </button>
+
+            {testResult && (
+              testResult.ok && testResult.validFor === testKey(form)
+                ? <span style={{ fontSize: '0.82rem', color: 'hsl(142 70% 40%)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <CheckCircle size={14} /> Conexión OK · {testResult.latencia_ms} ms
+                    {testResult.modelo_confirmado && <span style={{ color: 'hsl(var(--text-muted))' }}>({testResult.modelo_confirmado})</span>}
+                  </span>
+                : <span style={{ fontSize: '0.82rem', color: 'hsl(var(--color-gasto))', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <XCircle size={14} /> {testResult.error || 'Falló la conexión.'}
+                  </span>
+            )}
+
+            <button
+              type="submit"
+              disabled={saving || !(testResult?.ok && testResult.validFor === testKey(form))}
+              className="btn btn-primary"
+              style={{ padding: '9px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              title={!(testResult?.ok && testResult.validFor === testKey(form)) ? 'Probá la conexión antes de guardar' : ''}
+            >
+              <Plus size={15} /> {saving ? 'Agregando…' : 'Agregar modelo'}
+            </button>
+          </div>
         </form>
       )}
 
@@ -336,6 +423,7 @@ export default function ModelosManager({ inicial }) {
               <th style={th}>Costo entrada</th>
               <th style={th}>Costo salida</th>
               <th style={th}>Estado</th>
+              <th style={th}>Última prueba</th>
               <th style={th}></th>
             </tr>
           </thead>
@@ -368,13 +456,33 @@ export default function ModelosManager({ inicial }) {
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{formatCosto(m.costo_in)}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{formatCosto(m.costo_out)}</td>
                 <td style={td}>{m.activo ? '🟢 Activo' : '⚪ Inactivo'}</td>
-                <td style={{ ...td, textAlign: 'right' }}>
+                <td style={{ ...td, fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
+                  {m.ultima_prueba_at
+                    ? <span title={new Date(m.ultima_prueba_at).toLocaleString('es-PE')}>
+                        {m.ultima_prueba_latencia_ms} ms · {new Date(m.ultima_prueba_at).toLocaleDateString('es-PE')}
+                      </span>
+                    : '—'
+                  }
+                </td>
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button
+                    onClick={() => probarFila(m)}
+                    disabled={testingRowId === m.id}
+                    title="Probar conexión"
+                    className="btn btn-secondary"
+                    style={{ padding: '5px 10px', marginRight: '4px' }}
+                  >
+                    {testingRowId === m.id
+                      ? <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                      : <Zap size={12} />
+                    }
+                  </button>
                   <button
                     onClick={() => togglear(m)}
                     disabled={busyId === m.id}
                     title={m.activo ? 'Desactivar' : 'Activar'}
                     className="btn btn-secondary"
-                    style={{ padding: '5px 10px', marginRight: '6px' }}
+                    style={{ padding: '5px 10px', marginRight: '4px' }}
                   >
                     <Power size={13} />
                   </button>

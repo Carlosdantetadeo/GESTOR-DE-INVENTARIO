@@ -9,13 +9,13 @@ export const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
 // Fallback mínimo por si la tabla todavía no fue migrada (evita romper la UI).
 const MODELOS_FALLBACK = [
-  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true, tiene_api_key: false, tipo_hosting: 'cloud', rol: 'conversacion' },
+  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true, tiene_api_key: false, tipo_hosting: 'cloud', rol: 'conversacion', ultima_prueba_at: null, ultima_prueba_latencia_ms: null },
 ]
 
 export async function getModelosNlu({ soloActivos = false } = {}) {
   const supa = getAdminClient()
   let q = supa.from('modelos_nlu')
-    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, activo, tipo_hosting, rol, created_at, api_key_enc')
+    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, activo, tipo_hosting, rol, ultima_prueba_at, ultima_prueba_latencia_ms, created_at, api_key_enc')
     .order('created_at', { ascending: true })
   if (soloActivos) q = q.eq('activo', true)
   const { data, error } = await q
