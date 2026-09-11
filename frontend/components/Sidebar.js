@@ -38,7 +38,7 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
   }, [])
 
   const menuItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Movimientos', path: '/movimientos', icon: ArrowLeftRight },
     { name: 'Inventario', path: '/inventario', icon: Package },
     { name: 'Reportes', path: '/reportes', icon: BarChart3 },

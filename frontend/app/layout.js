@@ -2,13 +2,13 @@ import './globals.css'
 import AppShell from '../components/AppShell'
 
 export const metadata = {
-  metadataBase: new URL('https://dashboard.almacenero.digital'),
+  metadataBase: new URL('https://almacenero.digital'),
   title: 'Almacenero Digital',
   description: 'Control de inventario y ventas para tu negocio',
   openGraph: {
     title: 'Almacenero Digital',
     description: 'Control de inventario y ventas para tu negocio',
-    url: 'https://dashboard.almacenero.digital',
+    url: 'https://almacenero.digital',
     siteName: 'Almacenero Digital',
     type: 'website',
     locale: 'es_PE',

@@ -8,7 +8,7 @@ import Sidebar from './Sidebar'
 export default function AppShell({ children, empresa }) {
   const pathname = usePathname()
 
-  if (pathname?.startsWith('/superadmin') || pathname?.startsWith('/auditoria')) {
+  if (pathname === '/' || pathname?.startsWith('/superadmin') || pathname?.startsWith('/auditoria')) {
     return <main style={{ minHeight: '100vh' }}>{children}</main>
   }
 
