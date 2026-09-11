@@ -726,6 +726,15 @@ async function procesarRegistro(
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
 
+  // Fase 5: verificar límite de gasto antes de llamar al proveedor.
+  if (empresaId) {
+    const limite = await checkSpendLimit(empresaId, chatId)
+    if (limite.accion === 'bloquear') return
+    if (limite.accion === 'degradar' && limite.modeloDegradado) {
+      Object.assign(modelo, await resolverModelo(limite.modeloDegradado))
+    }
+  }
+
   const nlu = await callNLU(modelo, construirSystemPrompt(rubro, listaProd, listaTienda), transcript)
 
   // ── Reporte (decisión #9: vendedor también, scoped a su sede) ──
@@ -1421,6 +1430,16 @@ async function handleFotoTipo(cb: CallbackQuery) {
   ])
   const listaProd   = (productos ?? []).map(p => `${p.id}|${p.nombre}`).join('\n')
   const listaTienda = (tiendas   ?? []).map(t => `${t.id}|${t.nombre}`).join('\n')
+
+  // Fase 5: verificar límite de gasto antes de llamar al proveedor.
+  if (pend.empresa_id) {
+    const limite = await checkSpendLimit(pend.empresa_id, chatId)
+    if (limite.accion === 'bloquear') return
+    if (limite.accion === 'degradar' && limite.modeloDegradado) {
+      Object.assign(modelo, await resolverModelo(limite.modeloDegradado))
+    }
+  }
+
   const nlu = await callNLU(modelo, construirSystemPrompt(rubro, listaProd, listaTienda), prose)
   logConsumo(pend.empresa_id, modelo, nlu.tokensIn, nlu.tokensOut, 'foto').catch(console.error)
 
@@ -2085,6 +2104,71 @@ function classifyNlu(content: string | undefined, tokensIn: number, tokensOut: n
     tipo_explicito: obj.tipo_explicito === true,
     confianza: typeof obj.confianza === 'number' ? obj.confianza : (obj.tipo_explicito === true ? 1 : 0),
     items,
+  }
+}
+
+// ─── Límites de gasto (Fase 5) ───────────────────────────────────────────────
+
+// Resultado de checkSpendLimit:
+//   'ok'      → puede llamar al proveedor con el modelo original
+//   'degradar' → debe usar modelo_degradado_id en su lugar
+//   'bloquear' → no llamar al proveedor; informar al usuario
+type LimiteAccion = 'ok' | 'degradar' | 'bloquear'
+
+async function checkSpendLimit(empresaId: string, chatId: number): Promise<{ accion: LimiteAccion; modeloDegradado?: string }> {
+  try {
+    const { data: limite } = await supabase
+      .from('nlu_spend_limits')
+      .select('limite_mensual_usd, accion_al_superar, modelo_degradado_id, alerta_al_pct')
+      .eq('empresa_id', empresaId)
+      .maybeSingle()
+
+    if (!limite) return { accion: 'ok' }
+
+    const ahora = new Date()
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString()
+
+    const { data: agg } = await supabase
+      .from('consumo_ia')
+      .select('costo_usd')
+      .eq('empresa_id', empresaId)
+      .gte('created_at', inicioMes)
+
+    const gastoMes = (agg ?? []).reduce((s, r) => s + Number(r.costo_usd), 0)
+    const pct = (gastoMes / Number(limite.limite_mensual_usd)) * 100
+
+    // Alerta (no bloquea)
+    if (pct >= limite.alerta_al_pct && pct < 100) {
+      tg('sendMessage', {
+        chat_id: chatId,
+        text: `⚠️ Tu empresa lleva el ${pct.toFixed(0)}% del límite mensual de IA ($${gastoMes.toFixed(2)} / $${limite.limite_mensual_usd}).`,
+      }).catch(() => {})
+    }
+
+    if (pct < 100) return { accion: 'ok' }
+
+    // Límite superado
+    if (limite.accion_al_superar === 'bloquear') {
+      await tg('sendMessage', {
+        chat_id: chatId,
+        text: `🚫 Tu empresa alcanzó el límite mensual de IA ($${limite.limite_mensual_usd}). El procesamiento por IA está suspendido hasta el próximo mes.`,
+      })
+      return { accion: 'bloquear' }
+    }
+
+    if (limite.accion_al_superar === 'degradar' && limite.modelo_degradado_id) {
+      return { accion: 'degradar', modeloDegradado: limite.modelo_degradado_id }
+    }
+
+    // solo_avisar
+    tg('sendMessage', {
+      chat_id: chatId,
+      text: `⚠️ Límite mensual de IA superado ($${gastoMes.toFixed(2)} / $${limite.limite_mensual_usd}). El registro continúa pero revisa tu plan.`,
+    }).catch(() => {})
+    return { accion: 'ok' }
+  } catch {
+    // Ante fallo de la query, nunca bloquear al usuario.
+    return { accion: 'ok' }
   }
 }
 

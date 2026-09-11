@@ -354,6 +354,62 @@ export async function updateEmpresaModelo(empresaId, modelo) {
   return { ok: true }
 }
 
+// ─── Consumo y límites de gasto ──────────────────────────────────────────────
+
+// Retorna consumo agregado por empresa para el mes indicado (YYYY-MM) o el mes actual.
+export async function getConsumoResumen(mes) {
+  const supa = getAdminClient()
+  const ahora = new Date()
+  const mesStr = mes || `${ahora.getUTCFullYear()}-${String(ahora.getUTCMonth() + 1).padStart(2, '0')}`
+  const [year, month] = mesStr.split('-').map(Number)
+  const desde = new Date(Date.UTC(year, month - 1, 1)).toISOString()
+  const hasta  = new Date(Date.UTC(year, month, 1)).toISOString()
+
+  const [{ data: empresas }, { data: consumoRows }, { data: limites }] = await Promise.all([
+    supa.from('empresas').select('id, nombre, nlu_model, activa').order('nombre'),
+    supa.from('consumo_ia').select('empresa_id, tokens_entrada, tokens_salida, costo_usd')
+      .gte('created_at', desde).lt('created_at', hasta),
+    supa.from('nlu_spend_limits').select('*'),
+  ])
+
+  const consumoMap = {}
+  for (const c of consumoRows ?? []) {
+    if (!consumoMap[c.empresa_id]) consumoMap[c.empresa_id] = { tokens: 0, costo: 0 }
+    consumoMap[c.empresa_id].tokens += (c.tokens_entrada ?? 0) + (c.tokens_salida ?? 0)
+    consumoMap[c.empresa_id].costo  += Number(c.costo_usd ?? 0)
+  }
+
+  const limitesMap = {}
+  for (const l of limites ?? []) limitesMap[l.empresa_id] = l
+
+  return (empresas ?? []).map(e => ({
+    id:               e.id,
+    nombre:           e.nombre,
+    nluModel:         e.nlu_model,
+    activa:           e.activa !== false,
+    tokensMes:        consumoMap[e.id]?.tokens ?? 0,
+    costoMes:         consumoMap[e.id]?.costo  ?? 0,
+    limiteMensual:    limitesMap[e.id]?.limite_mensual_usd   ?? null,
+    accionAlSuperar:  limitesMap[e.id]?.accion_al_superar    ?? null,
+    alertaAlPct:      limitesMap[e.id]?.alerta_al_pct        ?? 80,
+    modeloDegradadoId: limitesMap[e.id]?.modelo_degradado_id ?? null,
+  }))
+}
+
+// Crea o actualiza el límite de gasto de una empresa.
+export async function upsertSpendLimit(empresaId, datos) {
+  const supa = getAdminClient()
+  const allowed = {}
+  if (datos.limite_mensual_usd !== undefined)  allowed.limite_mensual_usd  = Number(datos.limite_mensual_usd)
+  if (datos.accion_al_superar  !== undefined)  allowed.accion_al_superar   = datos.accion_al_superar
+  if (datos.modelo_degradado_id !== undefined) allowed.modelo_degradado_id = datos.modelo_degradado_id || null
+  if (datos.alerta_al_pct !== undefined)       allowed.alerta_al_pct       = Number(datos.alerta_al_pct)
+  const { error } = await supa.from('nlu_spend_limits')
+    .upsert({ empresa_id: empresaId, ...allowed }, { onConflict: 'empresa_id' })
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
+}
+
 // Suspensión reversible (sprint 021). `activa = false` bloquea login de clientes
 // y procesamiento del bot. `suspendida_at` queda como auditoría.
 export async function setEmpresaActiva(empresaId, activa) {

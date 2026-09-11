@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, Cpu, LogOut, ShieldCheck } from 'lucide-react'
+import { Building2, Cpu, LogOut, ShieldCheck, BarChart2 } from 'lucide-react'
 
 export default function SuperadminChrome({ children }) {
   const pathname = usePathname()
@@ -13,6 +13,7 @@ export default function SuperadminChrome({ children }) {
 
   const isEmpresas = pathname === '/superadmin'
   const isModelos  = pathname.startsWith('/superadmin/modelos')
+  const isConsumo  = pathname.startsWith('/superadmin/consumo')
 
   const navLinkStyle = (active) => ({
     display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px',
@@ -62,6 +63,7 @@ export default function SuperadminChrome({ children }) {
         <nav className="sa-topbar-nav">
           <Link href="/superadmin" style={navLinkStyle(isEmpresas)}><Building2 size={15} /> Empresas</Link>
           <Link href="/superadmin/modelos" style={navLinkStyle(isModelos)}><Cpu size={15} /> Modelos</Link>
+          <Link href="/superadmin/consumo" style={navLinkStyle(isConsumo)}><BarChart2 size={15} /> Consumo</Link>
           <a href="/api/superadmin/logout" style={{ ...navLinkStyle(false), color: 'hsl(var(--color-gasto))' }}><LogOut size={15} /></a>
         </nav>
       </header>
@@ -82,6 +84,7 @@ export default function SuperadminChrome({ children }) {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
             <Link href="/superadmin" style={navLinkStyle(isEmpresas)}><Building2 size={16} /> Empresas</Link>
             <Link href="/superadmin/modelos" style={navLinkStyle(isModelos)}><Cpu size={16} /> Modelos</Link>
+            <Link href="/superadmin/consumo" style={navLinkStyle(isConsumo)}><BarChart2 size={16} /> Consumo</Link>
           </nav>
 
           <a href="/api/superadmin/logout" className="btn btn-secondary" style={{ width: '100%', padding: '9px', fontSize: '0.8rem', textDecoration: 'none', justifyContent: 'center' }}>
