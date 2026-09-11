@@ -32,10 +32,21 @@ export async function getModelosNlu({ soloActivos = false } = {}) {
     if (e.nlu_model) countMap[e.nlu_model] = (countMap[e.nlu_model] || 0) + 1
   }
 
+  // Precio vigente: el registro más reciente por modelo.
+  const { data: pricingRows } = await supa.from('nlu_model_pricing')
+    .select('modelo_id, vigente_desde, fuente')
+    .order('vigente_desde', { ascending: false })
+  const pricingMap = {}
+  for (const p of pricingRows ?? []) {
+    if (!pricingMap[p.modelo_id]) pricingMap[p.modelo_id] = p
+  }
+
   return data.map(({ api_key_enc, ...rest }) => ({
     ...rest,
     tiene_api_key: !!api_key_enc,
     empresas_count: countMap[rest.id] || 0,
+    precio_vigente_desde: pricingMap[rest.id]?.vigente_desde ?? null,
+    precio_fuente: pricingMap[rest.id]?.fuente ?? null,
   }))
 }
 
@@ -152,6 +163,17 @@ export async function crearModelo(input) {
   })
   if (error) return { ok: false, message: error.code === '23505' ? 'Ya existe un modelo con ese id.' : error.message }
   await writeAuditLog(supa, 'crear', finalId, null, { label: label.trim(), proveedor })
+  // Registrar precio inicial en el historial.
+  const ci = Number(costo_in) || 0
+  const co = Number(costo_out) || 0
+  if (ci > 0 || co > 0) {
+    supa.from('nlu_model_pricing').insert({
+      modelo_id: finalId,
+      costo_in_por_token: ci,
+      costo_out_por_token: co,
+      fuente: input.fuente?.trim() || null,
+    }).catch(() => {})
+  }
   return { ok: true, id: finalId }
 }
 
@@ -193,6 +215,15 @@ export async function actualizarModelo(id, patch) {
   if (error) return { ok: false, message: error.message }
   const accion = allowed.estado ?? 'editar'
   await writeAuditLog(supa, accion, id, null, { campos: Object.keys(allowed) })
+  // Si se actualizaron ambos costos, registrar en historial de precios.
+  if (allowed.costo_in !== undefined && allowed.costo_out !== undefined) {
+    supa.from('nlu_model_pricing').insert({
+      modelo_id: id,
+      costo_in_por_token: allowed.costo_in,
+      costo_out_por_token: allowed.costo_out,
+      fuente: patch.fuente?.trim() || null,
+    }).catch(() => {})
+  }
   return { ok: true }
 }
 

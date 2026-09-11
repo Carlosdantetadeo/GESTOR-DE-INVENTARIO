@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, ChevronUp, Zap, CheckCircle, XCircle, Loader, X, ArrowRightLeft } from 'lucide-react'
+import { Plus, Trash2, ChevronUp, Zap, CheckCircle, XCircle, Loader, X, ArrowRightLeft, AlertTriangle, DollarSign } from 'lucide-react'
 
 const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
@@ -38,7 +38,11 @@ const errInline = { margin: '3px 0 0', fontSize: '0.72rem', color: 'hsl(var(--co
 
 const SPIN_STYLE = `@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`
 
-const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', base_url: '', costo_in: '', costo_out: '', badge: '', api_key: '', tipo_hosting: 'cloud', rol: 'conversacion' }
+// costo_in / costo_out en el form están en USD por 1M tokens (lo que publican los proveedores).
+// Se convierten a USD por token antes de enviar al servidor.
+const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', base_url: '', costo_in: '', costo_out: '', badge: '', api_key: '', tipo_hosting: 'cloud', rol: 'conversacion', fuente: '' }
+
+const PRECIO_VACIO = { costo_in: '', costo_out: '', fuente: '' }
 
 function slugify(s) {
   return String(s || '').trim().toLowerCase()
@@ -57,7 +61,14 @@ function validarApiModelId(val) {
 function formatCosto(v) {
   const n = Number(v)
   if (!n) return '—'
-  return `$${(n * 1_000_000).toFixed(4)} / 1M`
+  return `$${(n * 1_000_000).toFixed(2)} / 1M`
+}
+
+const MS_90_DIAS = 90 * 24 * 60 * 60 * 1000
+
+function precioVencido(iso) {
+  if (!iso) return false
+  return Date.now() - new Date(iso).getTime() > MS_90_DIAS
 }
 
 function formatFecha(iso) {
@@ -79,6 +90,8 @@ export default function ModelosManager({ inicial }) {
 
   // Phase 3
   const [tab, setTab]                   = useState('modelos')
+  const [editPrecio, setEditPrecio]     = useState(null) // { modelo, form: { costo_in, costo_out, fuente } }
+  const [savingPrecio, setSavingPrecio] = useState(false)
   const [auditLog, setAuditLog]         = useState(null)
   const [cargandoAudit, setCargandoAudit] = useState(false)
   const [panelEmpresas, setPanelEmpresas] = useState(null) // { modeloId, label, empresas }
@@ -157,11 +170,18 @@ export default function ModelosManager({ inicial }) {
       return
     }
     setSaving(true); setErrorForm('')
+    // Convertir costos de USD/1M a USD/token antes de enviar.
+    const payload = {
+      ...form,
+      api_model_id: form.api_model_id.trim(),
+      costo_in:  (parseFloat(form.costo_in)  || 0) / 1_000_000,
+      costo_out: (parseFloat(form.costo_out) || 0) / 1_000_000,
+    }
     try {
       const res = await fetch('/api/superadmin/modelos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, api_model_id: form.api_model_id.trim() }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok && data.ok) { setForm(VACIO); setFormAbierto(false); setTestResult(null); await refrescar() }
@@ -259,6 +279,25 @@ export default function ModelosManager({ inicial }) {
     if (t === 'auditoria' && auditLog === null) cargarAuditLog()
   }
 
+  const guardarPrecio = async () => {
+    if (!editPrecio) return
+    setSavingPrecio(true)
+    try {
+      const ci = (parseFloat(editPrecio.form.costo_in)  || 0) / 1_000_000
+      const co = (parseFloat(editPrecio.form.costo_out) || 0) / 1_000_000
+      const res = await fetch(`/api/superadmin/modelos/${editPrecio.modelo.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ costo_in: ci, costo_out: co, fuente: editPrecio.form.fuente.trim() || null }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok) { setEditPrecio(null); await refrescar() }
+      else setErrorForm(data.message || 'No se pudo actualizar el precio.')
+    } finally {
+      setSavingPrecio(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <style>{SPIN_STYLE}</style>
@@ -289,6 +328,51 @@ export default function ModelosManager({ inicial }) {
                 onClick={confirmarEliminar}
               >
                 {busyId === confirmDelete?.modelo.id ? 'Eliminando…' : 'Eliminar definitivamente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de actualización de precio */}
+      {editPrecio && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="glass-card" style={{ maxWidth: '380px', width: '90%', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+              Actualizar precio — {editPrecio.modelo.label}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <Campo label="Entrada (USD / 1M tokens)">
+                <input className="input-field" type="number" step="0.01" min="0" autoFocus
+                  value={editPrecio.form.costo_in}
+                  onChange={e => setEditPrecio(ep => ({ ...ep, form: { ...ep.form, costo_in: e.target.value } }))}
+                />
+                <p style={hint}>Ej: 0.59</p>
+              </Campo>
+              <Campo label="Salida (USD / 1M tokens)">
+                <input className="input-field" type="number" step="0.01" min="0"
+                  value={editPrecio.form.costo_out}
+                  onChange={e => setEditPrecio(ep => ({ ...ep, form: { ...ep.form, costo_out: e.target.value } }))}
+                />
+                <p style={hint}>Ej: 0.79</p>
+              </Campo>
+            </div>
+            <Campo label="Fuente (URL o nota, opcional)">
+              <input className="input-field" placeholder="https://groq.com/pricing"
+                value={editPrecio.form.fuente}
+                onChange={e => setEditPrecio(ep => ({ ...ep, form: { ...ep.form, fuente: e.target.value } }))}
+              />
+            </Campo>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setEditPrecio(null)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                disabled={savingPrecio || (!editPrecio.form.costo_in && !editPrecio.form.costo_out)}
+                onClick={guardarPrecio}
+                style={{ display: 'flex', alignItems: 'center', gap: '7px' }}
+              >
+                {savingPrecio ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <DollarSign size={13} />}
+                {savingPrecio ? 'Guardando…' : 'Guardar precio'}
               </button>
             </div>
           </div>
@@ -437,14 +521,19 @@ export default function ModelosManager({ inicial }) {
               <p style={hint}>Se genera del nombre si se deja vacío.</p>
             </Campo>
 
-            <Campo label="Costo entrada (USD/token)">
-              <input className="input-field" type="number" name="nlu_model_costo_in" autoComplete="off" step="0.000000001" min="0" value={form.costo_in} onChange={set('costo_in')} />
-              <p style={hint}>Ej: 0.00000059 (Groq Llama 3.3)</p>
+            <Campo label="Costo entrada (USD / 1M tokens)">
+              <input className="input-field" type="number" name="nlu_model_costo_in" autoComplete="off" step="0.01" min="0" value={form.costo_in} onChange={set('costo_in')} />
+              <p style={hint}>Ej: 0.59 (Groq Llama 3.3)</p>
             </Campo>
 
-            <Campo label="Costo salida (USD/token)">
-              <input className="input-field" type="number" name="nlu_model_costo_out" autoComplete="off" step="0.000000001" min="0" value={form.costo_out} onChange={set('costo_out')} />
-              <p style={hint}>Ej: 0.00000079 (Groq Llama 3.3)</p>
+            <Campo label="Costo salida (USD / 1M tokens)">
+              <input className="input-field" type="number" name="nlu_model_costo_out" autoComplete="off" step="0.01" min="0" value={form.costo_out} onChange={set('costo_out')} />
+              <p style={hint}>Ej: 0.79 (Groq Llama 3.3)</p>
+            </Campo>
+
+            <Campo label="Fuente del precio (URL o nota, opcional)">
+              <input className="input-field" name="nlu_model_fuente" autoComplete="off" data-1p-ignore data-lpignore="true" value={form.fuente} onChange={set('fuente')} />
+              <p style={hint}>Ej: https://groq.com/pricing</p>
             </Campo>
 
             <Campo label="Badge (opcional)">
@@ -541,6 +630,7 @@ export default function ModelosManager({ inicial }) {
                 <th style={th}>API key</th>
                 <th style={th}>Costo entrada</th>
                 <th style={th}>Costo salida</th>
+                <th style={th}>Precio desde</th>
                 <th style={th}>Estado</th>
                 <th style={th}>Última prueba</th>
                 <th style={th}></th>
@@ -548,7 +638,7 @@ export default function ModelosManager({ inicial }) {
             </thead>
             <tbody>
               {modelos.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'center', padding: '28px' }} colSpan={11}>Sin modelos.</td></tr>
+                <tr><td style={{ ...td, textAlign: 'center', padding: '28px' }} colSpan={12}>Sin modelos.</td></tr>
               ) : modelos.map((m, i) => {
                 const hostingBadge = HOSTING_BADGES[m.tipo_hosting] ?? HOSTING_BADGES.cloud
                 const estadoBadge  = ESTADO_BADGES[m.estado] ?? ESTADO_BADGES.inactivo
@@ -586,6 +676,18 @@ export default function ModelosManager({ inicial }) {
                     <td style={td}>{m.tiene_api_key ? '🔑 Propia' : '— global'}</td>
                     <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{formatCosto(m.costo_in)}</td>
                     <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{formatCosto(m.costo_out)}</td>
+                    <td style={{ ...td, fontSize: '0.75rem', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>
+                      {m.precio_vigente_desde ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          {new Date(m.precio_vigente_desde).toLocaleDateString('es-PE')}
+                          {precioVencido(m.precio_vigente_desde) && (
+                            <span title="Precio sin verificar hace más de 90 días" style={{ color: 'hsl(38 90% 45%)', cursor: 'help', display: 'flex' }}>
+                              <AlertTriangle size={12} />
+                            </span>
+                          )}
+                        </span>
+                      ) : '—'}
+                    </td>
                     <td style={td}>
                       <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: estadoBadge.bg, color: estadoBadge.color }}>
                         {estadoBadge.label}
@@ -600,6 +702,14 @@ export default function ModelosManager({ inicial }) {
                       }
                     </td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button
+                        onClick={() => setEditPrecio({ modelo: m, form: { costo_in: (m.costo_in * 1_000_000).toFixed(2), costo_out: (m.costo_out * 1_000_000).toFixed(2), fuente: m.precio_fuente || '' } })}
+                        title="Actualizar precio"
+                        className="btn btn-secondary"
+                        style={{ padding: '5px 10px', marginRight: '4px', color: precioVencido(m.precio_vigente_desde) ? 'hsl(38 90% 45%)' : undefined }}
+                      >
+                        <DollarSign size={12} />
+                      </button>
                       <button
                         onClick={() => probarFila(m)}
                         disabled={testingRowId === m.id}
