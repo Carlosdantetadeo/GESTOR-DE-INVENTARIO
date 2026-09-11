@@ -1929,6 +1929,82 @@ async function construirDeepLink(usuario: UsuarioConEmpresa, periodo: string, se
   return `\n\n🔗 Ver detalle completo en el dashboard: ${DASHBOARD_BASE_URL}/reportes?periodo=${periodo}&sede=${sedeParam}&v=${DEEP_LINK_VERSION}${tokenParam}`
 }
 
+// ─── Cliente de inferencia unificado ─────────────────────────────────────────
+//
+// Toda la lógica específica de proveedor vive AQUÍ. Ningún otro lugar del código
+// debe hacer un if/switch por proveedor para llamar a un modelo.
+//
+// Proveedores OpenAI-compatibles (groq, openrouter, openai-compat) usan el mismo
+// cliente HTTP cambiando solo la baseURL y headers de atribución.
+// Anthropic tiene un formato de API distinto y se maneja por separado.
+
+type CallModelResult = { content: string; tokensIn: number; tokensOut: number }
+
+const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
+  groq:       'https://api.groq.com/openai/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+}
+
+async function callModel(
+  modelo: ModeloResuelto,
+  messages: Array<{ role: string; content: string }>,
+  maxTokens = 2048,
+): Promise<CallModelResult> {
+
+  // ── Anthropic (formato de API distinto al estándar OpenAI) ──
+  if (modelo.proveedor === 'anthropic') {
+    const apiKey = modelo.apiKey || ANTHROPIC_KEY
+    if (!apiKey) console.error(`[callModel] sin API key para anthropic (modelo ${modelo.id}) — setear ANTHROPIC_API_KEY o la key del modelo.`)
+    const systemMsg = messages.find(m => m.role === 'system')?.content ?? ''
+    const userMsgs  = messages.filter(m => m.role !== 'system')
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelo.apiModelId, max_tokens: maxTokens, system: systemMsg, messages: userMsgs }),
+    })
+    const data = await resp.json()
+    return { content: data.content?.[0]?.text ?? '', tokensIn: data.usage?.input_tokens ?? 0, tokensOut: data.usage?.output_tokens ?? 0 }
+  }
+
+  // ── OpenAI-compatible: groq / openrouter / openai-compat ──
+  const baseUrl = (OPENAI_COMPAT_BASE_URLS[modelo.proveedor] ?? (modelo.baseUrl ?? '').replace(/\/+$/, ''))
+  if (!baseUrl) {
+    console.error(`[callModel] modelo "${modelo.id}" (${modelo.proveedor}) sin base_url — no se puede llamar.`)
+    return { content: '', tokensIn: 0, tokensOut: 0 }
+  }
+  const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`
+
+  // Key: la del modelo primero; fallback al secret del proveedor solo para proveedores
+  // conocidos (nunca enviar el secret de Groq a un endpoint openai-compat de terceros).
+  const fallbackKey = modelo.proveedor === 'groq' ? GROQ_KEY : modelo.proveedor === 'openrouter' ? OPENROUTER_KEY : ''
+  const apiKey = modelo.apiKey || fallbackKey
+  if (!apiKey) console.error(`[callModel] sin API key para ${modelo.proveedor} (modelo ${modelo.id}) — la llamada fallará.`)
+
+  const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
+  if (modelo.proveedor === 'openrouter') {
+    headers['HTTP-Referer'] = DASHBOARD_BASE_URL || 'https://almacenero.digital'
+    headers['X-Title'] = 'Almacenero Digital'
+  }
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: modelo.apiModelId, temperature: 0, max_tokens: maxTokens, response_format: { type: 'json_object' }, messages }),
+    })
+    const data = await resp.json()
+    return { content: data.choices?.[0]?.message?.content ?? '', tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }
+  } catch (e) {
+    const msg = String(e)
+    if (msg.includes('ECONNREFUSED') || msg.includes('Connection refused')) {
+      console.error(`[callModel] ECONNREFUSED para "${modelo.id}" (${url}) — el servidor local no está corriendo o no es alcanzable desde el backend. Para modelos locales el backend debe estar en la misma red o el endpoint expuesto por túnel (Cloudflare Tunnel, Tailscale).`)
+    } else {
+      console.error(`[callModel] error: ${msg}`)
+    }
+    return { content: '', tokensIn: 0, tokensOut: 0 }
+  }
+}
+
 // ─── NLU multi-modelo ─────────────────────────────────────────────────────────
 
 async function callNLU(
@@ -1936,87 +2012,12 @@ async function callNLU(
   systemPrompt: string,
   transcript: string,
 ): Promise<NluResult> {
-
-  // ── Groq / OpenRouter / OpenAI-compatible genérico (Huawei MaaS, etc.) ──
-  if (modelo.proveedor === 'groq' || modelo.proveedor === 'openrouter' || modelo.proveedor === 'openai-compat') {
-    const esOR = modelo.proveedor === 'openrouter'
-    // URL del endpoint: hardcodeada para groq/openrouter; base_url para openai-compat.
-    let url: string
-    if (modelo.proveedor === 'groq') {
-      url = 'https://api.groq.com/openai/v1/chat/completions'
-    } else if (esOR) {
-      url = 'https://openrouter.ai/api/v1/chat/completions'
-    } else {
-      const base = (modelo.baseUrl ?? '').replace(/\/+$/, '')
-      if (!base) {
-        console.error(`[callNLU] modelo openai-compat "${modelo.id}" sin base_url; no se puede llamar.`)
-        return { intent: 'registro', tipo: null, tipo_explicito: false, confianza: 0, items: [], reporte: null, tokensIn: 0, tokensOut: 0 }
-      }
-      url = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`
-    }
-    // Key: la del modelo; fallback al secret SOLO para groq/openrouter (nunca mandar
-    // el secret de un proveedor a un endpoint de terceros openai-compat).
-    const apiKey = modelo.apiKey
-      || (modelo.proveedor === 'groq' ? GROQ_KEY : esOR ? OPENROUTER_KEY : '')
-    if (!apiKey) {
-      console.error(`[callNLU] sin API key para ${modelo.proveedor} (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o el secret del proveedor.`)
-    }
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    }
-    if (esOR) {
-      // Recomendados por OpenRouter para atribución (opcionales).
-      headers['HTTP-Referer'] = DASHBOARD_BASE_URL || 'https://almacenero.digital'
-      headers['X-Title'] = 'Almacenero Digital'
-    }
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: modelo.apiModelId,
-        temperature: 0,
-        max_tokens: 2048,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: transcript },
-        ],
-      }),
-    })
-    const data = await resp.json()
-    const tokensIn  = data.usage?.prompt_tokens     ?? 0
-    const tokensOut = data.usage?.completion_tokens ?? 0
-    return classifyNlu(data.choices?.[0]?.message?.content, tokensIn, tokensOut)
-  }
-
-  // ── Anthropic ──
-  if (modelo.proveedor === 'anthropic') {
-    const apiKey = modelo.apiKey || ANTHROPIC_KEY
-    if (!apiKey) {
-      console.error(`[callNLU] sin API key para anthropic (modelo ${modelo.id}); la llamada fallará — setear la key del modelo o ANTHROPIC_API_KEY.`)
-    }
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelo.apiModelId,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: transcript }],
-      }),
-    })
-    const data = await resp.json()
-    const tokensIn  = data.usage?.input_tokens  ?? 0
-    const tokensOut = data.usage?.output_tokens ?? 0
-    return classifyNlu(data.content?.[0]?.text, tokensIn, tokensOut)
-  }
-
-  return { intent: 'registro', tipo: null, tipo_explicito: false, confianza: 0, items: [], reporte: null, tokensIn: 0, tokensOut: 0 }
+  const { content, tokensIn, tokensOut } = await callModel(
+    modelo,
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: transcript }],
+    2048,
+  )
+  return classifyNlu(content, tokensIn, tokensOut)
 }
 
 // Parsea la respuesta del NLU al contrato 018. TOLERA respuestas viejas:

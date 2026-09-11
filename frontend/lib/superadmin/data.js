@@ -9,13 +9,13 @@ export const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
 // Fallback mínimo por si la tabla todavía no fue migrada (evita romper la UI).
 const MODELOS_FALLBACK = [
-  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true, tiene_api_key: false },
+  { id: 'groq-llama', label: 'Groq Llama 3.3', proveedor: 'groq', api_model_id: 'llama-3.3-70b-versatile', costo_in: 0.00000059, costo_out: 0.00000079, badge: 'Recomendado', activo: true, tiene_api_key: false, tipo_hosting: 'cloud', rol: 'conversacion' },
 ]
 
 export async function getModelosNlu({ soloActivos = false } = {}) {
   const supa = getAdminClient()
   let q = supa.from('modelos_nlu')
-    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, activo, created_at, api_key_enc')
+    .select('id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, activo, tipo_hosting, rol, created_at, api_key_enc')
     .order('created_at', { ascending: true })
   if (soloActivos) q = q.eq('activo', true)
   const { data, error } = await q
@@ -45,7 +45,7 @@ function slugify(s) {
 }
 
 export async function crearModelo(input) {
-  const { id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, api_key } = input ?? {}
+  const { id, label, proveedor, api_model_id, base_url, costo_in, costo_out, badge, api_key, tipo_hosting, rol } = input ?? {}
   const finalId = slugify(id || label)
   if (!finalId || !label?.trim() || !api_model_id?.trim()) {
     return { ok: false, message: 'Faltan datos: id/label/api_model_id.' }
@@ -63,6 +63,11 @@ export async function crearModelo(input) {
     catch (e) { return { ok: false, message: `No se pudo cifrar la API key (config del servidor — revisar MODELOS_ENC_KEY): ${e.message}` } }
   }
   const supa = getAdminClient()
+  const TIPOS_HOSTING_VALIDOS = ['cloud', 'local', 'self_hosted']
+  const ROLES_VALIDOS = ['clasificacion', 'extraccion', 'conversacion', 'razonamiento', 'embeddings']
+  const tipoHosting = TIPOS_HOSTING_VALIDOS.includes(tipo_hosting) ? tipo_hosting : 'cloud'
+  const rolModelo   = ROLES_VALIDOS.includes(rol) ? rol : 'conversacion'
+
   const { error } = await supa.from('modelos_nlu').insert({
     id: finalId,
     label: label.trim(),
@@ -72,6 +77,8 @@ export async function crearModelo(input) {
     costo_in: Number(costo_in) || 0,
     costo_out: Number(costo_out) || 0,
     badge: badge?.trim() || null,
+    tipo_hosting: tipoHosting,
+    rol: rolModelo,
     ...(api_key_enc ? { api_key_enc } : {}),
   })
   if (error) return { ok: false, message: error.code === '23505' ? 'Ya existe un modelo con ese id.' : error.message }
@@ -92,6 +99,14 @@ export async function actualizarModelo(id, patch) {
   if (patch.costo_out !== undefined)    allowed.costo_out = Number(patch.costo_out) || 0
   if (patch.badge !== undefined)        allowed.badge = patch.badge?.trim() || null
   if (patch.activo !== undefined)       allowed.activo = !!patch.activo
+  if (patch.tipo_hosting !== undefined) {
+    const TIPOS = ['cloud', 'local', 'self_hosted']
+    if (TIPOS.includes(patch.tipo_hosting)) allowed.tipo_hosting = patch.tipo_hosting
+  }
+  if (patch.rol !== undefined) {
+    const ROLES = ['clasificacion', 'extraccion', 'conversacion', 'razonamiento', 'embeddings']
+    if (ROLES.includes(patch.rol)) allowed.rol = patch.rol
+  }
   if (patch.api_key !== undefined) {
     const v = String(patch.api_key).trim()
     if (v === '') {

@@ -5,12 +5,32 @@ import { Plus, Trash2, Power, ChevronDown, ChevronUp } from 'lucide-react'
 
 const PROVEEDORES = ['groq', 'anthropic', 'openrouter', 'openai-compat']
 
+const TIPOS_HOSTING = [
+  { value: 'cloud',       label: 'Nube',        desc: 'Proveedor SaaS (Groq, Anthropic, OpenRouter, Huawei MaaS, etc.)' },
+  { value: 'local',       label: 'Local',        desc: 'Máquina del usuario (Ollama, LM Studio, llama.cpp). La API key suele ser opcional.' },
+  { value: 'self_hosted', label: 'Self-hosted',  desc: 'Infraestructura propia del cliente (vLLM, TGI en servidor dedicado).' },
+]
+
+const ROLES = [
+  { value: 'clasificacion', label: 'Clasificación',  desc: 'Detectar intención del usuario. Modelo barato (8B).' },
+  { value: 'extraccion',    label: 'Extracción',     desc: 'Extraer entidades / JSON estructurado. Modelo barato (8B).' },
+  { value: 'conversacion',  label: 'Conversación',   desc: 'Generar la respuesta final al usuario. Requiere mayor calidad.' },
+  { value: 'razonamiento',  label: 'Razonamiento',   desc: 'Decisiones complejas (escalar a humano, validaciones). Modelo potente.' },
+  { value: 'embeddings',    label: 'Embeddings',     desc: 'Vectorización de texto para búsqueda semántica.' },
+]
+
+const HOSTING_BADGES = {
+  cloud:       { label: 'Nube',        bg: 'hsl(var(--text-muted) / 0.15)',  color: 'hsl(var(--text-muted))' },
+  local:       { label: 'Local',       bg: 'hsl(210 80% 55% / 0.15)',        color: 'hsl(210 80% 45%)' },
+  self_hosted: { label: 'Self-hosted', bg: 'hsl(270 60% 55% / 0.15)',        color: 'hsl(270 60% 45%)' },
+}
+
 const th = { padding: '9px 12px', textAlign: 'left', fontWeight: 600, color: 'hsl(var(--text-muted))', fontSize: '0.72rem', whiteSpace: 'nowrap' }
 const td = { padding: '10px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }
 const hint = { margin: '3px 0 0', fontSize: '0.72rem', color: 'hsl(var(--text-muted))', fontWeight: 400 }
 const errInline = { margin: '3px 0 0', fontSize: '0.72rem', color: 'hsl(var(--color-gasto))', fontWeight: 400 }
 
-const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', base_url: '', costo_in: '', costo_out: '', badge: '', api_key: '' }
+const VACIO = { id: '', label: '', proveedor: 'openrouter', api_model_id: '', base_url: '', costo_in: '', costo_out: '', badge: '', api_key: '', tipo_hosting: 'cloud', rol: 'conversacion' }
 
 function slugify(s) {
   return String(s || '').trim().toLowerCase()
@@ -165,6 +185,20 @@ export default function ModelosManager({ inicial }) {
               </select>
             </Campo>
 
+            <Campo label="Tipo de alojamiento">
+              <select className="input-field" value={form.tipo_hosting} onChange={set('tipo_hosting')}>
+                {TIPOS_HOSTING.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <p style={hint}>{TIPOS_HOSTING.find(t => t.value === form.tipo_hosting)?.desc}</p>
+            </Campo>
+
+            <Campo label="Rol del modelo">
+              <select className="input-field" value={form.rol} onChange={set('rol')}>
+                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+              <p style={hint}>{ROLES.find(r => r.value === form.rol)?.desc}</p>
+            </Campo>
+
             <Campo label="API model id">
               <input
                 className="input-field"
@@ -182,7 +216,7 @@ export default function ModelosManager({ inicial }) {
               }
             </Campo>
 
-            {form.proveedor === 'openai-compat' && (
+            {(form.tipo_hosting !== 'cloud' || form.proveedor === 'openai-compat') && (
               <Campo label="Base URL">
                 <input
                   className="input-field"
@@ -192,9 +226,14 @@ export default function ModelosManager({ inicial }) {
                   data-lpignore="true"
                   value={form.base_url}
                   onChange={set('base_url')}
-                  required
+                  required={form.proveedor === 'openai-compat' || form.tipo_hosting !== 'cloud'}
                 />
-                <p style={hint}>Ej: https://…/v1 (endpoint OpenAI-compatible)</p>
+                {form.tipo_hosting === 'local'
+                  ? <p style={hint}>Ej: http://localhost:11434/v1 (Ollama) · http://localhost:1234/v1 (LM Studio)<br />
+                      <span style={{ color: 'hsl(var(--color-gasto))' }}>⚠️ El backend corre en Vercel y no puede alcanzar localhost ni IPs 192.168.x.x. Para modelos locales, el backend debe estar en la misma red o el endpoint expuesto por túnel (Cloudflare Tunnel, Tailscale).</span>
+                    </p>
+                  : <p style={hint}>Ej: https://…/v1 (endpoint OpenAI-compatible)</p>
+                }
               </Campo>
             )}
 
@@ -262,7 +301,10 @@ export default function ModelosManager({ inicial }) {
                 value={form.api_key}
                 onChange={set('api_key')}
               />
-              <p style={hint}>Se guarda cifrada. Vacío = usa la key global del proveedor.</p>
+              {form.tipo_hosting === 'local'
+                ? <p style={hint}>Ollama no exige API key. Podés dejarlo vacío.</p>
+                : <p style={hint}>Se guarda cifrada. Vacío = usa la key global del proveedor.</p>
+              }
             </Campo>
 
           </div>
@@ -287,6 +329,8 @@ export default function ModelosManager({ inicial }) {
             <tr style={{ borderBottom: '1px solid hsl(var(--border))', background: 'hsl(var(--bg-base))' }}>
               <th style={th}>Modelo</th>
               <th style={th}>Proveedor</th>
+              <th style={th}>Alojamiento</th>
+              <th style={th}>Rol</th>
               <th style={th}>API model id</th>
               <th style={th}>API key</th>
               <th style={th}>Costo entrada</th>
@@ -297,8 +341,11 @@ export default function ModelosManager({ inicial }) {
           </thead>
           <tbody>
             {modelos.length === 0 ? (
-              <tr><td style={{ ...td, textAlign: 'center', padding: '28px' }} colSpan={8}>Sin modelos.</td></tr>
-            ) : modelos.map((m, i) => (
+              <tr><td style={{ ...td, textAlign: 'center', padding: '28px' }} colSpan={10}>Sin modelos.</td></tr>
+            ) : modelos.map((m, i) => {
+              const hostingBadge = HOSTING_BADGES[m.tipo_hosting] ?? HOSTING_BADGES.cloud
+              const rolLabel = ROLES.find(r => r.value === m.rol)?.label ?? m.rol
+              return (
               <tr key={m.id} style={{ borderBottom: i < modelos.length - 1 ? '1px solid hsl(var(--border))' : 'none', opacity: m.activo ? 1 : 0.5 }}>
                 <td style={{ ...td, fontWeight: 600 }}>
                   {m.label}
@@ -310,6 +357,12 @@ export default function ModelosManager({ inicial }) {
                   <div style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', fontFamily: 'var(--font-mono)' }}>{m.id}</div>
                 </td>
                 <td style={td}>{m.proveedor}</td>
+                <td style={td}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: hostingBadge.bg, color: hostingBadge.color }}>
+                    {hostingBadge.label}
+                  </span>
+                </td>
+                <td style={{ ...td, fontSize: '0.78rem', color: 'hsl(var(--text-secondary))' }}>{rolLabel}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)', fontSize: '0.76rem' }}>{m.api_model_id}</td>
                 <td style={td}>{m.tiene_api_key ? '🔑 Propia' : '— global'}</td>
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{formatCosto(m.costo_in)}</td>
@@ -336,7 +389,7 @@ export default function ModelosManager({ inicial }) {
                   </button>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>
