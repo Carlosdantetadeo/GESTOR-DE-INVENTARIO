@@ -18,8 +18,6 @@ import {
 } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Card, Note, T } from '../../../lib/auditoria/ui'
 
-const COLOR_BG = { verde: '#16a34a', amarillo: '#f59e0b', rojo: '#ef4444' }
-
 export default function SupervisorPage() {
   const { session } = useAuditoria()
   const [sesiones, setSesiones] = useState([])
@@ -101,42 +99,10 @@ export default function SupervisorPage() {
   if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>No tenés permiso para ver el panel del supervisor.</p></Page>
   if (cargando) return <Page><p style={{ color: T.muted }}>Cargando panel…</p></Page>
 
-  const porColor = { verde: 0, amarillo: 0, rojo: 0 }
-  conteos.forEach((c) => { porColor[c.semaforo_color] += 1 })
-  const rojos = conteos.filter((c) => c.semaforo_color === 'rojo')
-
   return (
     <Page>
       <Title>Panel del supervisor</Title>
       {error && <Note tone="error">{error}</Note>}
-
-      {/* Contadores por color */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        {['rojo', 'amarillo', 'verde'].map((color) => (
-          <div key={color} style={{ flex: 1, background: COLOR_BG[color], color: '#fff', borderRadius: 14, padding: 14, textAlign: 'center' }}>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{porColor[color]}</div>
-            <div style={{ textTransform: 'capitalize', fontSize: '0.8rem', opacity: 0.9 }}>{color}</div>
-          </div>
-        ))}
-      </div>
-
-      <Panel titulo={`Alertas críticas (${rojos.length})`}>
-        {rojos.length === 0 ? <Vacio>Sin piezas en rojo.</Vacio> : (
-          <ul style={lista}>
-            {rojos.map((c) => (
-              <li key={c.id} style={{ ...fila, flexDirection: 'column', gap: 2 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span><strong style={{ color: T.ink }}>{c.productos?.nombre ?? 'Pieza'}</strong> · {c.cantidad}</span>
-                  {c.evidencias?.length > 0 && (
-                    <Button variant="secondary" onClick={() => verFoto(c.evidencias[0].storage_path)} style={mini}>📷 Ver foto</Button>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.8rem', color: T.muted }}>{c.semaforo_razon}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
 
       <Panel titulo={`Sesiones abiertas (${sesiones.length})`}>
         {sesiones.length === 0 ? <Vacio>No hay sesiones abiertas.</Vacio> : (
