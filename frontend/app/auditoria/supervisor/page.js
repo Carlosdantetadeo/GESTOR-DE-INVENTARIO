@@ -23,19 +23,22 @@ export default function SupervisorPage() {
   const [sesiones, setSesiones] = useState([])
   const [conteos, setConteos] = useState([])
   const [pendientes, setPendientes] = useState([])
+  const [totalProductos, setTotalProductos] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
 
   const cargar = useCallback(async () => {
     try {
       const abiertas = await getSesionesAbiertas()
-      const [cts, pend] = await Promise.all([
+      const [cts, pend, { count }] = await Promise.all([
         getConteosDeSesiones(abiertas.map((s) => s.id)),
         getPiezasPendientes(),
+        supabase.from('productos').select('*', { count: 'exact', head: true }),
       ])
       setSesiones(abiertas)
       setConteos(cts)
       setPendientes(pend)
+      setTotalProductos(count ?? 0)
       setError('')
     } catch {
       setError('No se pudieron cargar los datos.')
@@ -109,13 +112,21 @@ export default function SupervisorPage() {
           <ul style={lista}>
             {sesiones.map((s) => {
               const total = conteos.filter((c) => c.sesion_id === s.id).length
+              const pct = totalProductos > 0 ? Math.round((total / totalProductos) * 100) : 0
               return (
-                <li key={s.id} style={{ ...fila, justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
+                <li key={s.id} style={{ ...fila, flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <strong style={{ color: T.ink }}>{s.tiendas?.nombre ?? `Sede ${s.tienda_id}`}</strong>
-                    <span style={{ color: T.muted, fontSize: '0.85rem' }}> · {total} conteos</span>
+                    <Button variant="dark" onClick={() => cerrar(s)} style={mini}>Cerrar sesión</Button>
                   </div>
-                  <Button variant="dark" onClick={() => cerrar(s)} style={mini}>Cerrar sesión</Button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ flex: 1, height: 6, borderRadius: 99, background: '#e2e8f0', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: pct === 100 ? '#16a34a' : '#2563eb', transition: 'width 0.3s' }} />
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: T.muted, whiteSpace: 'nowrap' }}>
+                      {total} de {totalProductos} ítems
+                    </span>
+                  </div>
                 </li>
               )
             })}
