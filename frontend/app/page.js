@@ -152,10 +152,15 @@ export default function LandingPage() {
       </a>
 
       {/* ── NAV ── */}
-      <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(248,250,252,0.92)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #e2e8f0' }}>
-        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 24px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
-            <Image src="/logo-almacenero-digital-hd.png" alt="Almacenero Digital" width={280} height={90} priority style={{ height: '38px', width: 'auto' }} />
+      <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(248,250,252,0.95)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 24px', height: '68px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Logo nav: ícono + texto compuesto para control preciso */}
+          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+            <Image src="/foto-perfil-almacenero-digital.png" alt="" width={38} height={38} priority style={{ width: '38px', height: '38px', borderRadius: '9px' }} />
+            <div style={{ lineHeight: 1.15 }}>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f2557', letterSpacing: '-0.3px' }}>almacenero<span style={{ color: '#2563eb' }}>.digital</span></div>
+              <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#94a3b8', letterSpacing: '0.8px', textTransform: 'uppercase' }}>Tu asistente de inventario</div>
+            </div>
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
             <a href="#beneficios" className="nav-link hide-mobile">Beneficios</a>
@@ -172,7 +177,19 @@ export default function LandingPage() {
       <section style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 60%, #f0fdf4 100%)', padding: '90px 24px 80px' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
 
-          <div className="fade-up" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#dbeafe', color: '#1d4ed8', borderRadius: '99px', padding: '6px 16px', fontSize: '0.82rem', fontWeight: 700, marginBottom: '28px', letterSpacing: '0.3px' }}>
+          {/* Logo HD en hero — prominente y centrado */}
+          <div className="fade-up" style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px' }}>
+            <Image
+              src="/logo-almacenero-digital-hd.png"
+              alt="Almacenero Digital"
+              width={420}
+              height={134}
+              priority
+              style={{ height: '72px', width: 'auto', maxWidth: '100%' }}
+            />
+          </div>
+
+          <div className="fade-up delay-1" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#dbeafe', color: '#1d4ed8', borderRadius: '99px', padding: '6px 16px', fontSize: '0.82rem', fontWeight: 700, marginBottom: '28px', letterSpacing: '0.3px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
             Para ferreterías y comercios de Perú
           </div>
@@ -312,7 +329,13 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer id="contacto" style={{ background: '#0f172a', color: '#94a3b8', padding: '40px 24px' }}>
         <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <Image src="/logo-almacenero-digital-hd.png" alt="Almacenero Digital" width={240} height={76} style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Image src="/foto-perfil-almacenero-digital.png" alt="" width={32} height={32} style={{ width: '32px', height: '32px', borderRadius: '7px', opacity: 0.9 }} />
+            <div style={{ lineHeight: 1.2 }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#e2e8f0', letterSpacing: '-0.2px' }}>almacenero<span style={{ color: '#60a5fa' }}>.digital</span></div>
+              <div style={{ fontSize: '0.6rem', color: '#475569', letterSpacing: '0.6px', textTransform: 'uppercase' }}>Tu asistente de inventario</div>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '0.82rem' }}>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: '#25d366', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
               WhatsApp +51 906 959 989
