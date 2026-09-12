@@ -2,10 +2,13 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { verifySession, SESSION_COOKIE } from './lib/superadmin/session'
 
-const PUBLIC_PATHS = ['/', '/login', '/registro']
+const PUBLIC_PATHS = ['/login', '/registro']
 
 export async function middleware(request) {
   const earlyPath = request.nextUrl.pathname
+
+  // Landing pública — sin auth
+  if (earlyPath === '/') return NextResponse.next()
 
   // ── Panel superadmin ─────────────────────────────────────────────────────
   // Sesión propia (cookie firmada), independiente del auth de Supabase.

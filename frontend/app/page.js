@@ -161,7 +161,7 @@ export default function LandingPage() {
             <a href="#beneficios" className="nav-link hide-mobile">Beneficios</a>
             <a href="#como-funciona" className="nav-link hide-mobile">Cómo funciona</a>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="nav-link hide-mobile">Contacto</a>
-            <Link href="/login" className="cta-btn cta-primary" style={{ padding: '10px 22px', fontSize: '0.85rem' }}>
+            <Link href="/auditoria" className="cta-btn cta-primary" style={{ padding: '10px 22px', fontSize: '0.85rem' }}>
               Acceder
             </Link>
           </div>
@@ -189,7 +189,7 @@ export default function LandingPage() {
           </p>
 
           <div className="fade-up delay-3 cta-group" style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/login" className="cta-btn cta-primary">
+            <Link href="/auditoria" className="cta-btn cta-primary">
               Acceder a mi cuenta →
             </Link>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="cta-btn cta-wa">
@@ -302,7 +302,7 @@ export default function LandingPage() {
               <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><path d="M16 2C8.268 2 2 8.268 2 16c0 2.484.675 4.813 1.852 6.81L2 30l7.39-1.826A13.94 13.94 0 0016 30c7.732 0 14-6.268 14-14S23.732 2 16 2z" fill="rgba(255,255,255,0.25)"/><path d="M22.5 19.5c-.3-.15-1.77-.873-2.044-.972-.273-.1-.472-.15-.67.15-.2.298-.77.972-.945 1.17-.174.2-.347.223-.647.075-.3-.15-1.266-.467-2.412-1.489-.891-.794-1.493-1.774-1.668-2.074-.174-.3-.018-.462.13-.61.135-.133.3-.348.45-.522.15-.174.2-.298.3-.497.1-.2.05-.373-.025-.522-.075-.15-.67-1.614-.918-2.21-.242-.58-.487-.5-.67-.51-.174-.008-.373-.01-.572-.01-.2 0-.522.075-.795.373-.273.298-1.043 1.02-1.043 2.484 0 1.464 1.068 2.878 1.218 3.077.15.2 2.102 3.207 5.092 4.496.712.307 1.268.49 1.702.627.715.227 1.367.195 1.881.118.574-.085 1.77-.723 2.02-1.422.25-.698.25-1.296.175-1.422-.075-.125-.273-.2-.572-.348z" fill="#fff"/></svg>
               Consultar por WhatsApp
             </a>
-            <Link href="/login" className="cta-btn" style={{ background: '#fff', color: '#1d4ed8', padding: '18px 36px', fontSize: '1.05rem', boxShadow: '0 4px 24px rgba(0,0,0,0.18)' }}>
+            <Link href="/auditoria" className="cta-btn" style={{ background: '#fff', color: '#1d4ed8', padding: '18px 36px', fontSize: '1.05rem', boxShadow: '0 4px 24px rgba(0,0,0,0.18)' }}>
               Ya tengo cuenta →
             </Link>
           </div>
