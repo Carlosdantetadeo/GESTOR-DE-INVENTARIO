@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 export const metadata = {
   title: 'Almacenero Digital — Control de inventario para ferreterías y comercios',
@@ -153,10 +154,9 @@ export default function LandingPage() {
       {/* ── NAV ── */}
       <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(248,250,252,0.92)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #e2e8f0' }}>
         <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 24px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>📦</div>
-            <span style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.3px' }}>Almacenero Digital</span>
-          </div>
+          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
+            <Image src="/logo-almacenerodigital.png" alt="Almacenero Digital" width={200} height={80} priority style={{ height: '32px', width: 'auto' }} />
+          </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
             <a href="#beneficios" className="nav-link hide-mobile">Beneficios</a>
             <a href="#como-funciona" className="nav-link hide-mobile">Cómo funciona</a>
@@ -312,10 +312,7 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer id="contacto" style={{ background: '#0f172a', color: '#94a3b8', padding: '40px 24px' }}>
         <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>📦</div>
-            <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.9rem' }}>Almacenero Digital</span>
-          </div>
+          <Image src="/logo-almacenerodigital.png" alt="Almacenero Digital" width={160} height={64} style={{ height: '28px', width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '0.82rem' }}>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: '#25d366', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
               WhatsApp +51 906 959 989

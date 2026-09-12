@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import Logo from './Logo'
 
 export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
   const pathname = usePathname()
@@ -123,41 +124,13 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          justifyContent: 'space-between',
           marginBottom: '36px',
           padding: '0 8px',
           borderBottom: '1px solid hsl(var(--border))',
           paddingBottom: '24px'
         }}>
-          <div style={{
-            width: '34px', height: '34px',
-            background: 'hsl(var(--accent))',
-            borderRadius: 'var(--radius-md)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <Package size={17} color="#fff" />
-          </div>
-          <div style={{ overflow: 'hidden', flex: 1 }}>
-            <div style={{
-              fontSize: '1rem',
-              fontWeight: 700,
-              lineHeight: 1.2,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {empresa.nombre}
-            </div>
-            <span style={{
-              fontSize: '0.72rem',
-              color: 'hsl(var(--text-muted))'
-            }}>
-              Control de stock
-            </span>
-          </div>
+          <Logo height={32} href="/dashboard" />
           {/* Mobile close button */}
           <button
             onClick={closeMobile}
