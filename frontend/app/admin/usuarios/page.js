@@ -4,33 +4,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Users, MapPin, Unlink, X, Copy, Check } from 'lucide-react'
 
-function formatFecha(dateStr) {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('es-PE', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  })
-}
-
-function formatFechaHora(dateStr) {
-  if (!dateStr) return 'Sin actividad'
-  return new Date(dateStr).toLocaleString('es-PE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
-// Estado de actividad a partir del último movimiento registrado por el operario.
-//  🟢 Activo      — registró algo en las últimas 24h
-//  🟡 Inactivo    — más de 24h pero menos de 7 días
-//  🔴 Sin actividad — más de 7 días o nunca registró
-function estadoActividad(ultimo) {
-  if (!ultimo) return { color: '#ef4444', label: 'Sin actividad' }
-  const diffH = (Date.now() - new Date(ultimo).getTime()) / 3_600_000
-  if (diffH <= 24)     return { color: '#22c55e', label: 'Activo' }
-  if (diffH <= 24 * 7) return { color: '#eab308', label: 'Inactivo' }
-  return { color: '#ef4444', label: 'Sin actividad' }
-}
-
 export default function UsuariosPage() {
   const [empresaId, setEmpresaId] = useState(null)
   const [operarios, setOperarios] = useState([])
@@ -62,18 +35,7 @@ export default function UsuariosPage() {
         .select('id, telegram_id, nombre, rol, created_at, tiendas (nombre)')
         .order('created_at', { ascending: false })
 
-      // Último movimiento de cada operario (1 query por operario; N es chico).
-      const conActividad = await Promise.all((usrs ?? []).map(async (u) => {
-        const { data: m } = await supabase
-          .from('movimientos')
-          .select('created_at')
-          .eq('usuario_id', u.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-        return { ...u, ultimoRegistro: m?.[0]?.created_at ?? null }
-      }))
-
-      setOperarios(conActividad)
+      setOperarios(usrs ?? [])
       setLoading(false)
     }
     load()
@@ -149,7 +111,7 @@ export default function UsuariosPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
                   <tr style={{ background: 'hsl(var(--bg-base))', borderBottom: '1px solid hsl(var(--border))' }}>
-                    {['Nombre', 'Rol', 'Sede', 'Último registro', 'Vinculado', ''].map((h, i) => (
+                    {['Nombre', 'Rol', 'Sede', ''].map((h, i) => (
                       <th key={h || i} style={{
                         padding: '10px 16px', fontWeight: 600,
                         color: 'hsl(var(--text-muted))', fontSize: '0.775rem',
@@ -159,56 +121,32 @@ export default function UsuariosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {operarios.map((u, i) => {
-                    const est = estadoActividad(u.ultimoRegistro)
-                    return (
-                      <tr key={u.id} style={{
-                        borderBottom: i < operarios.length - 1 ? '1px solid hsl(var(--border))' : 'none',
-                      }}>
-                        <td style={{ padding: '10px 16px', fontWeight: 600 }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                            <span
-                              title={est.label}
-                              aria-label={est.label}
-                              style={{
-                                width: '9px', height: '9px', borderRadius: '50%',
-                                background: est.color, flexShrink: 0,
-                              }}
-                            />
-                            {u.nombre || '—'}
-                            <span style={{ fontSize: '0.72rem', fontWeight: 500, color: est.color }}>
-                              {est.label}
-                            </span>
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 16px' }}>
-                          <span style={styles.rolBadge}>{u.rol === 'admin' ? 'Admin' : 'Operario'}</span>
-                        </td>
-                        <td style={{ padding: '10px 16px', color: 'hsl(var(--text-secondary))' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                            <MapPin size={12} />
-                            {u.tiendas?.nombre || 'Sin asignar'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 16px', color: 'hsl(var(--text-secondary))', whiteSpace: 'nowrap' }}>
-                          {formatFechaHora(u.ultimoRegistro)}
-                        </td>
-                        <td style={{ padding: '10px 16px', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>
-                          {formatFecha(u.created_at)}
-                        </td>
-                        <td style={{ padding: '10px 16px', textAlign: 'right' }}>
-                          <button
-                            onClick={() => setConfirmU(u)}
-                            style={styles.disconnectBtn}
-                            aria-label={`Desconectar a ${u.nombre || 'operario'}`}
-                          >
-                            <Unlink size={13} />
-                            Desconectar
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {operarios.map((u, i) => (
+                    <tr key={u.id} style={{
+                      borderBottom: i < operarios.length - 1 ? '1px solid hsl(var(--border))' : 'none',
+                    }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{u.nombre || '—'}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={styles.rolBadge}>{u.rol === 'admin' ? 'Admin' : 'Operario'}</span>
+                      </td>
+                      <td style={{ padding: '12px 16px', color: 'hsl(var(--text-secondary))' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                          <MapPin size={12} />
+                          {u.tiendas?.nombre || 'Sin asignar'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => setConfirmU(u)}
+                          style={styles.disconnectBtn}
+                          aria-label={`Desconectar a ${u.nombre || 'operario'}`}
+                        >
+                          <Unlink size={13} />
+                          Desconectar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
