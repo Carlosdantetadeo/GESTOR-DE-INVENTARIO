@@ -10,8 +10,8 @@ import {
   Package,
   AlertTriangle
 } from 'lucide-react'
-import { getDashboardKPIs, getMovimientos, getTiendas, getStock, getEmpresaId } from '../lib/queries'
-import { useRealtimeMovimientos } from '../lib/realtime'
+import { getDashboardKPIs, getMovimientos, getTiendas, getStock, getEmpresaId } from '../../lib/queries'
+import { useRealtimeMovimientos } from '../../lib/realtime'
 
 function formatFecha(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime()
