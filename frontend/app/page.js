@@ -2,8 +2,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 
 export const metadata = {
-  title: 'Almacenero Digital — Control de inventario para ferreterías y comercios',
-  description: 'Registrá ventas e ingresos por voz o foto desde el celular. Dashboard en tiempo real. Multi-sede. Sin papel.',
+  title: 'Almacenero Digital — Control de inventario para cualquier negocio',
+  description: 'Registrá ventas e ingresos por voz o foto desde el celular. Para tiendas, depósitos, distribuidoras y más. Dashboard en tiempo real. Sin papel.',
 }
 
 const WA_LINK = 'https://wa.me/51906959989?text=Hola%2C%20quiero%20saber%20m%C3%A1s%20sobre%20Almacenero%20Digital'
@@ -12,12 +12,12 @@ const BENEFICIOS = [
   {
     icono: '🎙️',
     titulo: 'Registro por voz',
-    texto: 'El vendedor abre el celular, dicta la venta y listo. Groq Whisper transcribe al instante. Sin tipear, sin errores.',
+    texto: 'Tu equipo dicta la venta desde el celular y el sistema la registra al instante. Sin formularios, sin errores de tipeo.',
   },
   {
     icono: '📸',
     titulo: 'Recepción por foto',
-    texto: 'Sacá foto a la factura del proveedor y el sistema extrae automáticamente los productos y cantidades. Cero carga manual.',
+    texto: 'Sacá foto a la factura del proveedor y el sistema extrae los productos y cantidades automáticamente. Cero carga manual.',
   },
   {
     icono: '📊',
@@ -27,7 +27,7 @@ const BENEFICIOS = [
   {
     icono: '🏪',
     titulo: 'Multi-sede',
-    texto: 'Gestioná todas tus sucursales desde un solo lugar. Cada sede con su stock y sus reportes, todo consolidado.',
+    texto: 'Gestioná todas tus sucursales desde un solo lugar. Cada local con su stock y reportes, todo consolidado.',
   },
 ]
 
@@ -191,18 +191,42 @@ export default function LandingPage() {
 
           <div className="fade-up delay-1" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#dbeafe', color: '#1d4ed8', borderRadius: '99px', padding: '6px 16px', fontSize: '0.82rem', fontWeight: 700, marginBottom: '28px', letterSpacing: '0.3px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
-            Para ferreterías y comercios de Perú
+            Para tiendas, depósitos, distribuidoras y más
           </div>
 
-          <h1 className="fade-up delay-1 hero-title" style={{ fontSize: '3.2rem', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-1px', marginBottom: '22px' }}>
-            Tu ferretería,{' '}
+          <h1 className="fade-up delay-1 hero-title" style={{ fontSize: '3.2rem', fontWeight: 800, lineHeight: 1.2, letterSpacing: '-1px', marginBottom: '22px' }}>
+            Tu{' '}
+            {/* Texto rotativo CSS-only */}
+            <span style={{ display: 'inline-block', position: 'relative', height: '1.2em', verticalAlign: 'bottom', minWidth: '260px' }}>
+              <style>{`
+                @keyframes rot {
+                  0%,18%  { opacity:1; transform:translateY(0); }
+                  22%,100%{ opacity:0; transform:translateY(-8px); }
+                }
+                .rw span { position:absolute; left:0; opacity:0; color:#2563eb;
+                  animation: rot 12.5s infinite; white-space:nowrap; }
+                .rw span:nth-child(1) { animation-delay:0s; }
+                .rw span:nth-child(2) { animation-delay:2.5s; }
+                .rw span:nth-child(3) { animation-delay:5s; }
+                .rw span:nth-child(4) { animation-delay:7.5s; }
+                .rw span:nth-child(5) { animation-delay:10s; }
+              `}</style>
+              <span className="rw" style={{ position:'relative', display:'inline-block', minWidth:'260px' }}>
+                <span>ferretería,</span>
+                <span>mueblería,</span>
+                <span>distribuidora,</span>
+                <span>tienda de ropa,</span>
+                <span>abarrotes,</span>
+              </span>
+            </span>
+            <br />
             <span style={{ color: '#2563eb' }}>digitalizada.</span>
-            <br />Sin papel. En tiempo real.
+            {' '}Sin papel. En tiempo real.
           </h1>
 
           <p className="fade-up delay-2 hero-sub" style={{ fontSize: '1.15rem', color: '#475569', lineHeight: 1.7, maxWidth: '600px', margin: '0 auto 40px' }}>
-            Tus vendedores registran ventas por voz o foto desde el celular.
-            Vos ves el stock, las ventas y los reportes al instante desde cualquier lugar.
+            Tu equipo registra ventas e ingresos por voz o foto desde el celular.
+            Vos ves el stock, las ventas y los reportes al instante, desde cualquier lugar.
           </p>
 
           <div className="fade-up delay-3 cta-group" style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -239,7 +263,7 @@ export default function LandingPage() {
               Todo lo que necesita tu negocio
             </h2>
             <p style={{ color: '#64748b', fontSize: '1rem', maxWidth: '500px', margin: '0 auto' }}>
-              Diseñado para ferreterías, depósitos y comercios con múltiples sucursales.
+              Para tiendas, depósitos, distribuidoras, ropa, abarrotes y cualquier negocio con stock.
             </p>
           </div>
 
@@ -312,7 +336,7 @@ export default function LandingPage() {
             ¿Listo para digitalizar tu negocio?
           </h2>
           <p style={{ color: '#bfdbfe', fontSize: '1.05rem', lineHeight: 1.7, marginBottom: '36px' }}>
-            Escribinos por WhatsApp y te configuramos en menos de 24 horas.
+            Funciona para cualquier rubro. Escribinos y te configuramos en menos de 24 horas.
           </p>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="cta-btn cta-wa" style={{ padding: '18px 36px', fontSize: '1.05rem' }}>
