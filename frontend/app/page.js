@@ -327,26 +327,85 @@ export default function LandingPage() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer id="contacto" style={{ background: '#0f172a', color: '#94a3b8', padding: '40px 24px' }}>
-        <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Image src="/foto-perfil-almacenero-digital.png" alt="" width={32} height={32} style={{ width: '32px', height: '32px', borderRadius: '7px', opacity: 0.9 }} />
-            <div style={{ lineHeight: 1.2 }}>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#e2e8f0', letterSpacing: '-0.2px' }}>almacenero<span style={{ color: '#60a5fa' }}>.digital</span></div>
-              <div style={{ fontSize: '0.6rem', color: '#475569', letterSpacing: '0.6px', textTransform: 'uppercase' }}>Tu asistente de inventario</div>
+      <footer id="contacto" style={{ background: '#0f172a', padding: '52px 24px 32px' }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+
+          {/* Fila principal */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '40px', marginBottom: '40px' }}>
+
+            {/* Marca */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '280px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Image src="/foto-perfil-almacenero-digital.png" alt="" width={36} height={36} style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+                <div style={{ lineHeight: 1.2 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.2px' }}>almacenero<span style={{ color: '#60a5fa' }}>.digital</span></div>
+                  <div style={{ fontSize: '0.6rem', color: '#475569', letterSpacing: '0.7px', textTransform: 'uppercase' }}>Tu asistente de inventario</div>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.7 }}>
+                Control de stock e inventario para tiendas, depósitos y distribuidoras de Perú.
+              </p>
+              <a href="mailto:ctadeo@clarocomunica.com" style={{ color: '#60a5fa', textDecoration: 'none', fontSize: '0.82rem' }}>
+                ctadeo@clarocomunica.com
+              </a>
             </div>
+
+            {/* Comunidad */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                Seguinos en redes
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+
+                {/* Facebook */}
+                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook"
+                  style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#1877f2', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s, opacity 0.15s', opacity: 0.9 }}
+                  onMouseOver={e => e.currentTarget.style.transform='translateY(-3px)'}
+                  onMouseOut={e => e.currentTarget.style.transform='translateY(0)'}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
+                    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
+                  </svg>
+                </a>
+
+                {/* TikTok */}
+                <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" aria-label="TikTok"
+                  style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#010101', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s', opacity: 0.9 }}
+                  onMouseOver={e => e.currentTarget.style.transform='translateY(-3px)'}
+                  onMouseOut={e => e.currentTarget.style.transform='translateY(0)'}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff">
+                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z"/>
+                  </svg>
+                </a>
+
+                {/* YouTube */}
+                <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" aria-label="YouTube"
+                  style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#ff0000', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s', opacity: 0.9 }}
+                  onMouseOver={e => e.currentTarget.style.transform='translateY(-3px)'}
+                  onMouseOut={e => e.currentTarget.style.transform='translateY(0)'}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
+                    <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/>
+                    <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="#ff0000"/>
+                  </svg>
+                </a>
+
+              </div>
+              <p style={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.6, maxWidth: '200px' }}>
+                Sumate a nuestra comunidad y seguí las novedades del sistema.
+              </p>
+            </div>
+
           </div>
-          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '0.82rem' }}>
-            <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: '#25d366', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              WhatsApp +51 906 959 989
-            </a>
-            <a href="mailto:ctadeo@clarocomunica.com" style={{ color: '#60a5fa', textDecoration: 'none' }}>
-              ctadeo@clarocomunica.com
-            </a>
+
+          {/* Línea divisoria */}
+          <div style={{ borderTop: '1px solid #1e293b', paddingTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <span style={{ fontSize: '0.78rem', color: '#334155' }}>
+              © {new Date().getFullYear()} Almacenero Digital · Claro Comunica
+            </span>
+            <span style={{ fontSize: '0.78rem', color: '#1e293b' }}>
+              Hecho en Perú 🇵🇪
+            </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-            © {new Date().getFullYear()} Almacenero Digital · Claro Comunica
-          </div>
+
         </div>
       </footer>
 
