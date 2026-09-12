@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import Image from 'next/image'
 import Logo from './Logo'
 
 export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
@@ -130,7 +131,13 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
           borderBottom: '1px solid hsl(var(--border))',
           paddingBottom: '24px'
         }}>
-          <Logo height={32} href="/dashboard" />
+          <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+            <Image src="/foto-perfil-almacenero-digital.png" alt="Almacenero Digital" width={36} height={36} style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'hsl(var(--text-primary))', lineHeight: 1.2 }}>almacenero</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'hsl(var(--accent))', lineHeight: 1.2 }}>.digital</div>
+            </div>
+          </Link>
           {/* Mobile close button */}
           <button
             onClick={closeMobile}

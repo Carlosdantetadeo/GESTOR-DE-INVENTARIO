@@ -155,7 +155,7 @@ export default function LandingPage() {
       <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(248,250,252,0.92)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #e2e8f0' }}>
         <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 24px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
-            <Image src="/logo-almacenerodigital.png" alt="Almacenero Digital" width={200} height={80} priority style={{ height: '32px', width: 'auto' }} />
+            <Image src="/logo-almacenero-digital-hd.png" alt="Almacenero Digital" width={280} height={90} priority style={{ height: '38px', width: 'auto' }} />
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
             <a href="#beneficios" className="nav-link hide-mobile">Beneficios</a>
@@ -312,7 +312,7 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer id="contacto" style={{ background: '#0f172a', color: '#94a3b8', padding: '40px 24px' }}>
         <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <Image src="/logo-almacenerodigital.png" alt="Almacenero Digital" width={160} height={64} style={{ height: '28px', width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
+          <Image src="/logo-almacenero-digital-hd.png" alt="Almacenero Digital" width={240} height={76} style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '0.82rem' }}>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{ color: '#25d366', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
               WhatsApp +51 906 959 989
