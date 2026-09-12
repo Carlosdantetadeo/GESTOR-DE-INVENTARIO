@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import RotatingWord from './RotatingWord'
 
 export const metadata = {
   title: 'Almacenero Digital — Control de inventario para cualquier negocio',
@@ -195,33 +196,8 @@ export default function LandingPage() {
           </div>
 
           <h1 className="fade-up delay-1 hero-title" style={{ fontSize: '3.2rem', fontWeight: 800, lineHeight: 1.2, letterSpacing: '-1px', marginBottom: '22px' }}>
-            Tu{' '}
-            {/* Texto rotativo CSS-only */}
-            <span style={{ display: 'inline-block', position: 'relative', height: '1.2em', verticalAlign: 'bottom', minWidth: '260px' }}>
-              <style>{`
-                @keyframes rot {
-                  0%,18%  { opacity:1; transform:translateY(0); }
-                  22%,100%{ opacity:0; transform:translateY(-8px); }
-                }
-                .rw span { position:absolute; left:0; opacity:0; color:#2563eb;
-                  animation: rot 12.5s infinite; white-space:nowrap; }
-                .rw span:nth-child(1) { animation-delay:0s; }
-                .rw span:nth-child(2) { animation-delay:2.5s; }
-                .rw span:nth-child(3) { animation-delay:5s; }
-                .rw span:nth-child(4) { animation-delay:7.5s; }
-                .rw span:nth-child(5) { animation-delay:10s; }
-              `}</style>
-              <span className="rw" style={{ position:'relative', display:'inline-block', minWidth:'260px' }}>
-                <span>ferretería,</span>
-                <span>mueblería,</span>
-                <span>distribuidora,</span>
-                <span>tienda de ropa,</span>
-                <span>abarrotes,</span>
-              </span>
-            </span>
-            <br />
-            <span style={{ color: '#2563eb' }}>digitalizada.</span>
-            {' '}Sin papel. En tiempo real.
+            Tu <RotatingWord /><br />
+            <span style={{ color: '#2563eb' }}>digitalizado.</span> Sin papel. En tiempo real.
           </h1>
 
           <p className="fade-up delay-2 hero-sub" style={{ fontSize: '1.15rem', color: '#475569', lineHeight: 1.7, maxWidth: '600px', margin: '0 auto 40px' }}>
