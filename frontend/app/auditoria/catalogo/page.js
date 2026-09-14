@@ -315,7 +315,10 @@ export default function CatalogoPage() {
               <option value="supervisor">Supervisor</option>
               <option value="admin">Admin</option>
             </Select>
-            <Input type="number" placeholder="Sede (id, opcional)" value={nuevo.tienda_id} onChange={(e) => setNuevo({ ...nuevo, tienda_id: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
+            <Select value={nuevo.tienda_id} onChange={(e) => setNuevo({ ...nuevo, tienda_id: e.target.value })} style={{ flex: 1, minWidth: 120 }}>
+              <option value="">Sede (asignar)…</option>
+              {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </Select>
             <Button variant="primary" type="submit">Crear usuario</Button>
           </div>
         </form>
@@ -335,7 +338,14 @@ export default function CatalogoPage() {
         <p style={{ ...muted, margin: '0 0 6px' }}>Poné un nombre a cada vendedor para identificarlo en los reportes.</p>
         <ul style={lista}>
           {usuarios.map((u) => (
-            <UsuarioRow key={u.id} u={u} onGuardar={guardarNombre} onToggleActivo={toggleActivoUsuario} onEliminar={eliminarUsuario} />
+            <UsuarioRow
+              key={u.id}
+              u={u}
+              sedeNombre={tiendas.find((t) => Number(t.id) === Number(u.tienda_id))?.nombre || null}
+              onGuardar={guardarNombre}
+              onToggleActivo={toggleActivoUsuario}
+              onEliminar={eliminarUsuario}
+            />
           ))}
         </ul>
       </Panel>
@@ -404,7 +414,7 @@ function validar(rows) {
 }
 
 // Fila de usuario con nombre editable + activar/desactivar + eliminar.
-function UsuarioRow({ u, onGuardar, onToggleActivo, onEliminar }) {
+function UsuarioRow({ u, sedeNombre, onGuardar, onToggleActivo, onEliminar }) {
   const [nombre, setNombre] = useState(u.nombre || '')
   const [confirmar, setConfirmar] = useState(false)
   const cambiado = (nombre.trim() || null) !== (u.nombre || null)
@@ -412,7 +422,7 @@ function UsuarioRow({ u, onGuardar, onToggleActivo, onEliminar }) {
   return (
     <li style={{ ...fila, opacity: activo ? 1 : 0.6 }}>
       <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre del vendedor" style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
-      <span style={{ color: T.muted, fontSize: '0.8rem' }}>{u.email} · {u.rol}{u.tienda_id ? ` · sede ${u.tienda_id}` : ''}</span>
+      <span style={{ color: T.muted, fontSize: '0.8rem' }}>{u.email} · {u.rol} · {sedeNombre || 'sin sede'}</span>
       {!activo && <span style={{ fontSize: '0.72rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 999 }}>desactivado</span>}
       {cambiado && <Button variant="primary" onClick={() => onGuardar(u.id, nombre)}>Guardar</Button>}
       <Button variant="secondary" onClick={() => onToggleActivo(u.id, !activo)}>{activo ? 'Desactivar' : 'Activar'}</Button>
