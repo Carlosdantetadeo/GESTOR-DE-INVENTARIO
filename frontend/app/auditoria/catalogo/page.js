@@ -22,7 +22,8 @@ export default function CatalogoPage() {
   const [meses, setMeses] = useState(6)
   const [usuarios, setUsuarios] = useState([])
   const [resultado, setResultado] = useState('')
-  const [nuevo, setNuevo] = useState({ email: '', password: '', nombre: '', rol: 'vendedor', tienda_id: '' })
+  const [nuevo, setNuevo] = useState({ email: '', nombre: '', rol: 'vendedor', tienda_id: '' })
+  const [credNueva, setCredNueva] = useState(null)   // { email, password } recién creada
   const [tiendas, setTiendas] = useState([])
   const [tiendaNueva, setTiendaNueva] = useState('')
   const [secTienda, setSecTienda] = useState('')
@@ -194,20 +195,21 @@ export default function CatalogoPage() {
   async function crearUsuario(e) {
     e.preventDefault()
     setAviso('')
+    setCredNueva(null)
     const res = await fetch('/api/auditoria/usuarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: nuevo.email,
-        password: nuevo.password,
         nombre: nuevo.nombre,
         rol: nuevo.rol,
         tienda_id: nuevo.tienda_id === '' ? null : Number(nuevo.tienda_id),
       }),
     })
     if (res.ok) {
-      setNuevo({ email: '', password: '', nombre: '', rol: 'vendedor', tienda_id: '' })
-      setAviso('Usuario creado.')
+      const data = await res.json()
+      setCredNueva({ email: nuevo.email, password: data.password })
+      setNuevo({ email: '', nombre: '', rol: 'vendedor', tienda_id: '' })
       cargarUsuarios()
     } else {
       const err = await res.json().catch(() => ({}))
@@ -224,6 +226,24 @@ export default function CatalogoPage() {
     })
     if (res.ok) { setAviso('Nombre guardado.'); cargarUsuarios() }
     else setAviso('No se pudo guardar el nombre.')
+  }
+
+  // Activa/desactiva un usuario (ban reversible: desactivado no puede ingresar).
+  async function toggleActivoUsuario(id, activo) {
+    const res = await fetch('/api/auditoria/usuarios', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, activo }),
+    })
+    if (res.ok) { setAviso(activo ? 'Usuario activado.' : 'Usuario desactivado.'); cargarUsuarios() }
+    else { const err = await res.json().catch(() => ({})); setAviso(`No se pudo cambiar el estado (${err.error || res.status}).`) }
+  }
+
+  // Elimina de forma permanente un usuario.
+  async function eliminarUsuario(id) {
+    const res = await fetch(`/api/auditoria/usuarios?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    if (res.ok) { setAviso('Usuario eliminado.'); cargarUsuarios() }
+    else { const err = await res.json().catch(() => ({})); setAviso(`No se pudo eliminar (${err.error || res.status}).`) }
   }
 
   if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
@@ -288,7 +308,6 @@ export default function CatalogoPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Input placeholder="Nombre del vendedor" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
             <Input type="email" required placeholder="Email" value={nuevo.email} onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
-            <Input type="password" required placeholder="Contraseña" value={nuevo.password} onChange={(e) => setNuevo({ ...nuevo, password: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <Select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })} style={{ flex: 1, minWidth: 120 }}>
@@ -300,9 +319,24 @@ export default function CatalogoPage() {
             <Button variant="primary" type="submit">Crear usuario</Button>
           </div>
         </form>
+        {credNueva && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: T.ink }}>Usuario creado ✅</div>
+            <p style={{ ...muted, margin: '0 0 8px' }}>
+              Guardá esta contraseña ahora — no se vuelve a mostrar. Pasásela al empleado para que ingrese con su email.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem' }}>{credNueva.email}</span>
+              <code style={{ fontFamily: 'monospace', fontSize: 14, background: '#fff', border: `1px solid ${T.line}`, borderRadius: 6, padding: '4px 8px', letterSpacing: '0.05em' }}>{credNueva.password}</code>
+              <Button variant="secondary" onClick={() => copiar(credNueva.password)}>Copiar clave</Button>
+            </div>
+          </div>
+        )}
         <p style={{ ...muted, margin: '0 0 6px' }}>Poné un nombre a cada vendedor para identificarlo en los reportes.</p>
         <ul style={lista}>
-          {usuarios.map((u) => <UsuarioRow key={u.id} u={u} onGuardar={guardarNombre} />)}
+          {usuarios.map((u) => (
+            <UsuarioRow key={u.id} u={u} onGuardar={guardarNombre} onToggleActivo={toggleActivoUsuario} onEliminar={eliminarUsuario} />
+          ))}
         </ul>
       </Panel>
 
@@ -369,15 +403,27 @@ function validar(rows) {
   return { filas, errores }
 }
 
-// Fila de usuario con nombre editable (para identificar al vendedor en reportes).
-function UsuarioRow({ u, onGuardar }) {
+// Fila de usuario con nombre editable + activar/desactivar + eliminar.
+function UsuarioRow({ u, onGuardar, onToggleActivo, onEliminar }) {
   const [nombre, setNombre] = useState(u.nombre || '')
+  const [confirmar, setConfirmar] = useState(false)
   const cambiado = (nombre.trim() || null) !== (u.nombre || null)
+  const activo = u.activo !== false
   return (
-    <li style={fila}>
+    <li style={{ ...fila, opacity: activo ? 1 : 0.6 }}>
       <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre del vendedor" style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
       <span style={{ color: T.muted, fontSize: '0.8rem' }}>{u.email} · {u.rol}{u.tienda_id ? ` · sede ${u.tienda_id}` : ''}</span>
+      {!activo && <span style={{ fontSize: '0.72rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 999 }}>desactivado</span>}
       {cambiado && <Button variant="primary" onClick={() => onGuardar(u.id, nombre)}>Guardar</Button>}
+      <Button variant="secondary" onClick={() => onToggleActivo(u.id, !activo)}>{activo ? 'Desactivar' : 'Activar'}</Button>
+      {confirmar ? (
+        <>
+          <Button variant="danger" onClick={() => { setConfirmar(false); onEliminar(u.id) }}>Confirmar</Button>
+          <Button variant="secondary" onClick={() => setConfirmar(false)}>Cancelar</Button>
+        </>
+      ) : (
+        <Button variant="danger" onClick={() => setConfirmar(true)}>Eliminar</Button>
+      )}
     </li>
   )
 }
