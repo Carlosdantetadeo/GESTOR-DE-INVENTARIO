@@ -35,7 +35,7 @@ export default function NuevaEmpresaForm() {
 
     const sedesValidas = sedes.map(s => s.trim()).filter(Boolean)
     if (sedesValidas.length < 1) {
-      setError('Agregá al menos una sede con nombre.')
+      setError('Agrega al menos una sede con nombre.')
       setLoading(false)
       return
     }
@@ -82,7 +82,7 @@ export default function NuevaEmpresaForm() {
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: '14px 16px' }}>
               <div style={{ fontWeight: 600, marginBottom: '6px', fontSize: '0.875rem' }}>Contraseña temporal</div>
               <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '8px' }}>
-                Guardala ahora — no se vuelve a mostrar. El administrador debe cambiarla al primer ingreso.
+                Guárdala ahora — no se vuelve a mostrar. El administrador debe cambiarla al primer ingreso.
               </div>
               <code style={{ fontFamily: 'var(--font-mono)', background: 'hsl(var(--border))', display: 'block', padding: '8px 10px', borderRadius: '4px', fontSize: '0.9rem', letterSpacing: '0.05em' }}>
                 {tempPass}

@@ -53,7 +53,7 @@ function slugify(s) {
 function validarApiModelId(val) {
   const v = String(val || '').trim()
   if (!v) return 'El API model id es obligatorio.'
-  if (v.includes('@')) return 'No puede contener "@" — revisá que no sea un email.'
+  if (v.includes('@')) return 'No puede contener "@" — revisa que no sea un email.'
   if (/\s/.test(v)) return 'No puede contener espacios.'
   return ''
 }
@@ -163,7 +163,7 @@ export default function ModelosManager({ inicial }) {
     const apiErr = validarApiModelId(form.api_model_id)
     if (apiErr) { setErrApiId(apiErr); return }
     const testValido = testResult?.ok && testResult.validFor === testKey(form)
-    if (!testValido) { setErrorForm('Probá la conexión antes de guardar el modelo.'); return }
+    if (!testValido) { setErrorForm('Prueba la conexión antes de guardar el modelo.'); return }
     const slug = slugify(form.id || form.label)
     if (modelos.some(m => m.id.toLowerCase() === slug.toLowerCase())) {
       setErrorForm(`Ya existe un modelo con el id "${slug}". Usá otro en el campo ID interno.`)
@@ -310,7 +310,7 @@ export default function ModelosManager({ inicial }) {
               ¿Eliminar "{confirmDelete.modelo.label}"?
             </div>
             <p style={{ margin: 0, fontSize: '0.82rem', color: 'hsl(var(--text-secondary))' }}>
-              Esta acción es irreversible. Escribí el id del modelo (<code style={{ fontFamily: 'var(--font-mono)', background: 'hsl(var(--bg-base))', padding: '1px 5px', borderRadius: '4px' }}>{confirmDelete.modelo.id}</code>) para confirmar.
+              Esta acción es irreversible. Escribe el id del modelo (<code style={{ fontFamily: 'var(--font-mono)', background: 'hsl(var(--bg-base))', padding: '1px 5px', borderRadius: '4px' }}>{confirmDelete.modelo.id}</code>) para confirmar.
             </p>
             <input
               className="input-field"
@@ -581,7 +581,7 @@ export default function ModelosManager({ inicial }) {
               disabled={saving || !(testResult?.ok && testResult.validFor === testKey(form))}
               className="btn btn-primary"
               style={{ padding: '9px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
-              title={!(testResult?.ok && testResult.validFor === testKey(form)) ? 'Probá la conexión antes de guardar' : ''}
+              title={!(testResult?.ok && testResult.validFor === testKey(form)) ? 'Prueba la conexión antes de guardar' : ''}
             >
               <Plus size={15} /> {saving ? 'Agregando…' : 'Agregar modelo'}
             </button>
