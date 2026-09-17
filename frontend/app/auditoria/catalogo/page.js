@@ -178,8 +178,9 @@ export default function CatalogoPage() {
         `Importado: ${insertados} nuevas, ${actualizados} actualizadas` +
         (errores.length ? ` · ${errores.length} fila(s) con error omitidas` : ''),
       )
-    } catch {
-      setResultado('No se pudo procesar el archivo.')
+    } catch (err) {
+      console.error('[importar catalogo]', err)
+      setResultado(`No se pudo procesar el archivo: ${err?.message || err}`)
     } finally {
       e.target.value = ''
     }
