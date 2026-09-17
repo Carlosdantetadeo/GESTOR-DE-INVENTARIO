@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Lock, Mail, CheckCircle2, ArrowRight } from 'lucide-react'
+import { Lock, Mail, CheckCircle2, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 export default function Login() {
@@ -12,6 +12,7 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false)
   const [mode,     setMode]     = useState('login')
   const [resetSent, setResetSent] = useState(false)
+  const [verClave, setVerClave] = useState(false)
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -195,8 +196,13 @@ export default function Login() {
                     <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
                       <Lock size={15} />
                     </span>
-                    <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••••" className="login-input" autoComplete="current-password" />
+                    <input type={verClave ? 'text' : 'password'} required value={password} onChange={e => setPassword(e.target.value)}
+                      placeholder="••••••••" className="login-input" autoComplete="current-password" style={{ paddingRight: '42px' }} />
+                    <button type="button" onClick={() => setVerClave(v => !v)}
+                      aria-label={verClave ? 'Ocultar contraseña' : 'Ver contraseña'}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: '4px', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+                      {verClave ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
                   </div>
                 </div>
 
