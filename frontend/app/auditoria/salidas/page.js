@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes } from '../../../lib/auditoria/queries'
+import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -48,14 +48,20 @@ export default function SalidasPage() {
     setResultados(await buscarCombinado(q))
   }
 
-  // Combina coincidencias por trigrama (mejor para CÓDIGOS/referencias) con las
-  // semánticas por embeddings (mejor cuando lo dicen distinto). Deduplica.
+  // Combina, en orden de precisión:
+  //  1) coincidencia de texto/CÓDIGO (substring en nombre/referencia) — la mejor para códigos
+  //  2) trigrama local (offline)
+  //  3) semántica por embeddings (mejor cuando lo dicen distinto)
+  // Deduplica por producto.
   async function buscarCombinado(q) {
-    const locales = await buscarLocal(q).catch(() => [])
-    const sem = online ? ((await buscarSemantico(q).catch(() => null)) || []) : []
+    const [porTexto, locales, sem] = await Promise.all([
+      online ? buscarPorTexto(q).catch(() => []) : Promise.resolve([]),
+      buscarLocal(q).catch(() => []),
+      online ? buscarSemantico(q).then((r) => r || []).catch(() => []) : Promise.resolve([]),
+    ])
     const vistos = new Set()
     const out = []
-    for (const r of [...locales, ...sem]) {
+    for (const r of [...porTexto, ...locales, ...sem]) {
       const id = r.pieza?.producto_id ?? r.pieza?.id
       if (id == null || vistos.has(id)) continue
       vistos.add(id)

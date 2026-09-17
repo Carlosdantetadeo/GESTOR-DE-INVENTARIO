@@ -456,6 +456,24 @@ export async function buscarSemantico(texto, limite = 5) {
   }
 }
 
+// Búsqueda por coincidencia de texto (substring) en nombre y referencia.
+// Es la más precisa para CÓDIGOS (ej. "EM0021"): encuentra el producto aunque
+// el resto del nombre/talla difiera. Devuelve el formato { pieza, score }.
+export async function buscarPorTexto(texto, limite = 8) {
+  const q = (texto || '').trim().replace(/[,()*]/g, ' ').trim()
+  if (q.length < 2) return []
+  const { data, error } = await supabase
+    .from('productos')
+    .select('id, nombre, referencia')
+    .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
+    .limit(limite)
+  if (error || !data) return []
+  return data.map((p) => ({
+    pieza: { id: p.id, producto_id: p.id, nombre: p.nombre, referencia: p.referencia },
+    score: 1,
+  }))
+}
+
 // Productos sin embedding (para el backfill del admin). Trae hasta 1000 por vez;
 // el caller repite hasta terminar.
 export async function productosSinEmbedding() {
