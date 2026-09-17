@@ -183,7 +183,7 @@ async function procesarUpdate(update: TelegramUpdate) {
       if (cbChatId) {
         await tg('sendMessage', {
           chat_id: cbChatId,
-          text: 'ℹ️ El registro por Telegram está desactivado. Escribí /reporte para el reporte del día.',
+          text: 'ℹ️ El registro por Telegram está desactivado. Escribe /reporte para el reporte del día.',
         })
       }
       return
@@ -199,7 +199,7 @@ async function procesarUpdate(update: TelegramUpdate) {
     if (msg.voice || msg.photo?.length || msg.text) {
       await tg('sendMessage', {
         chat_id: msg.chat.id,
-        text: 'ℹ️ Este bot ahora solo entrega el *reporte del día*.\n\nEscribí /reporte para verlo. El registro de ventas e inventario se hace desde la app web.',
+        text: 'ℹ️ Este bot ahora solo entrega el *reporte del día*.\n\nEscribe /reporte para verlo. El registro de ventas e inventario se hace desde la app web.',
         parse_mode: 'Markdown',
       })
     }
@@ -219,7 +219,7 @@ async function handleStart(msg: TelegramMessage) {
     await tg('sendMessage', {
       chat_id: chatId,
       text:
-        '👋 Para registrarte como operario enviá:\n\n' +
+        '👋 Para registrarte como operario envía:\n\n' +
         '`/start TU_TOKEN`\n\n' +
         'Pedí el token al administrador de tu empresa.',
       parse_mode: 'Markdown',
@@ -281,8 +281,8 @@ async function handleStart(msg: TelegramMessage) {
       chat_id: chatId,
       text:
         `👋 *Token admin reconocido* (${mdSafe(empresa.nombre)}). ¿Qué modo de admin usarás?\n\n` +
-        `📊 *Solo consulta* → ves reportes consolidados, no registrás movimientos.\n` +
-        `📦 *Con sede asignada* → registrás movimientos y ves reportes.`,
+        `📊 *Solo consulta* → ves reportes consolidados, no registras movimientos.\n` +
+        `📦 *Con sede asignada* → registras movimientos y ves reportes.`,
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
@@ -371,7 +371,7 @@ async function handleJoin(cb: CallbackQuery) {
   if (existente && existente.empresa_id === empresa.id) {
     await tg('editMessageText', {
       chat_id: chatId, message_id: msgId,
-      text: '⚠️ Ya tenés una cuenta registrada en esta empresa.',
+      text: '⚠️ Ya tienes una cuenta registrada en esta empresa.',
     })
     return
   }
@@ -388,7 +388,7 @@ async function handleJoin(cb: CallbackQuery) {
   if (!tienda) {
     await tg('editMessageText', {
       chat_id: chatId, message_id: msgId,
-      text: '❌ La sede seleccionada no pertenece a esta empresa. Volvé a enviar /start con el token.',
+      text: '❌ La sede seleccionada no pertenece a esta empresa. Vuelve a enviar /start con el token.',
     })
     return
   }
@@ -416,7 +416,7 @@ async function handleJoin(cb: CallbackQuery) {
       `🏢 Empresa: *${empresa.nombre}*\n` +
       `📍 Sede: *${tienda?.nombre}*\n` +
       `👤 Rol: *${rol === 'admin' ? 'Administrador' : 'Operario'}*\n\n` +
-      `Ya podés enviar notas de voz para registrar movimientos.\n` +
+      `Ya puedes enviar notas de voz para registrar movimientos.\n` +
       `Decí algo como: _"Vendí 3 tubos PVC"_`,
     parse_mode: 'Markdown',
   })
@@ -547,7 +547,7 @@ async function handleVoice(message: TelegramMessage) {
   if (await pendienteEnEdicion(telegramUserId)) {
     await tg('sendMessage', {
       chat_id: chatId,
-      text: '✏️ Estás en modo edición de un registro pendiente. Terminá o enviá /cancelar.',
+      text: '✏️ Estás en modo edición de un registro pendiente. Termina o envía /cancelar.',
     })
     return
   }
@@ -565,7 +565,7 @@ async function handlePhoto(message: TelegramMessage) {
   if (await pendienteEnEdicion(telegramUserId)) {
     await tg('sendMessage', {
       chat_id: chatId,
-      text: '✏️ Estás en modo edición de un registro pendiente. Terminá o enviá /cancelar.',
+      text: '✏️ Estás en modo edición de un registro pendiente. Termina o envía /cancelar.',
     })
     return
   }
@@ -582,13 +582,13 @@ async function handlePhoto(message: TelegramMessage) {
   }
   // Suspensión (sprint 021): empresa dada de baja → no procesa.
   if ((usuario.empresas as { activa?: boolean } | null)?.activa === false) {
-    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contactá al proveedor.' })
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contacta al proveedor.' })
     return
   }
   if (usuario.rol === 'admin' && usuario.modo_admin === 'consulta') {
     await tg('sendMessage', {
       chat_id: chatId,
-      text: '📊 Tu cuenta está en modo consulta. No registrás movimientos.\nReenviá /start con tu token para cambiar de modo.',
+      text: '📊 Tu cuenta está en modo consulta. No registras movimientos.\nReenvía /start con tu token para cambiar de modo.',
     })
     return
   }
@@ -612,7 +612,7 @@ async function handlePhoto(message: TelegramMessage) {
     .single()
 
   if (!pend) {
-    await tg('sendMessage', { chat_id: chatId, text: '❌ No pude preparar la foto. Reenviála.' })
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No pude preparar la foto. Reenvíala.' })
     return
   }
 
@@ -711,7 +711,7 @@ async function procesarRegistro(
 
   // Suspensión (sprint 021): empresa dada de baja → no procesa.
   if ((usuario.empresas as { activa?: boolean } | null)?.activa === false) {
-    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contactá al proveedor.' })
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contacta al proveedor.' })
     return
   }
 
@@ -757,7 +757,7 @@ async function procesarRegistro(
   if (usuario.rol === 'admin' && usuario.modo_admin === 'consulta') {
     await tg('sendMessage', {
       chat_id: chatId,
-      text: '📊 Tu cuenta está en modo consulta. No registrás movimientos.\nReenviá /start con tu token para cambiar de modo.',
+      text: '📊 Tu cuenta está en modo consulta. No registras movimientos.\nReenvía /start con tu token para cambiar de modo.',
     })
     return
   }
@@ -789,7 +789,7 @@ async function procesarRegistro(
     .single() as { data: MovPendiente | null }
 
   if (!pend) {
-    await tg('sendMessage', { chat_id: chatId, text: '❌ No pude preparar la revisión. Reintentá.' })
+    await tg('sendMessage', { chat_id: chatId, text: '❌ No pude preparar la revisión. Reintenta.' })
     return
   }
 
@@ -1039,7 +1039,7 @@ async function handleDeshacerCmd(chatId: number, telegramId: number | undefined)
     .limit(50)
 
   if (!movs || movs.length === 0) {
-    await tg('sendMessage', { chat_id: chatId, text: 'No tenés registros para deshacer.' })
+    await tg('sendMessage', { chat_id: chatId, text: 'No tienes registros para deshacer.' })
     return
   }
 
@@ -1115,10 +1115,10 @@ function aplicarCampo(it: TarjetaItem, field: string, texto: string): TarjetaIte
   return null
 }
 
-// Mensaje "¿Qué corregís?" con los 3 botones de campo + Cancelar.
+// Mensaje "¿Qué corriges?" con los 3 botones de campo + Cancelar.
 function construirSelectorCampo(pendId: string, n: number, it: TarjetaItem) {
   return {
-    text: `Ítem ${n}: ${it.nombre} — ${it.cantidad} × S/${it.precio.toFixed(2)}\n\n¿Qué corregís?`,
+    text: `Ítem ${n}: ${it.nombre} — ${it.cantidad} × S/${it.precio.toFixed(2)}\n\n¿Qué corriges?`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -1132,10 +1132,10 @@ function construirSelectorCampo(pendId: string, n: number, it: TarjetaItem) {
   }
 }
 
-// Mensaje "Campo actual: X — Enviá el nuevo valor:".
+// Mensaje "Campo actual: X — Envía el nuevo valor:".
 function construirPromptValor(pendId: string, it: TarjetaItem, field: string) {
   return {
-    text: `${CAMPO_LABEL[field]} actual: ${valorActualCampo(it, field)}\n\nEnviá el nuevo valor:`,
+    text: `${CAMPO_LABEL[field]} actual: ${valorActualCampo(it, field)}\n\nEnvía el nuevo valor:`,
     reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: `editcancel:${pendId}` }]] },
   }
 }
@@ -1149,7 +1149,7 @@ async function handleEdicionInput(chatId: number, pend: MovPendiente, texto: str
     if (Number.isNaN(n) || n < 1 || n > items.length) {
       await tg('sendMessage', {
         chat_id: chatId,
-        text: `Número fuera de rango. Enviá un número entre 1 y ${items.length} o /cancelar.`,
+        text: `Número fuera de rango. Envía un número entre 1 y ${items.length} o /cancelar.`,
       })
       return
     }
@@ -1164,7 +1164,7 @@ async function handleEdicionInput(chatId: number, pend: MovPendiente, texto: str
 
   // En 'asking_field' se espera un TAP de botón, no texto.
   if (pend.editing_state === 'asking_field') {
-    await tg('sendMessage', { chat_id: chatId, text: 'Tocá un campo (Nombre, Cantidad o Precio) o /cancelar.' })
+    await tg('sendMessage', { chat_id: chatId, text: 'Toca un campo (Nombre, Cantidad o Precio) o /cancelar.' })
     return
   }
 
@@ -1179,7 +1179,7 @@ async function handleEdicionInput(chatId: number, pend: MovPendiente, texto: str
     }
     const actualizado = aplicarCampo(items[idx], field, texto)
     if (!actualizado) {
-      await tg('sendMessage', { chat_id: chatId, text: `Valor inválido para ${CAMPO_LABEL[field]}. Enviá solo el dato o /cancelar.` })
+      await tg('sendMessage', { chat_id: chatId, text: `Valor inválido para ${CAMPO_LABEL[field]}. Envía solo el dato o /cancelar.` })
       return
     }
     items[idx] = actualizado
@@ -1250,7 +1250,7 @@ async function confirmarPendiente(chatId: number, msgId: number, pendId: string,
   )
 
   if (!ids) {
-    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No pude registrar los productos. Reintentá.' })
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No pude registrar los productos. Reintenta.' })
     return
   }
 
@@ -1307,7 +1307,7 @@ async function handleCorregirCb(cb: CallbackQuery) {
 
   await tg('editMessageText', {
     chat_id: chatId, message_id: msgId,
-    text: '¿Qué ítem querés corregir? Enviá el número del ítem (1, 2, 3…) o /cancelar para volver.',
+    text: '¿Qué ítem quieres corregir? Envía el número del ítem (1, 2, 3…) o /cancelar para volver.',
     reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: `editcancel:${pendId}` }]] },
   })
 }
@@ -1405,7 +1405,7 @@ async function handleFotoTipo(cb: CallbackQuery) {
 
   const fileInfo = await tg('getFile', { file_id: pend.file_id })
   if (!fileInfo.ok || !fileInfo.result?.file_path) {
-    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❌ No se pudo obtener la imagen. Reenviá la foto.' })
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❌ No se pudo obtener la imagen. Reenvía la foto.' })
     return
   }
   const imgResp = await fetch(`${TG_FILE}/${fileInfo.result.file_path}`)
@@ -1420,7 +1420,7 @@ async function handleFotoTipo(cb: CallbackQuery) {
   const prose = await visionTranscribir(base64, mimeType, rubro, esCompra)
   if (!prose || prose === 'NO_INVENTARIO') {
     await supabase.from('movimiento_pendiente').update({ cancelled: true }).eq('id', pendId)
-    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No encontré información de inventario en la imagen. Reenviá una foto más clara.' })
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No encontré información de inventario en la imagen. Reenvía una foto más clara.' })
     return
   }
 
@@ -1445,7 +1445,7 @@ async function handleFotoTipo(cb: CallbackQuery) {
 
   if (nlu.items.length === 0) {
     await supabase.from('movimiento_pendiente').update({ cancelled: true }).eq('id', pendId)
-    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No pude leer los productos. Reenviá una foto más clara.' })
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❓ No pude leer los productos. Reenvía una foto más clara.' })
     return
   }
 
@@ -1514,7 +1514,7 @@ async function handleAdminModo(cb: CallbackQuery) {
     await upsertAdmin(telegramId, cb.from, empresa.id, null, 'consulta')
     await tg('editMessageText', {
       chat_id: chatId, message_id: msgId,
-      text: `✅ *Registrado en modo consulta.*\n\n🏢 Empresa: *${empresa.nombre}*\n📊 Ves reportes consolidados; no registrás movimientos.`,
+      text: `✅ *Registrado en modo consulta.*\n\n🏢 Empresa: *${empresa.nombre}*\n📊 Ves reportes consolidados; no registras movimientos.`,
       parse_mode: 'Markdown',
     })
     return
@@ -1552,7 +1552,7 @@ async function handleAdminSede(cb: CallbackQuery) {
   const { data: tienda } = await supabase
     .from('tiendas').select('nombre').eq('id', tiendaId).eq('empresa_id', empresa.id).maybeSingle()
   if (!tienda) {
-    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❌ Sede inválida. Reenviá /start con tu token.' })
+    await tg('editMessageText', { chat_id: chatId, message_id: msgId, text: '❌ Sede inválida. Reenvía /start con tu token.' })
     return
   }
   await upsertAdmin(telegramId, cb.from, empresa.id, tiendaId, 'con_sede')
@@ -1600,7 +1600,7 @@ async function handleReporteDiario(chatId: number, telegramUserId: number | unde
     return
   }
   if (usuario.empresas?.activa === false) {
-    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contactá al proveedor.' })
+    await tg('sendMessage', { chat_id: chatId, text: '⛔ Tu empresa está suspendida. Contacta al proveedor.' })
     return
   }
   if (usuario.rol !== 'admin') {
