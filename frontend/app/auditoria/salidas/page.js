@@ -101,16 +101,24 @@ export default function SalidasPage() {
       treinta:30,cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90,cien:100 }
     let t = texto.toLowerCase()
     // Eliminar "cada uno/una/1/..." para que no contamine los números
-    t = t.replace(/cada\s+(?:uno|una|\d+)/g, '')
+    t = t.replace(/cada\s+(?:uno|una|\d+)/g, ' ')
     for (const [p, n] of Object.entries(NUMS)) t = t.replace(new RegExp(`\\b${p}\\b`, 'g'), String(n))
-    // Patrón: "X [palabras] a/por/x Y"
-    const m = t.match(/(\d+(?:[.,]\d+)?)\s*[a-záéíóúñ\s]*?\s+(?:a|por|x)\s+(\d+(?:[.,]\d+)?)/)
-    if (m) return { cantidad: parseFloat(m[1].replace(',','.')), precio: parseFloat(m[2].replace(',','.')) }
-    // Fallback: tomar los dos primeros números del texto
-    const nums = [...t.matchAll(/\d+(?:[.,]\d+)?/g)].map(x => parseFloat(x[0].replace(',','.')))
-    if (nums.length >= 2) return { cantidad: nums[0], precio: nums[1] }
-    if (nums.length === 1) return { cantidad: nums[0], precio: null }
-    return { cantidad: null, precio: null }
+    // Quitar tokens de código/talla (mezclan letras y dígitos: em0021, t40, t-39, m4)
+    // para que sus números no se confundan con cantidad/precio.
+    const soloVenta = t.split(/\s+/)
+      .filter((tok) => !(/[a-záéíóúñ]/.test(tok) && /\d/.test(tok)))
+      .join(' ')
+    // Precio por pista: número junto a "soles"/"s/", o después de "a/por/x".
+    const mSoles = soloVenta.match(/(\d+(?:[.,]\d+)?)\s*(?:soles|s\/)/)
+    const mConector = soloVenta.match(/(?:\ba\b|\bpor\b|\bx\b)\s+(\d+(?:[.,]\d+)?)/)
+    const nums = [...soloVenta.matchAll(/\d+(?:[.,]\d+)?/g)].map((x) => parseFloat(x[0].replace(',', '.')))
+    const num = (s) => parseFloat(s.replace(',', '.'))
+    const cantidad = nums.length ? nums[0] : null
+    let precio = null
+    if (mSoles) precio = num(mSoles[1])
+    else if (mConector) precio = num(mConector[1])
+    else if (nums.length >= 2) precio = nums[1]
+    return { cantidad, precio }
   }
 
   async function interpretarVenta(t) {
