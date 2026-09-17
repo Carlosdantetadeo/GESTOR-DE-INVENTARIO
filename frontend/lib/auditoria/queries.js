@@ -523,6 +523,27 @@ export async function getPrecioSugerido(productoId) {
   return prod?.precio_referencial != null ? Number(prod.precio_referencial) : null
 }
 
+// Últimos productos vendidos por este vendedor (distintos), para accesos rápidos.
+export async function getProductosRecientes(authUid, limite = 8) {
+  const { data, error } = await supabase
+    .from('movimientos')
+    .select('producto_id, created_at, productos(id, nombre, referencia)')
+    .eq('tipo', 'venta').eq('auth_uid', authUid)
+    .order('created_at', { ascending: false })
+    .limit(60)
+  if (error) throw error
+  const vistos = new Set()
+  const out = []
+  for (const m of data || []) {
+    const p = m.productos
+    if (!p || vistos.has(p.id)) continue
+    vistos.add(p.id)
+    out.push({ id: p.id, producto_id: p.id, nombre: p.nombre, referencia: p.referencia })
+    if (out.length >= limite) break
+  }
+  return out
+}
+
 // Stock actual de una pieza en una sede (tabla derivada por trigger).
 export async function getStock(productoId, tiendaId) {
   const { data, error } = await supabase

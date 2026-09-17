@@ -4,11 +4,11 @@
 // Tres formas de encontrar la pieza: búsqueda por texto, VOZ (Groq Whisper) y
 // FOTO de boleta/factura (Groq Vision → prellena el ítem). El vendedor ingresa
 // cantidad y precio. Escribe en el mismo ledger que el bot; deshacer = DELETE.
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido } from '../../../lib/auditoria/queries'
+import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -26,12 +26,20 @@ export default function SalidasPage() {
   const [procesando, setProcesando] = useState(false)
   const [aviso, setAviso] = useState('')
   const [sinResultado, setSinResultado] = useState(false)
+  const [recientes, setRecientes] = useState([])
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
   }, [session, online])
+
+  const cargarRecientes = useCallback(async () => {
+    if (!session?.user?.id) return
+    try { setRecientes(await getProductosRecientes(session.user.id)) } catch { /* accesos rápidos son opcionales */ }
+  }, [session])
+
+  useEffect(() => { cargarRecientes() }, [cargarRecientes])
 
   async function buscar(q) {
     setTexto(q); setPieza(null); setStock(null); setSinResultado(false)
@@ -237,6 +245,7 @@ export default function SalidasPage() {
       setUltima({ ...mov, nombre: pieza.nombre, cantidad: cant })
       setAviso('Venta registrada.')
       setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio(''); setSinResultado(false)
+      cargarRecientes()
     } catch { setAviso('No se pudo registrar la venta.') }
   }
 
@@ -276,6 +285,17 @@ export default function SalidasPage() {
           </label>
         </div>
       </div>
+
+      {!texto.trim() && !pieza && resultados.length === 0 && recientes.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: '0.8rem', color: T.muted, marginBottom: 6, fontWeight: 600 }}>Recientes — tocá para vender de nuevo</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {recientes.map((p) => (
+              <button key={p.id} onClick={() => elegir(p)} style={chip}>{p.nombre}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!texto.trim() && !pieza && resultados.length === 0 && !grabando && (
         <Card style={{ marginTop: 14, background: '#f8fafc' }}>
@@ -368,4 +388,9 @@ const fotoBtn = {
 const resultItem = {
   width: '100%', textAlign: 'left', padding: '12px 14px',
   border: `1px solid ${T.line}`, borderRadius: 12, background: '#fff', cursor: 'pointer', fontSize: '1rem',
+}
+const chip = {
+  padding: '8px 14px', borderRadius: 999, border: `1px solid ${T.line}`,
+  background: '#fff', cursor: 'pointer', fontSize: '0.9rem', color: T.ink,
+  maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
