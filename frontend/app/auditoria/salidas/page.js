@@ -25,6 +25,7 @@ export default function SalidasPage() {
   const [grabando, setGrabando] = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const [sinResultado, setSinResultado] = useState(false)
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
@@ -33,7 +34,7 @@ export default function SalidasPage() {
   }, [session, online])
 
   async function buscar(q) {
-    setTexto(q); setPieza(null); setStock(null)
+    setTexto(q); setPieza(null); setStock(null); setSinResultado(false)
     if (!q.trim()) { setResultados([]); return }
     const locales = await buscarLocal(q)
     setResultados(locales)
@@ -45,7 +46,7 @@ export default function SalidasPage() {
   }
 
   async function elegir(p) {
-    setPieza(p)
+    setPieza(p); setSinResultado(false)
     setTexto(p.nombre)   // llena el input con el nombre → el usuario puede editarlo
     setResultados([])
     try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
@@ -107,8 +108,8 @@ export default function SalidasPage() {
       if (prec != null) setPrecio(String(prec))
       setAviso('')
     } else {
-      setPieza(null); setStock(null); setResultados([])
-      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto. Corregí el texto o buscá por nombre.`)
+      setPieza(null); setStock(null); setResultados([]); setSinResultado(true)
+      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto.`)
     }
   }
 
@@ -141,7 +142,7 @@ export default function SalidasPage() {
       }
       recorderRef.current = rec
       rec.start()
-      setGrabando(true)
+      setGrabando(true); setSinResultado(false)
     } catch { setAviso('No se pudo acceder al micrófono.') }
   }
 
@@ -150,6 +151,12 @@ export default function SalidasPage() {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
     recorderRef.current = null
     setGrabando(false)
+  }
+
+  // Vuelve al estado inicial para dictar/buscar de nuevo.
+  function limpiar() {
+    setTexto(''); setResultados([]); setPieza(null); setStock(null)
+    setCantidad(''); setPrecio(''); setAviso(''); setSinResultado(false)
   }
 
   async function procesarFoto(e) {
@@ -196,7 +203,7 @@ export default function SalidasPage() {
       })
       setUltima({ ...mov, nombre: pieza.nombre, cantidad: cant })
       setAviso('Venta registrada.')
-      setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio('')
+      setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio(''); setSinResultado(false)
     } catch { setAviso('No se pudo registrar la venta.') }
   }
 
@@ -236,6 +243,15 @@ export default function SalidasPage() {
           </label>
         </div>
       </div>
+
+      {sinResultado && (
+        <Card style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span style={{ fontSize: '0.9rem', color: T.muted }}>
+            No encontré el producto. Editá el texto de arriba y buscá, o empezá de nuevo.
+          </span>
+          <Button variant="secondary" onClick={limpiar}>🔄 Limpiar y dictar de nuevo</Button>
+        </Card>
+      )}
 
       {resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
