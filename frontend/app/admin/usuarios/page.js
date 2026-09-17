@@ -81,7 +81,7 @@ export default function UsuariosPage() {
           <div style={styles.sectionLabel}>Conexión Telegram</div>
           <div style={{ ...styles.card, gap: '14px' }}>
             <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
-              Tus empleados se conectan al bot enviándole <code>/start &lt;token&gt;</code>. Compartí el
+              Tus empleados se conectan al bot enviándole <code>/start &lt;token&gt;</code>. Comparte el
               token de <strong>operario</strong> con tus vendedores. El token <strong>admin</strong> es
               para administradores (reportes) — no lo compartas.
             </p>

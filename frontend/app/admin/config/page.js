@@ -265,7 +265,7 @@ export default function ConfigPage() {
           <div>
             <div style={styles.sectionLabel}>Catálogo de productos</div>
             <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', margin: '4px 0 0' }}>
-              Cargá tus productos para que el sistema los reconozca mejor al registrar por voz o foto.
+              Carga tus productos para que el sistema los reconozca mejor al registrar por voz o foto.
             </p>
           </div>
 
@@ -342,9 +342,9 @@ export default function ConfigPage() {
                   >
                     <FileSpreadsheet size={26} style={{ color: 'hsl(var(--text-muted))', marginBottom: '8px' }} />
                     <p style={{ fontSize: '0.85rem', margin: '0 0 10px' }}>
-                      Arrastrá tu archivo acá, o
+                      Arrastra tu archivo aquí, o
                       <label style={{ color: 'hsl(var(--accent))', fontWeight: 600, cursor: 'pointer' }}>
-                        {' '}elegí uno
+                        {' '}elige uno
                         <input type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }}
                           onChange={(e) => handleFile(e.target.files?.[0])} />
                       </label>
@@ -417,7 +417,7 @@ export default function ConfigPage() {
               <tbody>
                 {paged.length === 0 ? (
                   <tr><td colSpan={6} style={{ padding: '28px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-                    {catalogo.length === 0 ? 'Tu catálogo está vacío. Agregá productos arriba o importá un Excel/CSV.' : 'Sin resultados.'}
+                    {catalogo.length === 0 ? 'Tu catálogo está vacío. Agrega productos arriba o importa un Excel/CSV.' : 'Sin resultados.'}
                   </td></tr>
                 ) : paged.map((p, i) => (
                   <tr key={p.id} style={{ borderBottom: i < paged.length - 1 ? '1px solid hsl(var(--border))' : 'none' }}>
@@ -487,7 +487,7 @@ export default function ConfigPage() {
               <button onClick={() => !deleting && setConfirmDel(null)} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))', display: 'flex' }}><X size={20} /></button>
             </div>
             <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', margin: 0 }}>
-              ¿Eliminás <strong>{confirmDel.nombre}</strong> del catálogo? Esta acción no se puede deshacer.
+              ¿Eliminas <strong>{confirmDel.nombre}</strong> del catálogo? Esta acción no se puede deshacer.
             </p>
             {confirmDel.error && <span style={{ fontSize: '0.82rem', color: 'hsl(var(--color-gasto))' }}>⚠️ {confirmDel.error}</span>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>

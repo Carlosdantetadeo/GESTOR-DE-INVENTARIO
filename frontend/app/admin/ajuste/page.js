@@ -117,7 +117,7 @@ export default function AjusteInventario() {
       <div>
         <h1 style={{ fontSize: '2rem', marginBottom: '6px' }}>Ajuste de Inventario</h1>
         <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
-          Conteo físico por tienda. Ingresá la cantidad contada y el sistema calcula
+          Conteo físico por tienda. Ingresa la cantidad contada y el sistema calcula
           la diferencia. Cada ajuste se puede deshacer desde Movimientos.
         </p>
       </div>
@@ -204,7 +204,7 @@ export default function AjusteInventario() {
               {!tiendaId ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '40px' }}>
-                    Elegí una tienda para empezar el conteo.
+                    Elige una tienda para empezar el conteo.
                   </td>
                 </tr>
               ) : loadingStock ? (

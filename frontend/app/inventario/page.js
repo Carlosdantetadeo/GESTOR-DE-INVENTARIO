@@ -449,7 +449,7 @@ export default function Inventario() {
             </div>
 
             <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))', marginTop: '-8px' }}>
-              Precargá tu catálogo para que el bot reconozca el producto desde el primer mensaje.
+              Precarga tu catálogo para que el bot reconozca el producto desde el primer mensaje.
             </p>
 
             <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
