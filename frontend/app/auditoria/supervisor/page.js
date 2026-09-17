@@ -99,7 +99,7 @@ export default function SupervisorPage() {
   }
 
   if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
-  if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>No tenés permiso para ver el panel del supervisor.</p></Page>
+  if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>No tienes permiso para ver el panel del supervisor.</p></Page>
   if (cargando) return <Page><p style={{ color: T.muted }}>Cargando panel…</p></Page>
 
   return (

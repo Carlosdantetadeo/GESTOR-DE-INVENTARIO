@@ -288,7 +288,7 @@ export default function SalidasPage() {
 
       {!texto.trim() && !pieza && resultados.length === 0 && recientes.length > 0 && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: '0.8rem', color: T.muted, marginBottom: 6, fontWeight: 600 }}>Recientes — tocá para vender de nuevo</div>
+          <div style={{ fontSize: '0.8rem', color: T.muted, marginBottom: 6, fontWeight: 600 }}>Recientes — toca para vender de nuevo</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {recientes.map((p) => (
               <button key={p.id} onClick={() => elegir(p)} style={chip}>{p.nombre}</button>

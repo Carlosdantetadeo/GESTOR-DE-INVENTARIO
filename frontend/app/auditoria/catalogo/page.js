@@ -162,7 +162,7 @@ export default function CatalogoPage() {
             body: JSON.stringify({ textos }),
           })
           if (!res.ok) {
-            setResultado(`Pausado en ${hechos}/${totalPend} (HTTP ${res.status}). Volvé a apretar "Generar embeddings" para continuar.`)
+            setResultado(`Pausado en ${hechos}/${totalPend} (HTTP ${res.status}). Vuelve a tocar "Generar embeddings" para continuar.`)
             return
           }
           const { vectores } = await res.json()
@@ -175,7 +175,7 @@ export default function CatalogoPage() {
         }
         // Si una tanda completa no avanzó, cortar para no quedar en bucle.
         if (hechos === antes) {
-          setResultado(`Pausado en ${hechos}/${totalPend}: no se pudo avanzar. Revisá HuggingFace y reintentá.`)
+          setResultado(`Pausado en ${hechos}/${totalPend}: no se pudo avanzar. Revisa HuggingFace y reintenta.`)
           return
         }
       }
@@ -234,7 +234,7 @@ export default function CatalogoPage() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    if (!stockSede) { setStockResultado('Elegí primero la sede destino.'); return }
+    if (!stockSede) { setStockResultado('Elige primero la sede destino.'); return }
     setStockResultado('Leyendo archivo…')
     try {
       const wb = XLSX.read(await file.arrayBuffer())
@@ -265,7 +265,7 @@ export default function CatalogoPage() {
       })
       const sedeNombre = tiendas.find((t) => Number(t.id) === Number(stockSede))?.nombre ?? 'la sede'
       let msg = `Cargado: ${cargados} ingreso(s) en ${sedeNombre}.`
-      if (sinMatch.length) msg += ` · ${sinMatch.length} sin producto (revisá referencia/nombre): ${sinMatch.slice(0, 5).join(', ')}${sinMatch.length > 5 ? '…' : ''}`
+      if (sinMatch.length) msg += ` · ${sinMatch.length} sin producto (revisa referencia/nombre): ${sinMatch.slice(0, 5).join(', ')}${sinMatch.length > 5 ? '…' : ''}`
       setStockResultado(msg)
       setStockPend(null)
     } catch {
@@ -359,7 +359,7 @@ export default function CatalogoPage() {
           <Button variant="secondary" onClick={generarEmbeddings}>🧠 Generar embeddings</Button>
         </div>
         <p style={{ ...muted, fontSize: '0.75rem', color: T.faint, margin: '6px 0 0' }}>
-          "Generar embeddings" alimenta la búsqueda inteligente por voz/foto. Corrélo después de importar productos nuevos.
+          "Generar embeddings" alimenta la búsqueda inteligente por voz/foto. Córrelo después de importar productos nuevos.
         </p>
         {embEstado && (
           <p style={{ fontSize: '0.82rem', fontWeight: 600, margin: '8px 0 0', color: embEstado.total > 0 && embEstado.sin === 0 ? '#16a34a' : T.muted }}>
@@ -376,7 +376,7 @@ export default function CatalogoPage() {
           El stock se carga como ingresos en la sede elegida.
         </p>
         <Select value={stockSede} onChange={(e) => { setStockSede(e.target.value); setStockPend(null); setStockResultado('') }} style={{ marginBottom: 10 }}>
-          <option value="">Elegí la sede destino…</option>
+          <option value="">Elige la sede destino…</option>
           {tiendas.filter((t) => t.activa !== false).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
         </Select>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -403,13 +403,13 @@ export default function CatalogoPage() {
           </div>
         )}
         <p style={{ ...muted, fontSize: '0.75rem', color: T.faint, margin: '6px 0 0' }}>
-          Es una carga inicial: si volvés a subir el mismo archivo, suma de nuevo. Usalo una sola vez por sede.
+          Es una carga inicial: si vuelves a subir el mismo archivo, suma de nuevo. Úsalo una sola vez por sede.
         </p>
         {stockResultado && <p style={{ fontSize: '0.85rem', color: T.primary, margin: '8px 0 0' }}>{stockResultado}</p>}
       </Panel>
 
       <Panel titulo="Sedes">
-        <p style={muted}>Agregá o renombrá tus sucursales. "Desactivar" la oculta de la carga sin borrar el historial.</p>
+        <p style={muted}>Agrega o renombra tus sucursales. "Desactivar" la oculta de la carga sin borrar el historial.</p>
         <form onSubmit={agregarTienda} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
           <Input placeholder="Nombre de la sede (ej: Sucursal Centro)" value={tiendaNueva} onChange={(e) => setTiendaNueva(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
           <Button variant="primary" type="submit">Agregar sede</Button>
@@ -420,9 +420,9 @@ export default function CatalogoPage() {
       </Panel>
 
       <Panel titulo="Ubicaciones / Secciones">
-        <p style={muted}>Elegí una sede y agregá sus secciones (pasillo, estante, zona…). Se usan al ingresar inventario.</p>
+        <p style={muted}>Elige una sede y agrega sus secciones (pasillo, estante, zona…). Se usan al ingresar inventario.</p>
         <Select value={secTienda} onChange={(e) => elegirSecTienda(e.target.value)} style={{ marginBottom: 10 }}>
-          <option value="">Elegí una sede…</option>
+          <option value="">Elige una sede…</option>
           {tiendas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
         </Select>
         {secTienda && (
@@ -463,7 +463,7 @@ export default function CatalogoPage() {
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 12, marginBottom: 12 }}>
             <div style={{ fontWeight: 700, marginBottom: 4, color: T.ink }}>Usuario creado ✅</div>
             <p style={{ ...muted, margin: '0 0 8px' }}>
-              Guardá esta contraseña ahora — no se vuelve a mostrar. Pasásela al empleado para que ingrese con su email.
+              Guarda esta contraseña ahora — no se vuelve a mostrar. Pásasela al empleado para que ingrese con su email.
             </p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: '0.85rem' }}>{credNueva.email}</span>
@@ -472,7 +472,7 @@ export default function CatalogoPage() {
             </div>
           </div>
         )}
-        <p style={{ ...muted, margin: '0 0 6px' }}>Poné un nombre a cada vendedor para identificarlo en los reportes.</p>
+        <p style={{ ...muted, margin: '0 0 6px' }}>Pon un nombre a cada vendedor para identificarlo en los reportes.</p>
         <ul style={lista}>
           {usuarios.map((u) => (
             <UsuarioRow
@@ -502,7 +502,7 @@ export default function CatalogoPage() {
       <Panel titulo="Bot de Telegram (reportes)">
         <p style={muted}>
           El bot ahora <strong>solo entrega el reporte del día</strong>. Vinculá tu Telegram una vez
-          con el token de admin (comando <code>/start</code>) y después escribí <code>/reporte</code>.
+          con el token de admin (comando <code>/start</code>) y después escribe <code>/reporte</code>.
         </p>
         <Field label="Token de administrador (para /start)">
           <div style={{ display: 'flex', gap: 8 }}>

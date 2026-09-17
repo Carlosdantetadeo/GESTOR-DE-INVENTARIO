@@ -151,7 +151,7 @@ export default function RecepcionPage() {
                     ))}
                     <option value="nueva">➕ Pieza nueva (pendiente de aprobación)</option>
                   </Select>
-                  {bajaConfianza && <span style={{ color: '#b45309', fontSize: '0.8rem' }}>⚠ Coincidencia de baja confianza — revisá</span>}
+                  {bajaConfianza && <span style={{ color: '#b45309', fontSize: '0.8rem' }}>⚠ Coincidencia de baja confianza — revisa</span>}
                 </Card>
               )
             })}

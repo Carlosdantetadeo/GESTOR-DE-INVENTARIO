@@ -136,10 +136,10 @@ export default function CapturaPage() {
             const { texto: t } = await res.json()
             buscar(t)
           } else {
-            setAviso('La transcripción no está disponible. Registrá por búsqueda.')
+            setAviso('La transcripción no está disponible. Registra por búsqueda.')
           }
         } catch {
-          setAviso('No se pudo transcribir. Registrá por búsqueda.')
+          setAviso('No se pudo transcribir. Registra por búsqueda.')
         }
       }
       recorderRef.current = rec

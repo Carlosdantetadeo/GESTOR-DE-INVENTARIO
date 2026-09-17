@@ -71,11 +71,11 @@ export default function IngresoPage() {
           if (res.ok) {
             const { texto: t } = await res.json()
             if (t?.trim()) await interpretarIngreso(t)
-            else setAviso('No te entendí. Probá de nuevo o buscá por nombre.')
+            else setAviso('No te entendí. Prueba de nuevo o busca por nombre.')
           } else if (res.status === 501) {
             setAviso('La voz no está configurada (falta GROQ_API_KEY en Vercel).')
           } else {
-            setAviso('No se pudo transcribir el audio. Probá de nuevo.')
+            setAviso('No se pudo transcribir el audio. Prueba de nuevo.')
           }
         } catch { setAviso('No se pudo transcribir.') }
       }
@@ -121,14 +121,14 @@ export default function IngresoPage() {
       setAviso('')
     } else {
       setPieza(null); setStock(null); setResultados([])
-      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto. Corregí el texto o buscá por nombre.`)
+      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto. Corrige el texto o busca por nombre.`)
     }
   }
 
   async function registrar() {
     const cant = Number(cantidad)
     if (!pieza || !cant) return
-    if (!tiendaId) { setAviso('Elegí una sede.'); return }
+    if (!tiendaId) { setAviso('Elige una sede.'); return }
     if (!online) { setAviso('Registrar ingresos requiere conexión.'); return }
     try {
       const mov = await registrarIngresoManual({
@@ -168,7 +168,7 @@ export default function IngresoPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Field label="Sede">
           <Select value={tiendaId} onChange={(e) => elegirSede(e.target.value)}>
-            <option value="">Elegí una sede…</option>
+            <option value="">Elige una sede…</option>
             {tiendas.filter((t) => t.activa !== false).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </Select>
         </Field>
