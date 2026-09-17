@@ -480,6 +480,25 @@ export async function guardarEmbedding(id, emb) {
 
 // ── Salidas / ventas (FR-021) ─────────────────────────────────────────────────
 
+// Busca un producto por nombre exacto (case-insensitive) y, si no existe, lo crea.
+// Se usa para vender un ítem que la búsqueda no encontró en el catálogo, sin
+// duplicar si ya estaba. Devuelve el mismo formato que usa la pantalla de venta.
+export async function buscarOCrearProducto(nombre, empresaId) {
+  const nom = (nombre || '').trim()
+  if (!nom) throw new Error('nombre vacío')
+  const { data: existentes } = await supabase
+    .from('productos').select('id, nombre, referencia').ilike('nombre', nom).limit(1)
+  if (existentes?.length) {
+    const p = existentes[0]
+    return { id: p.id, producto_id: p.id, nombre: p.nombre, referencia: p.referencia }
+  }
+  const { data, error } = await supabase
+    .from('productos').insert({ empresa_id: empresaId, nombre: nom, unidad_medida: 'unidad' })
+    .select('id, nombre, referencia').single()
+  if (error) throw error
+  return { id: data.id, producto_id: data.id, nombre: data.nombre, referencia: data.referencia }
+}
+
 // Stock actual de una pieza en una sede (tabla derivada por trigger).
 export async function getStock(productoId, tiendaId) {
   const { data, error } = await supabase

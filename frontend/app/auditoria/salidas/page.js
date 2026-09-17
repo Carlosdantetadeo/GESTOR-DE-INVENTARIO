@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { getStock, registrarSalida, deshacerSalida, buscarSemantico } from '../../../lib/auditoria/queries'
+import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -98,19 +98,36 @@ export default function SalidasPage() {
       prec = r.precio
     }
 
-    let resultados = online ? await buscarSemantico(descripcion) : null
-    if (!resultados || !resultados.length) resultados = await buscarLocal(descripcion)
+    let encontrados = online ? await buscarSemantico(descripcion) : null
+    if (!encontrados || !encontrados.length) encontrados = await buscarLocal(descripcion)
     setTexto(descripcion)
-    if (resultados.length > 0) {
-      setResultados([])
-      await elegir(resultados[0].pieza)
-      if (cant != null) setCantidad(String(cant))
-      if (prec != null) setPrecio(String(prec))
-      setAviso('')
+    setPieza(null); setStock(null)
+    // Precargar lo dictado; queda listo cuando elijas o crees el producto.
+    if (cant != null) setCantidad(String(cant))
+    if (prec != null) setPrecio(String(prec))
+    if (encontrados.length > 0) {
+      setResultados(encontrados)   // mostrar candidatos para confirmar el correcto
+      setSinResultado(false)
+      setAviso('Elegí el producto correcto de la lista, o crealo abajo si no está.')
     } else {
-      setPieza(null); setStock(null); setResultados([]); setSinResultado(true)
-      setAviso(`Reconocí "${descripcion}" pero no encontré ese producto.`)
+      setResultados([]); setSinResultado(true)
+      setAviso(`Escuché "${descripcion}". No está en el catálogo — podés crearlo y vender abajo.`)
     }
+  }
+
+  // Vende un ítem que no estaba seleccionado: usa el producto si ya existe (por
+  // nombre) o lo crea, y abre la tarjeta para registrar. Evita duplicar.
+  async function crearYVender() {
+    const nombre = texto.trim()
+    if (!nombre) return
+    if (!online) { setAviso('Crear productos requiere conexión.'); return }
+    setAviso('Preparando producto…')
+    try {
+      const prod = await buscarOCrearProducto(nombre, session.empresaId)
+      setResultados([]); setSinResultado(false)
+      await elegir(prod)
+      setAviso('')
+    } catch { setAviso('No se pudo crear el producto.') }
   }
 
   async function grabarVoz() {
@@ -244,15 +261,6 @@ export default function SalidasPage() {
         </div>
       </div>
 
-      {sinResultado && (
-        <Card style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <span style={{ fontSize: '0.9rem', color: T.muted }}>
-            No encontré el producto. Editá el texto de arriba y buscá, o empezá de nuevo.
-          </span>
-          <Button variant="secondary" onClick={limpiar}>🔄 Limpiar y dictar de nuevo</Button>
-        </Card>
-      )}
-
       {resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {resultados.map(({ pieza: p }) => (
@@ -263,6 +271,18 @@ export default function SalidasPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {texto.trim() && !pieza && !grabando && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {resultados.length === 0 && (
+            <span style={{ fontSize: '0.9rem', color: T.muted }}>
+              {sinResultado ? 'No está en el catálogo.' : 'Elegí de la lista o creá el producto.'}
+            </span>
+          )}
+          <Button variant="secondary" full onClick={crearYVender}>➕ Vender "{texto.trim()}" (crear si no está)</Button>
+          <Button variant="ghost" onClick={limpiar}>🔄 Limpiar y empezar de nuevo</Button>
+        </div>
       )}
 
       {pieza && (
