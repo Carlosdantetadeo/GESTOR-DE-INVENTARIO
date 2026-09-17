@@ -456,11 +456,20 @@ export async function buscarSemantico(texto, limite = 5) {
   }
 }
 
-// Productos sin embedding (para el backfill del admin).
+// Productos sin embedding (para el backfill del admin). Trae hasta 1000 por vez;
+// el caller repite hasta terminar.
 export async function productosSinEmbedding() {
   const { data, error } = await supabase.from('productos').select('id, nombre, referencia').is('embedding', null)
   if (error) throw error
   return data || []
+}
+
+// Cuántos productos siguen sin embedding (para mostrar el progreso total).
+export async function contarSinEmbedding() {
+  const { count, error } = await supabase
+    .from('productos').select('id', { count: 'exact', head: true }).is('embedding', null)
+  if (error) throw error
+  return count ?? 0
 }
 
 // Guarda el embedding de un producto (formato texto de pgvector: '[...]').

@@ -10,7 +10,7 @@ import {
   importarCatalogo, getEmpresaConfig, updateEmpresaConfig, getTelegramTokens,
   getTiendas, crearTienda, renombrarTienda, setTiendaActiva,
   getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
-  productosSinEmbedding, guardarEmbedding, cargarStockInicial,
+  productosSinEmbedding, contarSinEmbedding, guardarEmbedding, cargarStockInicial,
 } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Select, Card, Note, T, inputStyle } from '../../../lib/auditoria/ui'
 
@@ -137,25 +137,43 @@ export default function CatalogoPage() {
   async function generarEmbeddings() {
     setResultado('Buscando productos sin embedding…')
     try {
-      const pend = await productosSinEmbedding()
-      if (!pend.length) { setResultado('Todos los productos ya tienen embedding. ✅'); return }
+      const totalPend = await contarSinEmbedding()
+      if (!totalPend) { setResultado('Todos los productos ya tienen embedding. ✅'); return }
+
       let hechos = 0
       const lote = 16
-      for (let i = 0; i < pend.length; i += lote) {
-        const grupo = pend.slice(i, i + lote)
-        const textos = grupo.map((p) => [p.nombre, p.referencia].filter(Boolean).join(' '))
-        const res = await fetch('/api/auditoria/embeddings', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ textos }),
-        })
-        if (!res.ok) { setResultado(`Error generando embeddings (HTTP ${res.status}).`); return }
-        const { vectores } = await res.json()
-        for (let j = 0; j < grupo.length; j++) {
-          if (vectores[j]?.length) { await guardarEmbedding(grupo[j].id, vectores[j]); hechos++ }
+      // Procesa en tandas hasta terminar. Guarda a medida que avanza, así es
+      // resumible: si se corta o HuggingFace limita, volvés a apretar y sigue.
+      for (;;) {
+        const pend = await productosSinEmbedding()   // hasta 1000 sin embedding
+        if (!pend.length) break
+        const antes = hechos
+        for (let i = 0; i < pend.length; i += lote) {
+          const grupo = pend.slice(i, i + lote)
+          const textos = grupo.map((p) => [p.nombre, p.referencia].filter(Boolean).join(' '))
+          const res = await fetch('/api/auditoria/embeddings', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ textos }),
+          })
+          if (!res.ok) {
+            setResultado(`Pausado en ${hechos}/${totalPend} (HTTP ${res.status}). Volvé a apretar "Generar embeddings" para continuar.`)
+            return
+          }
+          const { vectores } = await res.json()
+          for (let j = 0; j < grupo.length; j++) {
+            if (vectores[j]?.length) {
+              try { await guardarEmbedding(grupo[j].id, vectores[j]); hechos++ } catch { /* reintenta en la próxima vuelta */ }
+            }
+          }
+          setResultado(`Generando embeddings… ${hechos}/${totalPend}`)
         }
-        setResultado(`Generando embeddings… ${hechos}/${pend.length}`)
+        // Si una tanda completa no avanzó, cortar para no quedar en bucle.
+        if (hechos === antes) {
+          setResultado(`Pausado en ${hechos}/${totalPend}: no se pudo avanzar. Revisá HuggingFace y reintentá.`)
+          return
+        }
       }
-      setResultado(`Listo: ${hechos} producto(s) con embedding. 🧠`)
+      setResultado(`Listo: ${hechos} producto(s) con embedding en esta corrida. 🧠`)
     } catch {
       setResultado('No se pudieron generar los embeddings.')
     }
