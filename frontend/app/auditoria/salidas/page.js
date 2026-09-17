@@ -27,6 +27,7 @@ export default function SalidasPage() {
   const [aviso, setAviso] = useState('')
   const [sinResultado, setSinResultado] = useState(false)
   const [recientes, setRecientes] = useState([])
+  const [escuchado, setEscuchado] = useState('')   // lo que transcribió la voz
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
@@ -42,19 +43,29 @@ export default function SalidasPage() {
   useEffect(() => { cargarRecientes() }, [cargarRecientes])
 
   async function buscar(q) {
-    setTexto(q); setPieza(null); setStock(null); setSinResultado(false)
+    setTexto(q); setPieza(null); setStock(null); setSinResultado(false); setEscuchado('')
     if (!q.trim()) { setResultados([]); return }
-    const locales = await buscarLocal(q)
-    setResultados(locales)
-    // Enriquecer con semántica si hay red y pocos resultados locales
-    if (online && locales.length < 4) {
-      const sem = await buscarSemantico(q).catch(() => null)
-      if (sem?.length) setResultados(sem)
+    setResultados(await buscarCombinado(q))
+  }
+
+  // Combina coincidencias por trigrama (mejor para CÓDIGOS/referencias) con las
+  // semánticas por embeddings (mejor cuando lo dicen distinto). Deduplica.
+  async function buscarCombinado(q) {
+    const locales = await buscarLocal(q).catch(() => [])
+    const sem = online ? ((await buscarSemantico(q).catch(() => null)) || []) : []
+    const vistos = new Set()
+    const out = []
+    for (const r of [...locales, ...sem]) {
+      const id = r.pieza?.producto_id ?? r.pieza?.id
+      if (id == null || vistos.has(id)) continue
+      vistos.add(id)
+      out.push(r)
     }
+    return out.slice(0, 8)
   }
 
   async function elegir(p) {
-    setPieza(p); setSinResultado(false)
+    setPieza(p); setSinResultado(false); setEscuchado('')
     setTexto(p.nombre)   // llena el input con el nombre → el usuario puede editarlo
     setResultados([])
     const pid = p.producto_id ?? p.id
@@ -97,7 +108,8 @@ export default function SalidasPage() {
   }
 
   async function interpretarVenta(t) {
-    setAviso(`Escuché: "${t}"`)
+    setEscuchado(t)
+    setAviso('')
     let descripcion = t
     let cant = null
     let prec = null
@@ -122,8 +134,9 @@ export default function SalidasPage() {
       prec = r.precio
     }
 
-    let encontrados = online ? await buscarSemantico(descripcion) : null
-    if (!encontrados || !encontrados.length) encontrados = await buscarLocal(descripcion)
+    // Buscar candidatos por código (trigrama) + significado (embeddings).
+    let encontrados = await buscarCombinado(descripcion)
+    if (!encontrados.length && descripcion !== t) encontrados = await buscarCombinado(t)
     setTexto(descripcion)
     setPieza(null); setStock(null)
     // Precargar lo dictado; queda listo cuando elijas o crees el producto.
@@ -132,10 +145,8 @@ export default function SalidasPage() {
     if (encontrados.length > 0) {
       setResultados(encontrados)   // mostrar candidatos para confirmar el correcto
       setSinResultado(false)
-      setAviso('Elige el producto correcto de la lista, o créalo abajo si no está.')
     } else {
       setResultados([]); setSinResultado(true)
-      setAviso(`Escuché "${descripcion}". No está en el catálogo — puedes crearlo y vender abajo.`)
     }
   }
 
@@ -197,7 +208,7 @@ export default function SalidasPage() {
   // Vuelve al estado inicial para dictar/buscar de nuevo.
   function limpiar() {
     setTexto(''); setResultados([]); setPieza(null); setStock(null)
-    setCantidad(''); setPrecio(''); setAviso(''); setSinResultado(false)
+    setCantidad(''); setPrecio(''); setAviso(''); setSinResultado(false); setEscuchado('')
   }
 
   async function procesarFoto(e) {
@@ -244,7 +255,7 @@ export default function SalidasPage() {
       })
       setUltima({ ...mov, nombre: pieza.nombre, cantidad: cant })
       setAviso('Venta registrada.')
-      setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio(''); setSinResultado(false)
+      setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio(''); setSinResultado(false); setEscuchado('')
       cargarRecientes()
     } catch { setAviso('No se pudo registrar la venta.') }
   }
@@ -297,16 +308,13 @@ export default function SalidasPage() {
         </div>
       )}
 
-      {!texto.trim() && !pieza && resultados.length === 0 && !grabando && (
-        <Card style={{ marginTop: 14, background: '#f8fafc' }}>
-          <strong style={{ color: T.ink, fontSize: '0.95rem' }}>¿Cómo registrar una venta?</strong>
-          <div style={{ fontSize: '0.88rem', color: T.muted, lineHeight: 1.8, marginTop: 6 }}>
-            <div>1️⃣ Escribe el producto arriba, <em>o</em></div>
-            <div>2️⃣ Mantén presionado 🎤 y di la venta (ej: <em>"5 polos a 20"</em>), <em>o</em></div>
-            <div>3️⃣ Toca 📷 y toma foto a la boleta.</div>
-            <div style={{ marginTop: 8, color: T.ink }}>Luego eliges el producto, pones <strong>cantidad</strong> y <strong>precio</strong>, y tocas <strong>💰 Registrar venta</strong>.</div>
+      {escuchado && !pieza && (
+        <div style={{ marginTop: 12, fontSize: '0.92rem', color: T.ink, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px' }}>
+          🎧 Escuché: <strong>"{escuchado}"</strong>
+          <div style={{ color: T.muted, fontSize: '0.82rem', marginTop: 2 }}>
+            {resultados.length > 0 ? 'Elige el producto correcto de abajo.' : 'No lo encontré en el catálogo. Créalo abajo o corrige el texto.'}
           </div>
-        </Card>
+        </div>
       )}
 
       {resultados.length > 0 && (
@@ -376,6 +384,12 @@ export default function SalidasPage() {
       )}
 
       <Note>{aviso}</Note>
+
+      {/* Guía como pie de página, discreta (no se confunde con el flujo principal). */}
+      <p style={{ marginTop: 24, paddingTop: 12, borderTop: `1px solid ${T.line}`, fontSize: '0.75rem', color: T.faint, lineHeight: 1.6 }}>
+        Cómo vender: escribe el producto, o mantén presionado 🎤 y di la venta (ej: "5 polos a 20"), o toca 📷 para la boleta.
+        Luego elige el producto, pon cantidad y precio, y toca Registrar venta.
+      </p>
     </Page>
   )
 }
