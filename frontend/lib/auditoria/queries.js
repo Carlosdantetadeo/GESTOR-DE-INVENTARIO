@@ -279,38 +279,48 @@ export async function rechazarPieza({ piezaId, uid }) {
 
 // Importa filas de catálogo: actualiza las piezas existentes (por nombre) e
 // inserta las nuevas. Devuelve { insertados, actualizados }.
-export async function importarCatalogo({ empresaId, filas }) {
-  const { data: existentes, error: e0 } = await supabase.from('productos').select('id, nombre, referencia')
-  if (e0) throw e0
+export async function importarCatalogo({ empresaId, filas, onProgreso }) {
+  // Traer TODOS los existentes paginando (el select corta en 1000 por defecto;
+  // con catálogos grandes esto es indispensable para cruzar bien).
+  const existentes = []
+  const PAGE = 1000
+  for (let desde = 0; ; desde += PAGE) {
+    const { data, error } = await supabase
+      .from('productos').select('id, nombre, referencia').range(desde, desde + PAGE - 1)
+    if (error) throw error
+    if (!data?.length) break
+    existentes.push(...data)
+    if (data.length < PAGE) break
+  }
 
   // La base exige nombre y referencia únicos por empresa. Cruzamos por referencia
   // primero (si la fila la trae) y si no, por nombre.
   const porNombre = new Map()
   const porRef = new Map()
-  for (const p of existentes || []) {
+  for (const p of existentes) {
     if (p.nombre) porNombre.set(p.nombre.trim().toLowerCase(), p.id)
     if (p.referencia) porRef.set(p.referencia.trim().toLowerCase(), p.id)
   }
 
   const nuevos = []
+  const updates = []
   const refsVistas = new Set()      // referencias ya usadas en este archivo
   const nombresVistos = new Set()   // nombres ya usados en este archivo
+  const idsVistos = new Set()       // no actualizar dos veces el mismo producto
   const omitidos = []
-  let actualizados = 0
 
   for (const f of filas) {
     const refKey = f.referencia ? f.referencia.trim().toLowerCase() : null
     const nombreKey = f.nombre.trim().toLowerCase()
     const campos = { unidad_medida: f.unidad_medida, referencia: f.referencia }
-
     const id = (refKey && porRef.get(refKey)) || porNombre.get(nombreKey)
+
     if (id) {
-      const { error } = await supabase.from('productos').update(campos).eq('id', id)
-      if (error) { omitidos.push(`${f.nombre} (${error.message})`); continue }
-      actualizados += 1
+      if (idsVistos.has(id)) { omitidos.push(`${f.nombre} (repetido en el archivo)`); continue }
+      idsVistos.add(id)
+      updates.push({ id, campos, nombre: f.nombre })
       continue
     }
-
     // Producto nuevo: descartar duplicados dentro del mismo archivo (chocan con los índices únicos).
     if (nombresVistos.has(nombreKey)) { omitidos.push(`${f.nombre} (nombre repetido en el archivo)`); continue }
     if (refKey && refsVistas.has(refKey)) { omitidos.push(`${f.nombre} (referencia repetida: ${f.referencia})`); continue }
@@ -319,12 +329,35 @@ export async function importarCatalogo({ empresaId, filas }) {
     nuevos.push({ empresa_id: empresaId, nombre: f.nombre, ...campos })
   }
 
+  // Insertar en lotes (evita un POST gigante y timeouts). Si un lote falla,
+  // reintenta fila por fila para no perder el resto.
   let insertados = 0
-  if (nuevos.length) {
-    const { data, error } = await supabase.from('productos').insert(nuevos).select('id')
-    if (error) throw error
-    insertados = data?.length ?? nuevos.length
+  const LOTE_INS = 500
+  for (let i = 0; i < nuevos.length; i += LOTE_INS) {
+    const grupo = nuevos.slice(i, i + LOTE_INS)
+    const { data, error } = await supabase.from('productos').insert(grupo).select('id')
+    if (error) {
+      for (const row of grupo) {
+        const r = await supabase.from('productos').insert(row).select('id')
+        if (r.error) omitidos.push(`${row.nombre} (${r.error.message})`)
+        else insertados += 1
+      }
+    } else {
+      insertados += data?.length ?? grupo.length
+    }
+    onProgreso?.({ fase: 'insertando', hechos: insertados, total: nuevos.length })
   }
+
+  // Actualizar existentes en lotes paralelos (evita miles de llamadas en serie).
+  let actualizados = 0
+  const LOTE_UPD = 50
+  for (let i = 0; i < updates.length; i += LOTE_UPD) {
+    const grupo = updates.slice(i, i + LOTE_UPD)
+    const res = await Promise.all(grupo.map((u) => supabase.from('productos').update(u.campos).eq('id', u.id)))
+    res.forEach((r, k) => { if (r.error) omitidos.push(`${grupo[k].nombre} (${r.error.message})`); else actualizados += 1 })
+    onProgreso?.({ fase: 'actualizando', hechos: actualizados, total: updates.length })
+  }
+
   return { insertados, actualizados, omitidos }
 }
 
