@@ -2,6 +2,7 @@
 // El cliente `supabase` (anon key + sesión) aplica RLS, que filtra por
 // empresa_id vía get_my_empresa_id() (app_metadata).
 import { supabase } from '../supabase'
+import { normalizar } from './matching'
 
 export { supabase }
 
@@ -289,9 +290,6 @@ export async function importarCatalogo({ empresaId, filas }) {
     const campos = {
       unidad_medida: f.unidad_medida,
       referencia: f.referencia,
-      stock_minimo: f.stock_minimo,
-      punto_reorden: f.punto_reorden,
-      stock_maximo: f.stock_maximo,
     }
     const id = mapa.get(f.nombre.trim().toLowerCase())
     if (id) {
@@ -310,6 +308,46 @@ export async function importarCatalogo({ empresaId, filas }) {
     insertados = data?.length ?? nuevos.length
   }
   return { insertados, actualizados }
+}
+
+// Carga de stock inicial: NO escribe stock directo (Constitución IV/V). Matchea
+// cada fila con un producto (por referencia, o por nombre) y crea un movimiento
+// de ingreso en la sede; el trigger tr_actualizar_stock suma el stock.
+// Devuelve { cargados, sinMatch: [texto de las filas sin producto] }.
+export async function cargarStockInicial({ tiendaId, filas, authUid }) {
+  const { data: prods, error } = await supabase.from('productos').select('id, nombre, referencia')
+  if (error) throw error
+
+  const porRef = new Map()
+  const porNombre = new Map()
+  for (const p of prods || []) {
+    if (p.referencia) porRef.set(normalizar(p.referencia), p.id)
+    porNombre.set(normalizar(p.nombre), p.id)
+  }
+
+  const nuevos = []
+  const sinMatch = []
+  for (const f of filas) {
+    const id = (f.referencia && porRef.get(normalizar(f.referencia))) || porNombre.get(normalizar(f.nombre || ''))
+    if (!id) { sinMatch.push(f.referencia || f.nombre || '(fila sin identificador)'); continue }
+    nuevos.push({
+      tipo: 'ingreso',
+      producto_id: id,
+      tienda_destino: tiendaId,
+      cantidad: f.cantidad,
+      costo_unitario: f.costo ?? 0,
+      auth_uid: authUid ?? null,
+      client_op_id: crypto.randomUUID(),
+    })
+  }
+
+  let cargados = 0
+  if (nuevos.length) {
+    const { data, error: e2 } = await supabase.from('movimientos').insert(nuevos).select('id')
+    if (e2) throw e2
+    cargados = data?.length ?? nuevos.length
+  }
+  return { cargados, sinMatch }
 }
 
 // Config del tenant (RLS de empresas devuelve solo la propia).

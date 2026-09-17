@@ -10,11 +10,12 @@ import {
   importarCatalogo, getEmpresaConfig, updateEmpresaConfig, getTelegramTokens,
   getTiendas, crearTienda, renombrarTienda, setTiendaActiva,
   getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
-  productosSinEmbedding, guardarEmbedding,
+  productosSinEmbedding, guardarEmbedding, cargarStockInicial,
 } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Select, Card, Note, T, inputStyle } from '../../../lib/auditoria/ui'
 
-const COLUMNAS = ['nombre', 'unidad_medida', 'referencia', 'stock_minimo', 'punto_reorden', 'stock_maximo']
+const COLUMNAS = ['nombre', 'unidad_medida', 'referencia']
+const COLUMNAS_STOCK = ['referencia', 'nombre', 'cantidad', 'costo']
 
 export default function CatalogoPage() {
   const { session } = useAuditoria()
@@ -31,6 +32,11 @@ export default function CatalogoPage() {
   const [secNombre, setSecNombre] = useState('')
   const [tokens, setTokens] = useState({ operario: '', admin: '' })
   const [aviso, setAviso] = useState('')
+  // Carga de stock inicial (dos pasos: elegir archivo → confirmar).
+  const [stockSede, setStockSede] = useState('')
+  const [stockPend, setStockPend] = useState(null)   // { filas, errores } a la espera de confirmar
+  const [stockResultado, setStockResultado] = useState('')
+  const [stockCargando, setStockCargando] = useState(false)
 
   const cargarUsuarios = useCallback(async () => {
     const res = await fetch('/api/auditoria/usuarios')
@@ -119,9 +125,6 @@ export default function CatalogoPage() {
       nombre: 'Tornillo hexagonal 1/2"',
       unidad_medida: 'unidad',
       referencia: 'TH-12',
-      stock_minimo: 5,
-      punto_reorden: 10,
-      stock_maximo: 100,
     }
     const ws = XLSX.utils.json_to_sheet([ejemplo], { header: COLUMNAS })
     const wb = XLSX.utils.book_new()
@@ -179,6 +182,61 @@ export default function CatalogoPage() {
       setResultado('No se pudo procesar el archivo.')
     } finally {
       e.target.value = ''
+    }
+  }
+
+  // Baja la plantilla de stock inicial: referencia + cantidad (nombre y costo opcionales).
+  function descargarPlantillaStock() {
+    const ejemplo = { referencia: 'TH-12', nombre: 'Tornillo hexagonal 1/2"', cantidad: 50, costo: 0.8 }
+    const ws = XLSX.utils.json_to_sheet([ejemplo], { header: COLUMNAS_STOCK })
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'stock')
+    XLSX.writeFile(wb, 'plantilla-stock-inicial.xlsx')
+  }
+
+  // Paso 1: leer y validar el archivo, dejarlo pendiente de confirmación.
+  async function elegirArchivoStock(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!stockSede) { setStockResultado('Elegí primero la sede destino.'); return }
+    setStockResultado('Leyendo archivo…')
+    try {
+      const wb = XLSX.read(await file.arrayBuffer())
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+      const { filas, errores } = validarStock(rows)
+      if (!filas.length) {
+        setStockPend(null)
+        setStockResultado(`Ninguna fila válida. ${errores.slice(0, 3).join('; ') || 'archivo vacío'}`)
+        return
+      }
+      setStockPend({ filas, errores })
+      setStockResultado('')
+    } catch {
+      setStockPend(null)
+      setStockResultado('No se pudo leer el archivo.')
+    }
+  }
+
+  // Paso 2: confirmar → crea los ingresos en el ledger de la sede elegida.
+  async function confirmarStock() {
+    if (!stockPend || !stockSede) return
+    setStockCargando(true)
+    try {
+      const { cargados, sinMatch } = await cargarStockInicial({
+        tiendaId: Number(stockSede),
+        filas: stockPend.filas,
+        authUid: session.user.id,
+      })
+      const sedeNombre = tiendas.find((t) => Number(t.id) === Number(stockSede))?.nombre ?? 'la sede'
+      let msg = `Cargado: ${cargados} ingreso(s) en ${sedeNombre}.`
+      if (sinMatch.length) msg += ` · ${sinMatch.length} sin producto (revisá referencia/nombre): ${sinMatch.slice(0, 5).join(', ')}${sinMatch.length > 5 ? '…' : ''}`
+      setStockResultado(msg)
+      setStockPend(null)
+    } catch {
+      setStockResultado('No se pudo cargar el stock.')
+    } finally {
+      setStockCargando(false)
     }
   }
 
@@ -255,7 +313,7 @@ export default function CatalogoPage() {
 
       <Panel titulo="Cargar catálogo (Excel/CSV)">
         <p style={muted}>
-          Columnas: {COLUMNAS.join(', ')}. <code>nombre</code> es obligatorio; los umbrales deben ser numéricos.
+          Columnas: {COLUMNAS.join(', ')}. <code>nombre</code> es obligatorio; <code>unidad_medida</code> y <code>referencia</code> son opcionales.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" onClick={descargarPlantilla}>⬇️ Plantilla</Button>
@@ -269,6 +327,44 @@ export default function CatalogoPage() {
           "Generar embeddings" alimenta la búsqueda inteligente por voz/foto. Corrélo después de importar productos nuevos.
         </p>
         {resultado && <p style={{ fontSize: '0.85rem', color: T.primary, margin: '8px 0 0' }}>{resultado}</p>}
+      </Panel>
+
+      <Panel titulo="Cargar stock inicial">
+        <p style={muted}>
+          Columnas: {COLUMNAS_STOCK.join(', ')}. Se cruza con el catálogo por <code>referencia</code> (o por <code>nombre</code>).
+          El stock se carga como ingresos en la sede elegida.
+        </p>
+        <Select value={stockSede} onChange={(e) => { setStockSede(e.target.value); setStockPend(null); setStockResultado('') }} style={{ marginBottom: 10 }}>
+          <option value="">Elegí la sede destino…</option>
+          {tiendas.filter((t) => t.activa !== false).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+        </Select>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={descargarPlantillaStock}>⬇️ Plantilla stock</Button>
+          <label style={{ ...fileBtn, opacity: stockSede ? 1 : 0.5, pointerEvents: stockSede ? 'auto' : 'none' }}>
+            📄 Elegir archivo
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={elegirArchivoStock} style={{ display: 'none' }} disabled={!stockSede} />
+          </label>
+        </div>
+        {stockPend && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12, margin: '10px 0 0' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: T.ink }}>
+              Se cargarán {stockPend.filas.length} ítem(s) en {tiendas.find((t) => Number(t.id) === Number(stockSede))?.nombre ?? 'la sede'}.
+            </div>
+            {stockPend.errores.length > 0 && (
+              <p style={{ ...muted, margin: '0 0 8px' }}>{stockPend.errores.length} fila(s) con error se omitirán.</p>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Button variant="primary" onClick={confirmarStock} disabled={stockCargando}>
+                {stockCargando ? 'Cargando…' : 'Confirmar carga'}
+              </Button>
+              <Button variant="secondary" onClick={() => { setStockPend(null); setStockResultado('') }} disabled={stockCargando}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+        <p style={{ ...muted, fontSize: '0.75rem', color: T.faint, margin: '6px 0 0' }}>
+          Es una carga inicial: si volvés a subir el mismo archivo, suma de nuevo. Usalo una sola vez por sede.
+        </p>
+        {stockResultado && <p style={{ fontSize: '0.85rem', color: T.primary, margin: '8px 0 0' }}>{stockResultado}</p>}
       </Panel>
 
       <Panel titulo="Sedes">
@@ -390,25 +486,28 @@ function validar(rows) {
   rows.forEach((r, i) => {
     const nombre = String(r.nombre ?? '').trim()
     if (!nombre) { errores.push(`fila ${i + 2}: sin nombre`); return }
-    const num = (v, def) => {
-      if (v === '' || v == null) return def
-      const n = Number(v)
-      return Number.isFinite(n) ? n : NaN
-    }
-    const stock_minimo = num(r.stock_minimo, 5)
-    const punto_reorden = num(r.punto_reorden, 0)
-    const stock_maximo = r.stock_maximo === '' || r.stock_maximo == null ? null : num(r.stock_maximo, null)
-    if ([stock_minimo, punto_reorden].some((n) => Number.isNaN(n)) || Number.isNaN(stock_maximo)) {
-      errores.push(`fila ${i + 2}: umbral no numérico`); return
-    }
     filas.push({
       nombre,
       unidad_medida: String(r.unidad_medida ?? '').trim() || 'unidad',
       referencia: String(r.referencia ?? '').trim() || null,
-      stock_minimo,
-      punto_reorden,
-      stock_maximo,
     })
+  })
+  return { filas, errores }
+}
+
+// Valida las filas de stock inicial. Requiere referencia o nombre + cantidad > 0.
+function validarStock(rows) {
+  const filas = []
+  const errores = []
+  rows.forEach((r, i) => {
+    const referencia = String(r.referencia ?? '').trim()
+    const nombre = String(r.nombre ?? '').trim()
+    if (!referencia && !nombre) { errores.push(`fila ${i + 2}: sin referencia ni nombre`); return }
+    const cantidad = Number(r.cantidad)
+    if (!Number.isFinite(cantidad) || cantidad <= 0) { errores.push(`fila ${i + 2}: cantidad inválida`); return }
+    const costo = r.costo === '' || r.costo == null ? 0 : Number(r.costo)
+    if (!Number.isFinite(costo) || costo < 0) { errores.push(`fila ${i + 2}: costo inválido`); return }
+    filas.push({ referencia: referencia || null, nombre: nombre || null, cantidad, costo })
   })
   return { filas, errores }
 }
