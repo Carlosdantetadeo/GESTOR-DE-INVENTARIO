@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto } from '../../../lib/auditoria/queries'
+import { getStock, registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -49,7 +49,23 @@ export default function SalidasPage() {
     setPieza(p); setSinResultado(false)
     setTexto(p.nombre)   // llena el input con el nombre → el usuario puede editarlo
     setResultados([])
-    try { setStock(await getStock(p.producto_id ?? p.id, session.tiendaId)) } catch { setStock(null) }
+    const pid = p.producto_id ?? p.id
+    try { setStock(await getStock(pid, session.tiendaId)) } catch { setStock(null) }
+    // Precio automático: si no hay precio (no dictado), sugerir el último de venta / referencial.
+    try {
+      const sug = await getPrecioSugerido(pid)
+      if (sug != null) setPrecio((prev) => (prev === '' ? String(sug) : prev))
+    } catch { /* precio sugerido es opcional */ }
+  }
+
+  // Registrar con Enter desde los campos (menos toques).
+  function onEnterRegistrar(e) {
+    if (e.key === 'Enter') { e.preventDefault(); registrar() }
+  }
+
+  // Ajusta la cantidad con los botones rápidos (mínimo 1).
+  function ajustarCantidad(delta) {
+    setCantidad((c) => String(Math.max(1, (Number(c) || 0) + delta)))
   }
 
   // Extrae cantidad y precio de frases de venta. Convierte palabras numéricas a dígitos
@@ -305,10 +321,22 @@ export default function SalidasPage() {
             {stock != null && <div style={{ fontSize: '0.85rem', color: T.muted, marginTop: 2 }}>Stock disponible: {stock}</div>}
           </div>
           <Field label="Cantidad">
-            <Input type="number" inputMode="numeric" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} autoFocus />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+              <Button variant="secondary" onClick={() => ajustarCantidad(-1)} style={{ minWidth: 48, fontSize: '1.3rem', fontWeight: 700 }} aria-label="Restar uno">−</Button>
+              <Input type="number" inputMode="numeric" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} onKeyDown={onEnterRegistrar} autoFocus style={{ flex: 1, textAlign: 'center', fontSize: '1.15rem', fontWeight: 700 }} />
+              <Button variant="secondary" onClick={() => ajustarCantidad(1)} style={{ minWidth: 48, fontSize: '1.3rem', fontWeight: 700 }} aria-label="Sumar uno">+</Button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {[1, 2, 3, 5, 10, 12].map((n) => (
+                <Button key={n} variant="ghost" onClick={() => setCantidad(String(n))}
+                  style={{ minWidth: 44, padding: '8px 0', border: `1px solid ${T.line}`, fontWeight: 700, ...(Number(cantidad) === n ? { background: T.ink, color: '#fff' } : null) }}>
+                  {n}
+                </Button>
+              ))}
+            </div>
           </Field>
           <Field label="Precio unitario">
-            <Input type="number" inputMode="decimal" min="0" step="0.1" value={precio} onChange={(e) => setPrecio(e.target.value)} />
+            <Input type="number" inputMode="decimal" min="0" step="0.1" value={precio} onChange={(e) => setPrecio(e.target.value)} onKeyDown={onEnterRegistrar} placeholder="0.00" />
           </Field>
           {total != null && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 8, borderTop: `1px solid ${T.line}` }}>

@@ -510,6 +510,19 @@ export async function buscarOCrearProducto(nombre, empresaId) {
   return { id: data.id, producto_id: data.id, nombre: data.nombre, referencia: data.referencia }
 }
 
+// Precio sugerido para una venta: el de la última venta del producto (lo más
+// útil), o el precio de referencia del catálogo. Devuelve number o null.
+export async function getPrecioSugerido(productoId) {
+  const { data: mov } = await supabase
+    .from('movimientos').select('precio_unitario')
+    .eq('producto_id', productoId).eq('tipo', 'venta')
+    .order('created_at', { ascending: false }).limit(1)
+  if (mov?.[0]?.precio_unitario) return Number(mov[0].precio_unitario)
+  const { data: prod } = await supabase
+    .from('productos').select('precio_referencial').eq('id', productoId).maybeSingle()
+  return prod?.precio_referencial != null ? Number(prod.precio_referencial) : null
+}
+
 // Stock actual de una pieza en una sede (tabla derivada por trigger).
 export async function getStock(productoId, tiendaId) {
   const { data, error } = await supabase
