@@ -2,13 +2,19 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { verifySession, SESSION_COOKIE } from './lib/superadmin/session'
 
-const PUBLIC_PATHS = ['/login', '/registro']
+const PUBLIC_PATHS = ['/login']
 
 export async function middleware(request) {
   const earlyPath = request.nextUrl.pathname
 
   // Landing pública — sin auth
   if (earlyPath === '/') return NextResponse.next()
+
+  // Auto-registro deshabilitado — el alta de empresas la hace el proveedor
+  // desde el panel superadmin. La ruta pública /registro queda bloqueada.
+  if (earlyPath === '/registro' || earlyPath.startsWith('/registro/')) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
 
   // ── Panel superadmin ─────────────────────────────────────────────────────
   // Sesión propia (cookie firmada), independiente del auth de Supabase.
@@ -68,7 +74,7 @@ export async function middleware(request) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Con sesión activa → no dejar pasar a /login ni /registro
+  // Con sesión activa → no dejar pasar a /login
   if (user && isPublic) {
     return NextResponse.redirect(new URL('/auditoria', request.url))
   }

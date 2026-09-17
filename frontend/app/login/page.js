@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
 import { Lock, Mail, CheckCircle2, ArrowRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -212,12 +211,6 @@ export default function Login() {
                 </button>
               </form>
 
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px', textAlign: 'center', fontSize: '0.82rem', color: '#94a3b8' }}>
-                ¿No tenés cuenta?{' '}
-                <Link href="/registro" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
-                  Registrá tu empresa
-                </Link>
-              </div>
             </>
 
           ) : resetSent ? (

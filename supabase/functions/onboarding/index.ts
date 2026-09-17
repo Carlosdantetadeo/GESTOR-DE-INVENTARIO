@@ -5,6 +5,7 @@
 // Variables de entorno requeridas (Supabase Dashboard → Edge Functions → Secrets):
 //   SUPABASE_URL              (disponible automáticamente)
 //   SERVICE_ROLE_KEY          (disponible automáticamente)
+//   ONBOARDING_SECRET         (secreto compartido con el backend del superadmin)
 //
 // Deploy: supabase functions deploy onboarding --no-verify-jwt
 
@@ -17,23 +18,19 @@ const supabase = createClient(
   Deno.env.get('SERVICE_ROLE_KEY')!,
 )
 
-// ─── CORS (la página de registro llama esta función desde el browser) ─────────
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
 // ─── Entry point ──────────────────────────────────────────────────────────────
+// El alta de empresas la dispara únicamente el proxy server-side del superadmin
+// (/api/superadmin/empresa), que envía el header x-onboarding-secret. Sin ese
+// secreto la función rechaza el request. No se llama desde el browser → sin CORS.
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
   if (req.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405)
+  }
+
+  const secret = Deno.env.get('ONBOARDING_SECRET')
+  if (!secret || req.headers.get('x-onboarding-secret') !== secret) {
+    return json({ error: 'No autorizado' }, 401)
   }
 
   let body: OnboardingRequest
@@ -225,7 +222,7 @@ Almacenero Digital · Sistema de inventario
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   })
 }
 

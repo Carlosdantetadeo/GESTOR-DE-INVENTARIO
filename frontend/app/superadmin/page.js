@@ -18,11 +18,16 @@ export default async function SuperadminEmpresas() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1100px' }}>
-      <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '4px' }}>Empresas suscritas</h1>
-        <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.875rem' }}>
-          {empresas.length} {empresas.length === 1 ? 'empresa' : 'empresas'} · consumo del mes en curso
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '4px' }}>Empresas suscritas</h1>
+          <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.875rem' }}>
+            {empresas.length} {empresas.length === 1 ? 'empresa' : 'empresas'} · consumo del mes en curso
+          </p>
+        </div>
+        <Link href="/superadmin/nueva-empresa" className="btn btn-primary" style={{ padding: '9px 16px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+          + Nueva empresa
+        </Link>
       </div>
 
       <div className="glass-card" style={{ padding: 0, overflowX: 'auto' }}>
