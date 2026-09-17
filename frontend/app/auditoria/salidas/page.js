@@ -28,6 +28,7 @@ export default function SalidasPage() {
   const [sinResultado, setSinResultado] = useState(false)
   const [recientes, setRecientes] = useState([])
   const [escuchado, setEscuchado] = useState('')   // lo que transcribió la voz
+  const [pidiendoDeshacer, setPidiendoDeshacer] = useState(false)
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
@@ -257,18 +258,20 @@ export default function SalidasPage() {
     const cant = Number(cantidad)
     if (!pieza || !cant) return
     if (!online) { setAviso('Registrar ventas requiere conexión.'); return }
-    if (stock != null && cant > stock) setAviso(`⚠️ Stock actual: ${stock}. La venta quedará en negativo.`)
+    const precioNum = precio === '' ? 0 : Number(precio)
+    const negativo = stock != null && cant > stock
     try {
       const mov = await registrarSalida({
         productoId: pieza.producto_id ?? pieza.id,
         tiendaId: session.tiendaId,
         cantidad: cant,
-        precio: precio === '' ? 0 : Number(precio),
+        precio: precioNum,
         authUid: session.user.id,
         clientOpId: crypto.randomUUID(),
       })
-      setUltima({ ...mov, nombre: pieza.nombre, cantidad: cant })
-      setAviso('Venta registrada.')
+      setUltima({ ...mov, nombre: pieza.nombre, cantidad: cant, precio: precioNum, total: cant * precioNum })
+      setPidiendoDeshacer(false)
+      setAviso(negativo ? `⚠️ Vendiste ${cant} con stock ${stock}: quedó en negativo.` : '')
       setTexto(''); setPieza(null); setStock(null); setCantidad(''); setPrecio(''); setSinResultado(false); setEscuchado('')
       cargarRecientes()
     } catch { setAviso('No se pudo registrar la venta.') }
@@ -276,11 +279,12 @@ export default function SalidasPage() {
 
   async function deshacer() {
     if (!ultima) return
+    setPidiendoDeshacer(false)
     if (Date.now() - new Date(ultima.created_at).getTime() > VENTANA_MS) {
       setAviso('La ventana para deshacer (5 min) venció.'); setUltima(null); return
     }
-    try { await deshacerSalida(ultima.id); setAviso('Venta revertida.'); setUltima(null) }
-    catch { setAviso('No se pudo revertir.') }
+    try { await deshacerSalida(ultima.id); setAviso('Venta deshecha.'); setUltima(null) }
+    catch { setAviso('No se pudo deshacer.') }
   }
 
   if (!session) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
@@ -391,9 +395,27 @@ export default function SalidasPage() {
       )}
 
       {ultima && (
-        <Card style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: '0.9rem' }}>Última: <strong>{ultima.nombre}</strong> × {ultima.cantidad}</span>
-          <Button variant="secondary" onClick={deshacer} style={{ minHeight: 'auto', padding: '8px 14px' }}>↩️ Deshacer</Button>
+        <Card style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10, borderLeft: '4px solid #16a34a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '1.05rem' }}>✅</span>
+            <strong style={{ color: T.ink }}>Venta registrada</strong>
+          </div>
+          <div style={{ fontSize: '1rem', color: T.ink, fontWeight: 600 }}>{ultima.nombre}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 6, borderTop: `1px solid ${T.line}` }}>
+            <span style={{ color: T.muted, fontSize: '0.9rem' }}>{ultima.cantidad} × S/ {Number(ultima.precio || 0).toFixed(2)}</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: T.ink }}>S/ {Number(ultima.total || 0).toFixed(2)}</span>
+          </div>
+          {!pidiendoDeshacer ? (
+            <Button variant="secondary" onClick={() => setPidiendoDeshacer(true)} style={{ minHeight: 'auto', padding: '9px 14px' }}>↩️ Deshacer venta</Button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 12 }}>
+              <span style={{ fontSize: '0.88rem', color: '#b91c1c' }}>¿Seguro que quieres deshacer esta venta? Se eliminará del registro y el stock se repone.</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button variant="danger" onClick={deshacer} style={{ flex: 1 }}>Sí, deshacer</Button>
+                <Button variant="ghost" onClick={() => setPidiendoDeshacer(false)} style={{ flex: 1 }}>Cancelar</Button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
