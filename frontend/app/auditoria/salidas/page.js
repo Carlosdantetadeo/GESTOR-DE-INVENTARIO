@@ -252,7 +252,7 @@ export default function SalidasPage() {
             onContextMenu={(e) => e.preventDefault()}
             style={{ flex: 1, touchAction: 'none', userSelect: 'none', ...(grabando ? { background: '#ef4444' } : null) }}
           >
-            {grabando ? '🔴 Voz' : '🎤 Voz'}
+            {grabando ? '🔴 Soltá para enviar' : '🎤 Mantené para hablar'}
           </Button>
           <label style={fotoBtn}>
             {procesando ? '…' : '📷 Foto'}
@@ -260,6 +260,18 @@ export default function SalidasPage() {
           </label>
         </div>
       </div>
+
+      {!texto.trim() && !pieza && resultados.length === 0 && !grabando && (
+        <Card style={{ marginTop: 14, background: '#f8fafc' }}>
+          <strong style={{ color: T.ink, fontSize: '0.95rem' }}>¿Cómo registrar una venta?</strong>
+          <div style={{ fontSize: '0.88rem', color: T.muted, lineHeight: 1.8, marginTop: 6 }}>
+            <div>1️⃣ Escribí el producto arriba, <em>o</em></div>
+            <div>2️⃣ Mantené apretado 🎤 y decí la venta (ej: <em>"5 remeras a 20"</em>), <em>o</em></div>
+            <div>3️⃣ Tocá 📷 y sacá foto a la boleta.</div>
+            <div style={{ marginTop: 8, color: T.ink }}>Después elegís el producto, ponés <strong>cantidad</strong> y <strong>precio</strong>, y tocás <strong>💰 Registrar venta</strong>.</div>
+          </div>
+        </Card>
+      )}
 
       {resultados.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
