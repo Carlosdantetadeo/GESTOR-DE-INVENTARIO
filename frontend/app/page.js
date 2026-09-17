@@ -4,7 +4,7 @@ import RotatingWord from './RotatingWord'
 
 export const metadata = {
   title: 'Almacenero Digital — Control de inventario para cualquier negocio',
-  description: 'Registrá ventas e ingresos por voz o foto desde el celular. Para tiendas, depósitos, distribuidoras y más. Dashboard en tiempo real. Sin papel.',
+  description: 'Registra ventas e ingresos por voz o foto desde el celular. Para tiendas, depósitos, distribuidoras y más. Dashboard en tiempo real. Sin papel.',
 }
 
 const WA_LINK = 'https://wa.me/51906959989?text=Hola%2C%20quiero%20saber%20m%C3%A1s%20sobre%20Almacenero%20Digital'
@@ -18,7 +18,7 @@ const BENEFICIOS = [
   {
     icono: '📸',
     titulo: 'Recepción por foto',
-    texto: 'Sacá foto a la factura del proveedor y el sistema extrae los productos y cantidades automáticamente. Cero carga manual.',
+    texto: 'Toma foto a la factura del proveedor y el sistema extrae los productos y cantidades automáticamente. Cero carga manual.',
   },
   {
     icono: '📊',
@@ -28,7 +28,7 @@ const BENEFICIOS = [
   {
     icono: '🏪',
     titulo: 'Multi-sede',
-    texto: 'Gestioná todas tus sucursales desde un solo lugar. Cada local con su stock y reportes, todo consolidado.',
+    texto: 'Gestiona todas tus sucursales desde un solo lugar. Cada local con su stock y reportes, todo consolidado.',
   },
 ]
 
@@ -45,7 +45,7 @@ const PASOS = [
   },
   {
     nro: '03',
-    titulo: 'Vos ves todo desde el dashboard',
+    titulo: 'Ves todo desde el dashboard',
     texto: 'Stock actual, ventas del día, productos críticos y reportes por sede. Todo en tiempo real desde cualquier lugar.',
   },
 ]
@@ -210,7 +210,7 @@ export default function LandingPage() {
 
           <p className="fade-up delay-2 hero-sub" style={{ fontSize: '1.15rem', color: '#475569', lineHeight: 1.7, maxWidth: '600px', margin: '0 auto 40px' }}>
             Tu equipo registra ventas e ingresos por voz o foto desde el celular.
-            Vos ves el stock, las ventas y los reportes al instante, desde cualquier lugar.
+            Ves el stock, las ventas y los reportes al instante, desde cualquier lugar.
           </p>
 
           <div className="fade-up delay-3 cta-group" style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -320,7 +320,7 @@ export default function LandingPage() {
             ¿Listo para digitalizar tu negocio?
           </h2>
           <p style={{ color: '#bfdbfe', fontSize: '1.05rem', lineHeight: 1.7, marginBottom: '36px' }}>
-            Funciona para cualquier rubro. Escribinos y te configuramos en menos de 24 horas.
+            Funciona para cualquier rubro. Escríbenos y te configuramos en menos de 24 horas.
           </p>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="cta-btn cta-wa" style={{ padding: '18px 36px', fontSize: '1.05rem' }}>
@@ -361,7 +361,7 @@ export default function LandingPage() {
             {/* Comunidad */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                Seguinos en redes
+                Síguenos en redes
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
 
@@ -392,7 +392,7 @@ export default function LandingPage() {
 
               </div>
               <p style={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.6, maxWidth: '200px' }}>
-                Sumate a nuestra comunidad y seguí las novedades del sistema.
+                Súmate a nuestra comunidad y sigue las novedades del sistema.
               </p>
             </div>
 

@@ -29,7 +29,7 @@ export default function Login() {
     const { data: { user } } = await supabase.auth.getUser()
     const empresaId = user?.app_metadata?.empresa_id
     if (!empresaId) {
-      setError('Tu cuenta no tiene una empresa asignada. Contactá al administrador.')
+      setError('Tu cuenta no tiene una empresa asignada. Contacta al administrador.')
       await supabase.auth.signOut()
       setLoading(false)
       return
@@ -37,7 +37,7 @@ export default function Login() {
 
     const { data: emp } = await supabase.from('empresas').select('activa').eq('id', empresaId).single()
     if (emp && emp.activa === false) {
-      setError('Tu empresa está suspendida. Contactá al proveedor.')
+      setError('Tu empresa está suspendida. Contacta al proveedor.')
       await supabase.auth.signOut()
       setLoading(false)
       return
@@ -133,7 +133,7 @@ export default function Login() {
               Tu inventario,<br />bajo control.
             </h2>
             <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.9rem', lineHeight: 1.7, maxWidth: '280px' }}>
-              Registrá ventas por voz o foto. Controlá stock en tiempo real. Desde cualquier sede, desde cualquier celular.
+              Registra ventas por voz o foto. Controla el stock en tiempo real. Desde cualquier sede, desde cualquier celular.
             </p>
           </div>
 
@@ -169,7 +169,7 @@ export default function Login() {
             <>
               <div>
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginBottom: '6px' }}>Bienvenido</h1>
-                <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Ingresá a tu cuenta para continuar</p>
+                <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Ingresa a tu cuenta para continuar</p>
               </div>
 
               <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -225,7 +225,7 @@ export default function Login() {
                 <CheckCircle2 size={28} color="#16a34a" />
               </div>
               <div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Revisá tu correo</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Revisa tu correo</div>
                 <div style={{ fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6 }}>
                   Te enviamos un link para restablecer tu contraseña.
                 </div>
