@@ -280,25 +280,43 @@ export async function rechazarPieza({ piezaId, uid }) {
 // Importa filas de catálogo: actualiza las piezas existentes (por nombre) e
 // inserta las nuevas. Devuelve { insertados, actualizados }.
 export async function importarCatalogo({ empresaId, filas }) {
-  const { data: existentes, error: e0 } = await supabase.from('productos').select('id, nombre')
+  const { data: existentes, error: e0 } = await supabase.from('productos').select('id, nombre, referencia')
   if (e0) throw e0
-  const mapa = new Map((existentes || []).map((p) => [p.nombre.trim().toLowerCase(), p.id]))
+
+  // La base exige nombre y referencia únicos por empresa. Cruzamos por referencia
+  // primero (si la fila la trae) y si no, por nombre.
+  const porNombre = new Map()
+  const porRef = new Map()
+  for (const p of existentes || []) {
+    if (p.nombre) porNombre.set(p.nombre.trim().toLowerCase(), p.id)
+    if (p.referencia) porRef.set(p.referencia.trim().toLowerCase(), p.id)
+  }
 
   const nuevos = []
+  const refsVistas = new Set()      // referencias ya usadas en este archivo
+  const nombresVistos = new Set()   // nombres ya usados en este archivo
+  const omitidos = []
   let actualizados = 0
+
   for (const f of filas) {
-    const campos = {
-      unidad_medida: f.unidad_medida,
-      referencia: f.referencia,
-    }
-    const id = mapa.get(f.nombre.trim().toLowerCase())
+    const refKey = f.referencia ? f.referencia.trim().toLowerCase() : null
+    const nombreKey = f.nombre.trim().toLowerCase()
+    const campos = { unidad_medida: f.unidad_medida, referencia: f.referencia }
+
+    const id = (refKey && porRef.get(refKey)) || porNombre.get(nombreKey)
     if (id) {
       const { error } = await supabase.from('productos').update(campos).eq('id', id)
-      if (error) throw error
+      if (error) { omitidos.push(`${f.nombre} (${error.message})`); continue }
       actualizados += 1
-    } else {
-      nuevos.push({ empresa_id: empresaId, nombre: f.nombre, ...campos })
+      continue
     }
+
+    // Producto nuevo: descartar duplicados dentro del mismo archivo (chocan con los índices únicos).
+    if (nombresVistos.has(nombreKey)) { omitidos.push(`${f.nombre} (nombre repetido en el archivo)`); continue }
+    if (refKey && refsVistas.has(refKey)) { omitidos.push(`${f.nombre} (referencia repetida: ${f.referencia})`); continue }
+    nombresVistos.add(nombreKey)
+    if (refKey) refsVistas.add(refKey)
+    nuevos.push({ empresa_id: empresaId, nombre: f.nombre, ...campos })
   }
 
   let insertados = 0
@@ -307,7 +325,7 @@ export async function importarCatalogo({ empresaId, filas }) {
     if (error) throw error
     insertados = data?.length ?? nuevos.length
   }
-  return { insertados, actualizados }
+  return { insertados, actualizados, omitidos }
 }
 
 // Carga de stock inicial: NO escribe stock directo (Constitución IV/V). Matchea

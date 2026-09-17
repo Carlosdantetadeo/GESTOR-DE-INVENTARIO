@@ -173,10 +173,12 @@ export default function CatalogoPage() {
         setResultado(`Ninguna fila válida. Errores: ${errores.join('; ') || 'archivo vacío'}`)
         return
       }
-      const { insertados, actualizados } = await importarCatalogo({ empresaId: session.empresaId, filas })
+      const { insertados, actualizados, omitidos = [] } = await importarCatalogo({ empresaId: session.empresaId, filas })
+      const totalOmit = errores.length + omitidos.length
       setResultado(
         `Importado: ${insertados} nuevas, ${actualizados} actualizadas` +
-        (errores.length ? ` · ${errores.length} fila(s) con error omitidas` : ''),
+        (totalOmit ? ` · ${totalOmit} omitida(s)` : '') +
+        (omitidos.length ? `. Sin cargar: ${omitidos.slice(0, 5).join('; ')}${omitidos.length > 5 ? '…' : ''}` : ''),
       )
     } catch (err) {
       console.error('[importar catalogo]', err)
