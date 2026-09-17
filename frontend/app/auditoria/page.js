@@ -34,7 +34,7 @@ export default function AuditoriaHome() {
           Almacenero Digital
         </h1>
         <p style={{ margin: '4px 0 0', color: T.muted, fontSize: '0.92rem' }}>
-          {ROL_LABEL[rol] ? `Hola, ${ROL_LABEL[rol]}. ` : ''}¿Qué querés hacer?
+          {ROL_LABEL[rol] ? `Hola, ${ROL_LABEL[rol]}. ` : ''}¿Qué quieres hacer?
         </p>
       </div>
 

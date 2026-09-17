@@ -38,7 +38,7 @@ export default function BuscarPage() {
     <Page>
       <Title>¿Dónde está?</Title>
       <p style={{ color: T.muted, fontSize: '0.9rem', marginTop: -8, marginBottom: 12 }}>
-        Buscá una pieza y ves el stock en cada sede.
+        Busca una pieza y mira el stock en cada sede.
       </p>
 
       <Input

@@ -132,10 +132,10 @@ export default function SalidasPage() {
     if (encontrados.length > 0) {
       setResultados(encontrados)   // mostrar candidatos para confirmar el correcto
       setSinResultado(false)
-      setAviso('Elegí el producto correcto de la lista, o crealo abajo si no está.')
+      setAviso('Elige el producto correcto de la lista, o créalo abajo si no está.')
     } else {
       setResultados([]); setSinResultado(true)
-      setAviso(`Escuché "${descripcion}". No está en el catálogo — podés crearlo y vender abajo.`)
+      setAviso(`Escuché "${descripcion}". No está en el catálogo — puedes crearlo y vender abajo.`)
     }
   }
 
@@ -173,11 +173,11 @@ export default function SalidasPage() {
           if (res.ok) {
             const { texto: t } = await res.json()
             if (t?.trim()) await interpretarVenta(t)
-            else setAviso('No te entendí. Probá de nuevo o buscá por nombre.')
+            else setAviso('No te entendí. Prueba de nuevo o busca por nombre.')
           } else if (res.status === 501) {
             setAviso('La voz no está configurada (falta API_GROQ en Vercel).')
           } else {
-            setAviso('No se pudo transcribir el audio. Probá de nuevo.')
+            setAviso('No se pudo transcribir el audio. Prueba de nuevo.')
           }
         } catch { setAviso('No se pudo transcribir.') }
       }
@@ -223,7 +223,7 @@ export default function SalidasPage() {
       await buscar(it.descripcion)
       if (it.cantidad) setCantidad(String(it.cantidad))
       if (it.precio_unitario) setPrecio(String(it.precio_unitario))
-      if (items.length > 1) setAviso(`Cargué el primer ítem. Hay ${items.length - 1} más: registralos de a uno.`)
+      if (items.length > 1) setAviso(`Cargué el primer ítem. Hay ${items.length - 1} más: regístralos uno por uno.`)
     } catch { setAviso('Error procesando la foto.') }
     finally { setProcesando(false) }
   }
@@ -325,7 +325,7 @@ export default function SalidasPage() {
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {resultados.length === 0 && (
             <span style={{ fontSize: '0.9rem', color: T.muted }}>
-              {sinResultado ? 'No está en el catálogo.' : 'Elegí de la lista o creá el producto.'}
+              {sinResultado ? 'No está en el catálogo.' : 'Elige de la lista o crea el producto.'}
             </span>
           )}
           <Button variant="secondary" full onClick={crearYVender}>➕ Vender "{texto.trim()}" (crear si no está)</Button>

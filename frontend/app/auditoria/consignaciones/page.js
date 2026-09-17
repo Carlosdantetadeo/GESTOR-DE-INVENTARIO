@@ -124,9 +124,9 @@ export default function ConsignacionesPage() {
                 setAviso('')
               } else {
                 setTexto(desc)
-                setAviso(`Reconocí "${desc}" pero no está en el catálogo. Buscá por nombre.`)
+                setAviso(`Reconocí "${desc}" pero no está en el catálogo. Busca por nombre.`)
               }
-            } else { setAviso('No te entendí. Probá de nuevo.') }
+            } else { setAviso('No te entendí. Prueba de nuevo.') }
           } else if (res.status === 501) {
             setAviso('La voz no está configurada (falta API_GROQ en Vercel).')
           } else { setAviso('No se pudo transcribir el audio.') }
