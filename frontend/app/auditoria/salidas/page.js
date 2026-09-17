@@ -277,7 +277,7 @@ export default function SalidasPage() {
             onContextMenu={(e) => e.preventDefault()}
             style={{ flex: 1, touchAction: 'none', userSelect: 'none', ...(grabando ? { background: '#ef4444' } : null) }}
           >
-            {grabando ? '🔴 Soltá para enviar' : '🎤 Mantené para hablar'}
+            {grabando ? '🔴 Grabando…' : '🎤 Voz'}
           </Button>
           <label style={fotoBtn}>
             {procesando ? '…' : '📷 Foto'}
@@ -301,10 +301,10 @@ export default function SalidasPage() {
         <Card style={{ marginTop: 14, background: '#f8fafc' }}>
           <strong style={{ color: T.ink, fontSize: '0.95rem' }}>¿Cómo registrar una venta?</strong>
           <div style={{ fontSize: '0.88rem', color: T.muted, lineHeight: 1.8, marginTop: 6 }}>
-            <div>1️⃣ Escribí el producto arriba, <em>o</em></div>
-            <div>2️⃣ Mantené apretado 🎤 y decí la venta (ej: <em>"5 remeras a 20"</em>), <em>o</em></div>
-            <div>3️⃣ Tocá 📷 y sacá foto a la boleta.</div>
-            <div style={{ marginTop: 8, color: T.ink }}>Después elegís el producto, ponés <strong>cantidad</strong> y <strong>precio</strong>, y tocás <strong>💰 Registrar venta</strong>.</div>
+            <div>1️⃣ Escribe el producto arriba, <em>o</em></div>
+            <div>2️⃣ Mantén presionado 🎤 y di la venta (ej: <em>"5 polos a 20"</em>), <em>o</em></div>
+            <div>3️⃣ Toca 📷 y toma foto a la boleta.</div>
+            <div style={{ marginTop: 8, color: T.ink }}>Luego eliges el producto, pones <strong>cantidad</strong> y <strong>precio</strong>, y tocas <strong>💰 Registrar venta</strong>.</div>
           </div>
         </Card>
       )}
