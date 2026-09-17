@@ -472,6 +472,17 @@ export async function contarSinEmbedding() {
   return count ?? 0
 }
 
+// Estado de embeddings del catálogo: { total, con, sin } (para el cartel de la UI).
+export async function getEstadoEmbeddings() {
+  const [{ count: total }, { count: sin }] = await Promise.all([
+    supabase.from('productos').select('id', { count: 'exact', head: true }),
+    supabase.from('productos').select('id', { count: 'exact', head: true }).is('embedding', null),
+  ])
+  const t = total ?? 0
+  const s = sin ?? 0
+  return { total: t, sin: s, con: t - s }
+}
+
 // Guarda el embedding de un producto (formato texto de pgvector: '[...]').
 export async function guardarEmbedding(id, emb) {
   const { error } = await supabase.from('productos').update({ embedding: `[${emb.join(',')}]` }).eq('id', id)

@@ -10,7 +10,7 @@ import {
   importarCatalogo, getEmpresaConfig, updateEmpresaConfig, getTelegramTokens,
   getTiendas, crearTienda, renombrarTienda, setTiendaActiva,
   getSecciones, crearSeccion, renombrarSeccion, borrarSeccion,
-  productosSinEmbedding, contarSinEmbedding, guardarEmbedding, cargarStockInicial,
+  productosSinEmbedding, contarSinEmbedding, getEstadoEmbeddings, guardarEmbedding, cargarStockInicial,
 } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Select, Card, Note, T, inputStyle } from '../../../lib/auditoria/ui'
 
@@ -37,10 +37,15 @@ export default function CatalogoPage() {
   const [stockPend, setStockPend] = useState(null)   // { filas, errores } a la espera de confirmar
   const [stockResultado, setStockResultado] = useState('')
   const [stockCargando, setStockCargando] = useState(false)
+  const [embEstado, setEmbEstado] = useState(null)   // { total, con, sin }
 
   const cargarUsuarios = useCallback(async () => {
     const res = await fetch('/api/auditoria/usuarios')
     if (res.ok) setUsuarios((await res.json()).usuarios || [])
+  }, [])
+
+  const refrescarEmb = useCallback(() => {
+    getEstadoEmbeddings().then(setEmbEstado).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -49,7 +54,8 @@ export default function CatalogoPage() {
     getTiendas().then(setTiendas).catch(() => {})
     getTelegramTokens(session.empresaId).then(setTokens).catch(() => {})
     cargarUsuarios()
-  }, [session, cargarUsuarios])
+    refrescarEmb()
+  }, [session, cargarUsuarios, refrescarEmb])
 
   async function copiar(texto) {
     if (!texto) return
@@ -176,6 +182,8 @@ export default function CatalogoPage() {
       setResultado(`Listo: ${hechos} producto(s) con embedding en esta corrida. 🧠`)
     } catch {
       setResultado('No se pudieron generar los embeddings.')
+    } finally {
+      refrescarEmb()
     }
   }
 
@@ -203,6 +211,7 @@ export default function CatalogoPage() {
         (totalOmit ? ` · ${totalOmit} omitida(s)` : '') +
         (omitidos.length ? `. Sin cargar: ${omitidos.slice(0, 5).join('; ')}${omitidos.length > 5 ? '…' : ''}` : ''),
       )
+      refrescarEmb()
     } catch (err) {
       console.error('[importar catalogo]', err)
       setResultado(`No se pudo procesar el archivo: ${err?.message || err}`)
@@ -352,6 +361,12 @@ export default function CatalogoPage() {
         <p style={{ ...muted, fontSize: '0.75rem', color: T.faint, margin: '6px 0 0' }}>
           "Generar embeddings" alimenta la búsqueda inteligente por voz/foto. Corrélo después de importar productos nuevos.
         </p>
+        {embEstado && (
+          <p style={{ fontSize: '0.82rem', fontWeight: 600, margin: '8px 0 0', color: embEstado.total > 0 && embEstado.sin === 0 ? '#16a34a' : T.muted }}>
+            🧠 Embeddings: {embEstado.con}/{embEstado.total}
+            {embEstado.total === 0 ? ' (todavía no hay productos)' : embEstado.sin === 0 ? ' ✅ completo' : ` · faltan ${embEstado.sin}`}
+          </p>
+        )}
         {resultado && <p style={{ fontSize: '0.85rem', color: T.primary, margin: '8px 0 0' }}>{resultado}</p>}
       </Panel>
 
