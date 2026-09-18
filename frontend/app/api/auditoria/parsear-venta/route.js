@@ -5,19 +5,18 @@ import { NextResponse } from 'next/server'
 
 const PROMPT =
   'Interpretás frases de venta habladas por un vendedor de una tienda (ropa, calzado, ferretería, etc.) en español latinoamericano. ' +
-  'De la frase extraé el producto, la cantidad y el precio unitario. ' +
-  'Devolvé SOLO un JSON sin texto extra ni markdown: {"descripcion": string, "cantidad": number|null, "precio": number|null}.\n' +
+  'Una frase puede contener UNO O VARIOS productos (separados por "y", comas o enumerados). ' +
+  'Devolvé SOLO un JSON sin texto extra ni markdown: {"items":[{"descripcion": string, "cantidad": number|null, "precio": number|null}]}. Un objeto por producto.\n' +
   'Muchos productos se identifican por un CÓDIGO (letras y números juntos, ej. "EM0021" o "EM0021-M4") y una TALLA (ej. "T-39", "T40", "talla 40"). ' +
   'Los dígitos que forman parte del CÓDIGO o de la TALLA NO son la cantidad ni el precio.\n' +
   'EJEMPLOS:\n' +
-  '"15 EM0021 talla 40 a 20 soles cada uno" → {"descripcion":"EM0021 T40","cantidad":15,"precio":20}\n' +
-  '"dos EM0034 T38 a diez cincuenta" → {"descripcion":"EM0034 T38","cantidad":2,"precio":10.5}\n' +
-  '"vendí tres bolsas de cemento a quince soles" → {"descripcion":"bolsa de cemento","cantidad":3,"precio":15}\n' +
-  '"cinco metros de cable por veinte" → {"descripcion":"cable","cantidad":5,"precio":20}\n' +
-  '"una llave francesa" → {"descripcion":"llave francesa","cantidad":1,"precio":null}\n' +
+  '"15 EM0021 talla 40 a 20 soles cada uno" → {"items":[{"descripcion":"EM0021 T40","cantidad":15,"precio":20}]}\n' +
+  '"5 polos EM0021 a 20 y 3 gorras EM0034 a 15" → {"items":[{"descripcion":"polo EM0021","cantidad":5,"precio":20},{"descripcion":"gorra EM0034","cantidad":3,"precio":15}]}\n' +
+  '"dos EM0034 T38 a diez cincuenta" → {"items":[{"descripcion":"EM0034 T38","cantidad":2,"precio":10.5}]}\n' +
+  '"una llave francesa" → {"items":[{"descripcion":"llave francesa","cantidad":1,"precio":null}]}\n' +
   'REGLAS:\n' +
   '- "descripcion": el producto tal como se menciona; INCLUÍ el código y la talla si los dice. Sin verbos, cantidad, precio ni palabras como "soles" o "cada uno".\n' +
-  '- "cantidad": unidades vendidas (suele ser el número al inicio). Si dice "un/una" → 1.\n' +
+  '- "cantidad": unidades vendidas. Si dice "un/una" → 1.\n' +
   '- "precio": valor UNITARIO. Es el número junto a "soles" o después de "a"/"por". "cada uno" indica que es unitario.\n' +
   '- Convertí números escritos en palabras: uno→1, dos→2, quince→15, veinte→20, etc.\n' +
   '- Los dígitos pegados a letras (EM0021, T40, M4) son parte del producto, NUNCA cantidad ni precio.\n' +
@@ -59,18 +58,25 @@ export async function POST(request) {
   return NextResponse.json(parseVenta(contenido))
 }
 
-// Extrae el objeto del texto del modelo, tolerante a envoltorios/markdown.
+// Extrae los ítems del texto del modelo, tolerante a envoltorios/markdown.
+// Devuelve { items:[...] } y además el primer ítem en plano (descripcion/cantidad/
+// precio) para compatibilidad con los clientes que esperan un solo producto.
 function parseVenta(texto) {
   try {
     const match = texto.match(/\{[\s\S]*\}/)
     const obj = JSON.parse(match ? match[0] : texto)
-    return {
-      descripcion: String(obj.descripcion ?? '').trim(),
-      cantidad: numeroONull(obj.cantidad),
-      precio: numeroONull(obj.precio),
-    }
+    const arr = Array.isArray(obj.items) ? obj.items : (obj.descripcion ? [obj] : [])
+    const items = arr
+      .map((it) => ({
+        descripcion: String(it.descripcion ?? '').trim(),
+        cantidad: numeroONull(it.cantidad),
+        precio: numeroONull(it.precio),
+      }))
+      .filter((it) => it.descripcion)
+    const first = items[0] ?? { descripcion: '', cantidad: null, precio: null }
+    return { items, descripcion: first.descripcion, cantidad: first.cantidad, precio: first.precio }
   } catch {
-    return { descripcion: '', cantidad: null, precio: null }
+    return { items: [], descripcion: '', cantidad: null, precio: null }
   }
 }
 
