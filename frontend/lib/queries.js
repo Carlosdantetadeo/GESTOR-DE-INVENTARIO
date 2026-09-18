@@ -142,6 +142,8 @@ export async function getStock(empresaId, tiendaId = null) {
       productos (
         id,
         nombre,
+        referencia,
+        unidad,
         ultimo_costo,
         precio_venta_sugerido,
         stock_minimo,

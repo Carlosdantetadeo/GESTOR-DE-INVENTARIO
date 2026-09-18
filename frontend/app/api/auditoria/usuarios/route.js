@@ -97,17 +97,44 @@ export async function POST(request) {
 
   const admin = getAdminClient()
 
-  // Límite de usuarios por empresa (plan). NULL = ilimitado.
-  const { data: emp } = await admin.from('empresas').select('max_usuarios').eq('id', empresaId).maybeSingle()
-  const limite = emp?.max_usuarios ?? null
-  if (limite != null) {
-    const { data: lista } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-    const actuales = (lista?.users || []).filter((u) => u.app_metadata?.empresa_id === empresaId).length
-    if (actuales >= limite) {
+  // Reglas de límite por rol:
+  // admin → máximo 1 por empresa (fijo)
+  // supervisor → máximo 1 por empresa (fijo)
+  // vendedor → limitado por max_usuarios de la empresa (configurable por plan)
+  const { data: lista } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const mismos = (lista?.users || []).filter((u) => u.app_metadata?.empresa_id === empresaId)
+
+  if (rol === 'admin') {
+    const hayAdmin = mismos.some((u) => u.app_metadata?.rol === 'admin')
+    if (hayAdmin) {
       return NextResponse.json({
         error: 'limite_usuarios',
-        message: `Alcanzaste el límite de ${limite} usuario(s) de tu plan. Contactá al proveedor para ampliarlo.`,
+        message: 'Esta empresa ya tiene un administrador. Solo se permite uno por empresa.',
       }, { status: 403 })
+    }
+  }
+
+  if (rol === 'supervisor') {
+    const haySupervisor = mismos.some((u) => u.app_metadata?.rol === 'supervisor')
+    if (haySupervisor) {
+      return NextResponse.json({
+        error: 'limite_usuarios',
+        message: 'Esta empresa ya tiene un supervisor. Solo se permite uno por empresa.',
+      }, { status: 403 })
+    }
+  }
+
+  if (rol === 'vendedor') {
+    const { data: emp } = await admin.from('empresas').select('max_usuarios').eq('id', empresaId).maybeSingle()
+    const limite = emp?.max_usuarios ?? null
+    if (limite != null) {
+      const actualesVendedores = mismos.filter((u) => u.app_metadata?.rol === 'vendedor').length
+      if (actualesVendedores >= limite) {
+        return NextResponse.json({
+          error: 'limite_usuarios',
+          message: `Alcanzaste el límite de ${limite} vendedor(es) de tu plan. Contacta al proveedor para ampliarlo.`,
+        }, { status: 403 })
+      }
     }
   }
 

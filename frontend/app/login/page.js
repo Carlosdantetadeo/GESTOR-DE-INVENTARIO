@@ -43,6 +43,9 @@ export default function Login() {
       return
     }
 
+    // Cierra todas las sesiones anteriores — evita que se compartan credenciales
+    await supabase.auth.signOut({ scope: 'others' })
+
     window.location.href = new URLSearchParams(window.location.search).get('redirect') || '/auditoria'
   }
 

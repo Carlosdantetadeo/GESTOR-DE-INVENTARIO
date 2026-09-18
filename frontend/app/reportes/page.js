@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BarChart3, FileSpreadsheet, FileText, TrendingUp, Package, ArrowLeftRight } from 'lucide-react'
+import { FileSpreadsheet, FileText, TrendingUp, Package, ArrowLeftRight, RefreshCw, Info } from 'lucide-react'
 import { getMovimientos, getStock, getTiendas, getEmpresaId, getEmpresa } from '../../lib/queries'
 import { exportToPDF, exportToExcel } from '../../lib/export'
 
@@ -19,10 +19,31 @@ function formatFecha(dateStr) {
   })
 }
 
-const REPORTES_DISPONIBLES = [
-  { id: 'ventas', nombre: 'Reporte General de Ventas', desc: 'Desglose detallado de las ventas por sucursal y vendedor.', icon: TrendingUp },
-  { id: 'inventario', nombre: 'Valorización de Almacén', desc: 'Resumen financiero del valor de la mercadería en todas las sedes.', icon: Package },
-  { id: 'movimientos', nombre: 'Historial de Transacciones', desc: 'Registro de auditoría de todas las operaciones realizadas por voz.', icon: ArrowLeftRight }
+const REPORTES = [
+  {
+    id: 'ventas',
+    nombre: 'Reporte de ventas',
+    desc: 'Todas las ventas registradas: producto, cantidad, precio y vendedor.',
+    paraQue: 'Para revisar cuánto se vendió, qué productos se movieron más y cruzar con tu caja.',
+    icon: TrendingUp,
+    color: 'var(--color-venta)',
+  },
+  {
+    id: 'inventario',
+    nombre: 'Valorización de almacén',
+    desc: 'Stock actual por sede con el costo unitario y el valor total del inventario.',
+    paraQue: 'Para saber cuánto vale tu mercadería, útil para el contador y para pedir reposición.',
+    icon: Package,
+    color: 'var(--color-ingreso)',
+  },
+  {
+    id: 'movimientos',
+    nombre: 'Historial de operaciones',
+    desc: 'Registro completo de ingresos, salidas, traslados y ajustes de stock.',
+    paraQue: 'Para auditar cualquier movimiento, detectar errores y tener el historial completo.',
+    icon: ArrowLeftRight,
+    color: 'var(--accent)',
+  },
 ]
 
 export default function Reportes() {
@@ -31,7 +52,7 @@ export default function Reportes() {
   const [tiendas, setTiendas] = useState([])
   const [tienda, setTienda] = useState('all')
   const [fecha, setFecha] = useState('today')
-  const [generando, setGenerando] = useState(null) // reporteId being generated
+  const [generando, setGenerando] = useState(null)
 
   useEffect(() => {
     getEmpresaId().then(id => {
@@ -58,13 +79,12 @@ export default function Reportes() {
     setGenerando(`${reporteId}-${format}`)
 
     const tiendaId = tienda === 'all' ? null : tienda
-    const rangeLabel = tienda === 'all' ? 'Todas las Tiendas' : (tiendas.find(t => String(t.id) === tienda)?.nombre || tienda)
+    const rangeLabel = tienda === 'all' ? 'Todas las sedes' : (tiendas.find(t => String(t.id) === tienda)?.nombre || tienda)
 
     try {
       if (reporteId === 'inventario') {
         const stockData = await getStock(empresaId, tiendaId)
 
-        // Pivot by producto
         const prodMap = {}
         const tiendaSet = {}
         stockData.forEach(row => {
@@ -108,7 +128,6 @@ export default function Reportes() {
         }
 
       } else {
-        // ventas or movimientos
         const tipoFiltro = reporteId === 'ventas' ? 'venta' : undefined
         const allMovs = await getMovimientos(empresaId, { tiendaId, tipo: tipoFiltro, limit: 500 })
         const startDate = getDateRange()
@@ -131,7 +150,7 @@ export default function Reportes() {
         } else {
           const titulo = reporteId === 'ventas'
             ? `REPORTE DE VENTAS — ${rangeLabel}`
-            : `HISTORIAL DE TRANSACCIONES — ${rangeLabel}`
+            : `HISTORIAL DE OPERACIONES — ${rangeLabel}`
           const headers = ['Tipo', 'Producto', 'Cant', 'P.Unit', 'Total', 'Tienda', 'Fecha']
           const rows = movs.map(m => [
             m.tipo.toUpperCase(),
@@ -151,90 +170,135 @@ export default function Reportes() {
     }
   }
 
-  return (
-    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+  const periodoLabel = { today: 'hoy', '7d': 'últimos 7 días', '30d': 'último mes', all: 'historial completo' }
 
-      {/* Header */}
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+      {/* ── Header ── */}
       <div>
-        <h1 style={{ fontSize: '2rem', marginBottom: '6px' }}>Centro de Reportes</h1>
-        <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
-          Genera balances, conciliaciones y valorizaciones del negocio al instante.
+        <h1 style={{ fontSize: '1.7rem', fontWeight: 800, marginBottom: '4px' }}>Reportes</h1>
+        <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.88rem' }}>
+          Descarga la información de tu negocio en Excel o PDF para compartir con tu contador o tu equipo.
         </p>
       </div>
 
-      {/* Parámetros */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <h3 style={{ fontSize: '1.2rem' }}>1. Parámetros del Reporte</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+      {/* ── Filtros ── */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Filtrar antes de descargar
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
           <div>
-            <label style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-              FILTRAR POR SUCURSAL
-            </label>
+            <label style={labelStyle}>Sede</label>
             <select value={tienda} onChange={(e) => setTienda(e.target.value)} className="input-field">
-              <option value="all">Todas las Tiendas (Consolidado)</option>
+              <option value="all">Todas las sedes (consolidado)</option>
               {tiendas.map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-              RANGO DE TIEMPO
-            </label>
+            <label style={labelStyle}>Período</label>
             <select value={fecha} onChange={(e) => setFecha(e.target.value)} className="input-field">
               <option value="today">Hoy</option>
-              <option value="7d">Últimos 7 Días</option>
-              <option value="30d">Último Mes</option>
-              <option value="all">Histórico Completo</option>
+              <option value="7d">Últimos 7 días</option>
+              <option value="30d">Último mes</option>
+              <option value="all">Historial completo</option>
             </select>
           </div>
         </div>
+        {(tienda !== 'all' || fecha !== 'today') && (
+          <p style={{ fontSize: '0.78rem', color: 'hsl(var(--accent))', margin: 0 }}>
+            Los reportes se descargarán con los filtros aplicados: {tienda === 'all' ? 'todas las sedes' : tiendas.find(t => String(t.id) === tienda)?.nombre}, {periodoLabel[fecha]}.
+          </p>
+        )}
       </div>
 
-      {/* Tarjetas */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <h3 style={{ fontSize: '1.2rem' }}>2. Selecciona el Formato de Descarga</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-          {REPORTES_DISPONIBLES.map((rep) => {
-            const Icon = rep.icon
-            const isGeneratingExcel = generando === `${rep.id}-excel`
-            const isGeneratingPDF = generando === `${rep.id}-pdf`
-            const anyGenerating = generando !== null
+      {/* ── Cards de reportes ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        {REPORTES.map((rep) => {
+          const Icon = rep.icon
+          const isGenExcel = generando === `${rep.id}-excel`
+          const isGenPDF = generando === `${rep.id}-pdf`
+          const anyGenerando = generando !== null
 
-            return (
-              <div key={rep.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '20px' }}>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                  <div style={{ background: 'hsl(var(--accent) / 0.15)', color: 'hsl(var(--accent))', padding: '12px', borderRadius: 'var(--radius-sm)' }}>
-                    <Icon size={24} />
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>{rep.nombre}</h4>
-                    <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.8rem', lineHeight: '1.4' }}>{rep.desc}</p>
-                  </div>
+          return (
+            <div key={rep.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+              {/* Cabecera del reporte */}
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '14px' }}>
+                <div style={{
+                  background: `hsl(${rep.color} / 0.12)`,
+                  color: `hsl(${rep.color})`,
+                  padding: '11px',
+                  borderRadius: 'var(--radius-sm)',
+                  flexShrink: 0,
+                }}>
+                  <Icon size={22} />
                 </div>
-                <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid hsl(var(--border))', paddingTop: '16px' }}>
-                  <button
-                    onClick={() => triggerDownload(rep.id, 'excel')}
-                    className="btn btn-secondary"
-                    style={{ flex: 1, padding: '10px', fontSize: '0.8rem' }}
-                    disabled={anyGenerating || !empresaId}
-                  >
-                    <FileSpreadsheet size={16} />
-                    {isGeneratingExcel ? 'Generando...' : 'Excel (.xlsx)'}
-                  </button>
-                  <button
-                    onClick={() => triggerDownload(rep.id, 'pdf')}
-                    className="btn btn-primary"
-                    style={{ flex: 1, padding: '10px', fontSize: '0.8rem' }}
-                    disabled={anyGenerating || !empresaId}
-                  >
-                    <FileText size={16} />
-                    {isGeneratingPDF ? 'Generando...' : 'PDF Oficial'}
-                  </button>
+                <div>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '3px' }}>{rep.nombre}</h4>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.8rem', lineHeight: 1.4, margin: 0 }}>{rep.desc}</p>
                 </div>
               </div>
-            )
-          })}
-        </div>
+
+              {/* Para qué sirve */}
+              <div style={{
+                display: 'flex', gap: '8px', alignItems: 'flex-start',
+                background: 'hsl(var(--bg-base))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 12px',
+                marginBottom: '16px',
+              }}>
+                <Info size={13} style={{ color: 'hsl(var(--text-muted))', flexShrink: 0, marginTop: '2px' }} />
+                <span style={{ fontSize: '0.76rem', color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>{rep.paraQue}</span>
+              </div>
+
+              {/* Botones de descarga */}
+              <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid hsl(var(--border))', paddingTop: '14px' }}>
+                <button
+                  onClick={() => triggerDownload(rep.id, 'excel')}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: '9px 8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  disabled={anyGenerando || !empresaId}
+                >
+                  {isGenExcel
+                    ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Generando…</>
+                    : <><FileSpreadsheet size={14} /> Excel</>
+                  }
+                </button>
+                <button
+                  onClick={() => triggerDownload(rep.id, 'pdf')}
+                  className="btn btn-primary"
+                  style={{ flex: 1, padding: '9px 8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  disabled={anyGenerando || !empresaId}
+                >
+                  {isGenPDF
+                    ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Generando…</>
+                    : <><FileText size={14} /> PDF oficial</>
+                  }
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
+
+      <style jsx global>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   )
 }
+
+const labelStyle = {
+  display: 'block',
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  color: 'hsl(var(--text-secondary))',
+  marginBottom: '6px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+}
+

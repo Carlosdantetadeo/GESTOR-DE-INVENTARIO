@@ -34,7 +34,7 @@ export default function LimiteUsuarios({ empresaId, valor }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
-        Máximo de usuarios que puede tener esta empresa (según su plan). Se valida al crear un usuario nuevo.
+        Máximo de <strong>vendedores</strong> permitidos (según el plan contratado). Admin y supervisor son 1 fijo cada uno.
         Dejalo <strong>vacío para ilimitado</strong>.
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
