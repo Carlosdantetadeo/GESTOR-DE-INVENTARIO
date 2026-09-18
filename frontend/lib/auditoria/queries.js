@@ -494,9 +494,12 @@ export async function buscarPorTexto(texto, limite = 8) {
     const { data } = await supabase.from('productos').select('id, nombre, referencia').or(ors.join(',')).limit(60)
     return data || []
   }
-  // Traer la familia por el núcleo numérico; si no hay núcleo, por el token más específico.
-  let data = nucleos.length ? await traer(nucleos) : await traer([buscables[0]])
-  if (!data.length) data = await traer(buscables)
+  // Primero por el CÓDIGO exacto (familia chica y precisa: todas las tallas de ese
+  // código). Si no aparece, ampliar por el núcleo numérico (familia grande), y por
+  // último por cualquier token. Así no se pierde el código que empieza con letra.
+  let data = await traer([buscables[0]])
+  if (!data.length && nucleos.length) data = await traer(nucleos)
+  if (!data.length && buscables.length > 1) data = await traer(buscables)
 
   // Comparar sin guiones/espacios: "T41" matchea "T-41", "X25421 M3" matchea "X25421-M3".
   const compact = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
