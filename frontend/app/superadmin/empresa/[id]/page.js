@@ -7,6 +7,7 @@ import ModeloSelector from './ModeloSelector'
 import EstadoEmpresa from './EstadoEmpresa'
 import TokensTelegram from './TokensTelegram'
 import OperariosSuperadmin from './OperariosSuperadmin'
+import InstruccionesNlu from './InstruccionesNlu'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +75,12 @@ export default async function EmpresaDetalle({ params }) {
           El cambio aplica al siguiente mensaje del bot de esta empresa.
         </p>
         <ModeloSelector empresaId={empresa.id} current={empresa.nlu_model} modelos={modelosActivos} />
+      </section>
+
+      {/* Sección — Instrucciones de reconocimiento por rubro */}
+      <section style={card}>
+        <div style={label}>Reconocimiento por rubro (voz / foto / código)</div>
+        <InstruccionesNlu empresaId={empresa.id} valor={empresa.nlu_instrucciones} />
       </section>
 
       {/* Sección 3 — Consumo de tokens */}

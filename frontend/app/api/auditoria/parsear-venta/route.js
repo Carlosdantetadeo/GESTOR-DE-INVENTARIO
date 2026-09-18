@@ -28,10 +28,15 @@ export async function POST(request) {
     return NextResponse.json({ error: 'nlu_no_configurado' }, { status: 501 })
   }
 
-  const { texto } = await request.json().catch(() => ({}))
+  const { texto, instrucciones } = await request.json().catch(() => ({}))
   if (!texto || !texto.trim()) {
     return NextResponse.json({ error: 'sin_texto' }, { status: 400 })
   }
+
+  // Instrucciones del rubro de la empresa (se agregan al prompt base si vienen).
+  const system = instrucciones && String(instrucciones).trim()
+    ? `${PROMPT}\n\nCONTEXTO DE ESTA TIENDA (aplicá estas reglas del rubro):\n${String(instrucciones).trim()}`
+    : PROMPT
 
   const model = process.env.GROQ_NLU_MODEL || 'llama-3.3-70b-versatile'
 
@@ -43,7 +48,7 @@ export async function POST(request) {
       temperature: 0,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: PROMPT },
+        { role: 'system', content: system },
         { role: 'user', content: texto },
       ],
     }),

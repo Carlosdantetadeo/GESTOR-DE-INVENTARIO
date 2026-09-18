@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto } from '../../../lib/auditoria/queries'
+import { registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto, getInstruccionesNlu } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -26,12 +26,17 @@ export default function SalidasPage() {
   const [registrando, setRegistrando] = useState(false)
   const [ultimoResumen, setUltimoResumen] = useState(null)   // { movs, count, total }
   const [pidiendoDeshacer, setPidiendoDeshacer] = useState(false)
+  const [instrucciones, setInstrucciones] = useState('')   // reglas del rubro (por empresa)
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
   }, [session, online])
+
+  useEffect(() => {
+    if (session?.empresaId) getInstruccionesNlu().then(setInstrucciones).catch(() => {})
+  }, [session])
 
   const cargarRecientes = useCallback(async () => {
     if (!session?.user?.id) return
@@ -156,7 +161,7 @@ export default function SalidasPage() {
     let items = []
     try {
       const res = await fetch('/api/auditoria/parsear-venta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: t }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: t, instrucciones }),
       })
       if (res.ok) { const d = await res.json(); items = Array.isArray(d.items) ? d.items : [] }
     } catch { /* fallback */ }
@@ -222,6 +227,7 @@ export default function SalidasPage() {
       const blob = await comprimirImagen(file)
       const fd = new FormData()
       fd.append('imagen', blob, 'boleta.jpg')
+      if (instrucciones) fd.append('instrucciones', instrucciones)
       const res = await fetch('/api/auditoria/factura', { method: 'POST', body: fd })
       if (!res.ok) {
         if (res.status === 501) { setAviso('La lectura de fotos no está configurada.'); return }

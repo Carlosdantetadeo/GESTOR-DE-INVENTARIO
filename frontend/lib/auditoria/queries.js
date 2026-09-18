@@ -401,6 +401,13 @@ export async function cargarStockInicial({ tiendaId, filas, authUid }) {
   return { cargados, sinMatch }
 }
 
+// Instrucciones de reconocimiento (NLU/visión) de la empresa actual. RLS por empresa.
+// Se inyectan al prompt de voz/foto/texto para adaptar el sistema al rubro.
+export async function getInstruccionesNlu() {
+  const { data } = await supabase.from('empresas').select('nlu_instrucciones').single()
+  return data?.nlu_instrucciones ?? ''
+}
+
 // Config del tenant (RLS de empresas devuelve solo la propia).
 export async function getEmpresaConfig() {
   const { data, error } = await supabase.from('empresas').select('rubro, meses_stock_muerto').single()

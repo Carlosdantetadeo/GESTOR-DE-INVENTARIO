@@ -20,6 +20,10 @@ export async function POST(request) {
   if (!imagen) {
     return NextResponse.json({ error: 'sin_imagen' }, { status: 400 })
   }
+  const instrucciones = form.get('instrucciones')
+  const promptFinal = instrucciones && String(instrucciones).trim()
+    ? `${PROMPT}\n\nCONTEXTO DE ESTA TIENDA (aplicá estas reglas del rubro):\n${String(instrucciones).trim()}`
+    : PROMPT
 
   const base64 = Buffer.from(await imagen.arrayBuffer()).toString('base64')
   const dataUrl = `data:${imagen.type || 'image/jpeg'};base64,${base64}`
@@ -36,7 +40,7 @@ export async function POST(request) {
         {
           role: 'user',
           content: [
-            { type: 'text', text: PROMPT },
+            { type: 'text', text: promptFinal },
             { type: 'image_url', image_url: { url: dataUrl } },
           ],
         },

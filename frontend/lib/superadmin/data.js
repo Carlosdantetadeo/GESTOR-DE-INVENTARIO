@@ -299,7 +299,7 @@ export async function getEmpresaDetalle(empresaId) {
 
   const { data: empresa } = await supa
     .from('empresas')
-    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at, telegram_token, telegram_token_admin')
+    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at, telegram_token, telegram_token_admin, nlu_instrucciones')
     .eq('id', empresaId)
     .single()
   if (!empresa) return null
@@ -341,6 +341,16 @@ export async function getEmpresaDetalle(empresaId) {
   }))
 
   return { empresa, consumoMensual, operarios }
+}
+
+// Instrucciones de reconocimiento (NLU/visión) por empresa. Texto libre que se
+// inyecta al prompt de voz/foto/texto para adaptar el sistema al rubro.
+export async function setEmpresaInstrucciones(empresaId, texto) {
+  const supa = getAdminClient()
+  const valor = (texto ?? '').trim() || null
+  const { error } = await supa.from('empresas').update({ nlu_instrucciones: valor }).eq('id', empresaId)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
 }
 
 export async function updateEmpresaModelo(empresaId, modelo) {
