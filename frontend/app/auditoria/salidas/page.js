@@ -331,6 +331,9 @@ export default function SalidasPage() {
             <input type="file" accept="image/*" capture="environment" onChange={procesarFoto} style={{ display: 'none' }} disabled={procesando} />
           </label>
         </div>
+        <div style={{ fontSize: '0.75rem', color: T.faint, lineHeight: 1.5 }}>
+          Mantén presionado 🎤 y di: <strong>cantidad · código · talla · precio</strong> — ej: <em>"2 X25421-M3 talla 41 a 80 soles"</em>. Mejor <strong>un producto por vez</strong>; se van sumando a la orden.
+        </div>
       </div>
 
       {escuchado && (
@@ -399,8 +402,10 @@ export default function SalidasPage() {
 
               {f.mostrarCand && f.candidatos.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: '0.75rem', color: T.muted }}>Toca el correcto (o edita el texto de arriba para ver otros):</span>
                   {f.candidatos.map(({ pieza: p }) => (
-                    <button key={p.producto_id ?? p.id} onClick={() => elegirCandidato(f.id, p)} style={resultItem}>
+                    <button key={p.producto_id ?? p.id} onClick={() => elegirCandidato(f.id, p)}
+                      style={{ ...resultItem, ...(f.productoId === (p.producto_id ?? p.id) ? { borderColor: T.primary, background: '#eff6ff' } : null) }}>
                       <strong style={{ color: T.ink }}>{p.nombre}</strong>{p.referencia ? <span style={{ color: T.muted }}> · {p.referencia}</span> : null}
                     </button>
                   ))}
