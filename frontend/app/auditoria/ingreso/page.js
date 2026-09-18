@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
-import { getStock, registrarIngresoManual, deshacerSalida, getTiendas, getSecciones, buscarSemantico } from '../../../lib/auditoria/queries'
+import { getStock, registrarIngresoManual, deshacerSalida, getTiendas, getSecciones, buscarSemantico, getInstruccionesNlu } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Select, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -27,11 +27,13 @@ export default function IngresoPage() {
   const [ultimo, setUltimo] = useState(null)
   const [grabando, setGrabando] = useState(false)
   const [aviso, setAviso] = useState('')
+  const [instrucciones, setInstrucciones] = useState('')   // reglas del rubro (por empresa)
   const recorderRef = useRef(null)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
     if (session?.empresaId) getTiendas().then(setTiendas).catch(() => {})
+    if (session?.empresaId) getInstruccionesNlu().then(setInstrucciones).catch(() => {})
   }, [session, online])
 
   // Al elegir sede: cargar sus secciones y resetear la selección de sección/pieza.
@@ -98,7 +100,7 @@ export default function IngresoPage() {
       const res = await fetch('/api/auditoria/parsear-venta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto: t }),
+        body: JSON.stringify({ texto: t, instrucciones }),
       })
       if (res.ok) {
         const d = await res.json()

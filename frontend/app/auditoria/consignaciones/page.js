@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
-import { buscarSemantico, crearConsignacion, getConsignacionesPendientes, confirmarConsignacion, devolverConsignacion } from '../../../lib/auditoria/queries'
+import { buscarSemantico, crearConsignacion, getConsignacionesPendientes, confirmarConsignacion, devolverConsignacion, getInstruccionesNlu } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Field, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 export default function ConsignacionesPage() {
@@ -25,6 +25,7 @@ export default function ConsignacionesPage() {
 
   // Voz
   const [grabando, setGrabando] = useState(false)
+  const [instrucciones, setInstrucciones] = useState('')   // reglas del rubro (por empresa)
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
@@ -35,6 +36,7 @@ export default function ConsignacionesPage() {
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
+    if (session?.empresaId) getInstruccionesNlu().then(setInstrucciones).catch(() => {})
   }, [session, online])
 
   const cargarPendientes = useCallback(async () => {
@@ -104,7 +106,7 @@ export default function ConsignacionesPage() {
               setAviso(`Escuché: "${t}"`)
               const parseRes = await fetch('/api/auditoria/parsear-venta', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ texto: t }),
+                body: JSON.stringify({ texto: t, instrucciones }),
               })
               let desc = t, cant = null, prec = null
               if (parseRes.ok) {
