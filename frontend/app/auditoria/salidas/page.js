@@ -29,6 +29,7 @@ export default function SalidasPage() {
   const [instrucciones, setInstrucciones] = useState('')   // reglas del rubro (por empresa)
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
+  const buscarFilaTimer = useRef(null)
 
   useEffect(() => {
     if (session?.empresaId && online) syncCatalogo().catch(() => {})
@@ -69,7 +70,7 @@ export default function SalidasPage() {
       vistos.add(id)
       out.push(r)
     }
-    return out.slice(0, 8)
+    return out.slice(0, 5)
   }
 
   // ── Agregar ítems a la orden ─────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export default function SalidasPage() {
       try { const s = await getPrecioSugerido(best.producto_id ?? best.id); if (s != null) prec = s } catch { /* opcional */ }
     }
     setOrden((o) => [...o, nuevaFila({
-      descripcion: desc,
+      descripcion: best?.nombre ?? desc,   // el input editable muestra el nombre resuelto
       nombre: best?.nombre ?? desc,
       productoId: best ? (best.producto_id ?? best.id) : null,
       referencia: best?.referencia ?? null,
@@ -125,6 +126,17 @@ export default function SalidasPage() {
 
   function updateFila(id, patch) { setOrden((o) => o.map((f) => (f.id === id ? { ...f, ...patch } : f))) }
   function quitarFila(id) { setOrden((o) => o.filter((f) => f.id !== id)) }
+
+  // Editar el texto de una fila: al cambiar (aunque sea una letra) re-busca y muestra
+  // las alternativas cercanas. Debounce para no consultar en cada tecla.
+  function editarDescripcion(id, texto) {
+    setOrden((o) => o.map((f) => (f.id === id ? { ...f, descripcion: texto } : f)))
+    clearTimeout(buscarFilaTimer.current)
+    buscarFilaTimer.current = setTimeout(async () => {
+      const cand = texto.trim() ? await buscarCombinado(texto) : []
+      setOrden((o) => o.map((f) => (f.id === id ? { ...f, candidatos: cand, mostrarCand: cand.length > 0 } : f)))
+    }, 350)
+  }
   function ajustarCantFila(id, delta) {
     setOrden((o) => o.map((f) => (f.id === id ? { ...f, cantidad: String(Math.max(1, (Number(f.cantidad) || 0) + delta)) } : f)))
   }
@@ -133,7 +145,8 @@ export default function SalidasPage() {
     try { const s = await getPrecioSugerido(p.producto_id ?? p.id); if (s != null) prec = s } catch { /* opcional */ }
     setOrden((o) => o.map((f) => (f.id === id ? {
       ...f, productoId: p.producto_id ?? p.id, nombre: p.nombre, referencia: p.referencia ?? null,
-      mostrarCand: false, precio: (f.precio === '' && prec != null) ? String(prec) : f.precio,
+      descripcion: p.nombre, mostrarCand: false,
+      precio: (f.precio === '' && prec != null) ? String(prec) : f.precio,
     } : f)))
   }
 
@@ -369,13 +382,17 @@ export default function SalidasPage() {
             <div key={f.id} style={{ borderTop: `1px solid ${T.line}`, paddingTop: 10, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: T.ink }}>{f.nombre}{f.referencia ? <span style={{ color: T.muted, fontWeight: 400 }}> · {f.referencia}</span> : null}</div>
-                  {!f.productoId && <div style={{ fontSize: '0.78rem', color: '#b45309' }}>Sin producto en catálogo — se creará "{f.descripcion}"</div>}
-                  {f.candidatos.length > 0 && (
-                    <button onClick={() => updateFila(f.id, { mostrarCand: !f.mostrarCand })} style={{ background: 'none', border: 'none', color: T.primary, fontSize: '0.8rem', padding: 0, cursor: 'pointer' }}>
-                      {f.mostrarCand ? 'ocultar opciones' : 'cambiar producto'}
-                    </button>
-                  )}
+                  <Input value={f.descripcion} onChange={(e) => editarDescripcion(f.id, e.target.value)} placeholder="Producto o código" style={{ fontWeight: 600 }} />
+                  <div style={{ fontSize: '0.78rem', marginTop: 3, color: f.productoId ? T.muted : '#b45309' }}>
+                    {f.productoId
+                      ? <>✓ {f.nombre}{f.referencia ? ` · ${f.referencia}` : ''}</>
+                      : <>Sin producto — se creará "{f.descripcion}"</>}
+                    {f.candidatos.length > 0 && (
+                      <button onClick={() => updateFila(f.id, { mostrarCand: !f.mostrarCand })} style={{ background: 'none', border: 'none', color: T.primary, fontSize: '0.78rem', padding: '0 0 0 6px', cursor: 'pointer' }}>
+                        {f.mostrarCand ? '· ocultar' : '· ver opciones'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <button onClick={() => quitarFila(f.id)} aria-label="Quitar ítem" style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1 }}>✕</button>
               </div>
