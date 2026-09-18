@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto, getInstruccionesNlu } from '../../../lib/auditoria/queries'
+import { registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto, getInstruccionesNlu, getEjemploCodigo } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -27,6 +27,7 @@ export default function SalidasPage() {
   const [ultimoResumen, setUltimoResumen] = useState(null)   // { movs, count, total }
   const [pidiendoDeshacer, setPidiendoDeshacer] = useState(false)
   const [instrucciones, setInstrucciones] = useState('')   // reglas del rubro (por empresa)
+  const [ejemploCodigo, setEjemploCodigo] = useState('')   // código real para la guía
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
   const buscarFilaTimer = useRef(null)
@@ -38,6 +39,7 @@ export default function SalidasPage() {
   useEffect(() => {
     if (!session?.empresaId) return
     getInstruccionesNlu().then(setInstrucciones).catch(() => {})
+    getEjemploCodigo().then(setEjemploCodigo).catch(() => {})
   }, [session])
 
   const cargarRecientes = useCallback(async () => {
@@ -332,7 +334,7 @@ export default function SalidasPage() {
           </label>
         </div>
         <div style={{ fontSize: '0.75rem', color: T.faint, lineHeight: 1.5 }}>
-          Mantén presionado 🎤 y di: <strong>cantidad · código · talla · precio</strong> — ej: <em>"2 X25421-M3 talla 41 a 80 soles"</em>. Mejor <strong>un producto por vez</strong>; se van sumando a la orden.
+          Mantén presionado 🎤 y di: <strong>cantidad · código · talla · precio</strong> — ej: <em>"2 {ejemploCodigo || 'X25421-M3 talla 41'} a 80 soles"</em>. Mejor <strong>un producto por vez</strong>; se van sumando a la orden.
         </div>
       </div>
 

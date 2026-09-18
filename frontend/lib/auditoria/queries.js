@@ -408,14 +408,11 @@ export async function getInstruccionesNlu() {
   return data?.nlu_instrucciones ?? ''
 }
 
-// Muestra de nombres/códigos de producto de la empresa actual (RLS por empresa),
-// para sesgar la transcripción de voz (Whisper) hacia SUS códigos reales sin
-// afectar a otras empresas. Devuelve un texto corto listo para el prompt de Whisper.
-export async function getPistaVozEmpresa(limite = 40) {
-  const { data } = await supabase.from('productos').select('nombre').limit(limite)
-  const nombres = (data || []).map((p) => p.nombre).filter(Boolean)
-  if (!nombres.length) return ''
-  return ('Venta de tienda. Ejemplos de códigos de producto de esta tienda: ' + nombres.join(', ')).slice(0, 850)
+// Un código de ejemplo del catálogo de la empresa (RLS por empresa), para mostrarlo
+// en la guía de dictado en pantalla. Sin productos → ''.
+export async function getEjemploCodigo() {
+  const { data } = await supabase.from('productos').select('nombre').limit(1)
+  return data?.[0]?.nombre ?? ''
 }
 
 // Config del tenant (RLS de empresas devuelve solo la propia).
