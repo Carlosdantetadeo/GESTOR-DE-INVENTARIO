@@ -21,20 +21,10 @@ export async function POST(request) {
   const sub = (audio.type || '').split(';')[0].split('/')[1]
   const ext = ['webm', 'mp4', 'm4a', 'ogg', 'wav', 'mpeg', 'mp3'].includes(sub) ? sub : 'webm'
 
-  // Pista para que Whisper transcriba bien los CÓDIGOS con letras (no "equis"→X)
-  // y no confunda talla/precio. Sesga el vocabulario, no fuerza contenido.
-  // Si el cliente manda una pista propia de la empresa (sus códigos reales) se usa
-  // esa; si no, una genérica. Es por empresa: no afecta a las demás.
-  const pistaCliente = form.get('prompt')
-  const prompt = pistaCliente && String(pistaCliente).trim()
-    ? String(pistaCliente)
-    : 'Venta de tienda. Los productos tienen códigos alfanuméricos con guion y talla, por ejemplo: X4444-M5 T-43, EM0021-M4 T-39, 25421-M10 T-40. La cantidad va en pares o unidades; el precio en soles.'
-
   const groqForm = new FormData()
   groqForm.append('file', audio, `audio.${ext}`)
   groqForm.append('model', 'whisper-large-v3')
   groqForm.append('language', 'es')
-  groqForm.append('prompt', prompt)
 
   const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',

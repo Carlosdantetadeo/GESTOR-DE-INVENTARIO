@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuditoria } from '../AuditoriaShell'
 import { syncCatalogo, buscarLocal } from '../../../lib/auditoria/offline/catalogo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
-import { registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto, getInstruccionesNlu, getPistaVozEmpresa } from '../../../lib/auditoria/queries'
+import { registrarSalida, deshacerSalida, buscarSemantico, buscarOCrearProducto, getPrecioSugerido, getProductosRecientes, buscarPorTexto, getInstruccionesNlu } from '../../../lib/auditoria/queries'
 import { Page, Title, Button, Input, Card, Note, T } from '../../../lib/auditoria/ui'
 
 const VENTANA_MS = 5 * 60 * 1000
@@ -27,7 +27,6 @@ export default function SalidasPage() {
   const [ultimoResumen, setUltimoResumen] = useState(null)   // { movs, count, total }
   const [pidiendoDeshacer, setPidiendoDeshacer] = useState(false)
   const [instrucciones, setInstrucciones] = useState('')   // reglas del rubro (por empresa)
-  const [pistaVoz, setPistaVoz] = useState('')             // muestra de códigos para Whisper
   const recorderRef = useRef(null)
   const canceladoRef = useRef(false)
 
@@ -38,7 +37,6 @@ export default function SalidasPage() {
   useEffect(() => {
     if (!session?.empresaId) return
     getInstruccionesNlu().then(setInstrucciones).catch(() => {})
-    getPistaVozEmpresa().then(setPistaVoz).catch(() => {})
   }, [session])
 
   const cargarRecientes = useCallback(async () => {
@@ -194,7 +192,6 @@ export default function SalidasPage() {
         const blob = new Blob(chunks, { type: rec.mimeType })
         const fd = new FormData()
         fd.append('audio', blob)
-        if (pistaVoz) fd.append('prompt', pistaVoz)   // sesga Whisper a los códigos de esta empresa
         try {
           const res = await fetch('/api/auditoria/transcribir', { method: 'POST', body: fd })
           if (res.ok) {
