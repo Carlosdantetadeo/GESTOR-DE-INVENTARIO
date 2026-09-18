@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requireSuperadmin } from '../../lib/superadmin/guard'
 import { getEmpresasResumen, getModelosNlu, modeloLabel } from '../../lib/superadmin/data'
+import EstadoEmpresaToggle from './EstadoEmpresaToggle'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,9 +64,12 @@ export default async function SuperadminEmpresas() {
                 <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>${e.costoMes.toFixed(4)}</td>
                 <td style={{ ...td, color: 'hsl(var(--text-secondary))' }}>{fmtFecha(e.ultimoMovimiento)}</td>
                 <td style={{ ...td, textAlign: 'right' }}>
-                  <Link href={`/superadmin/empresa/${e.id}`} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem' }}>
-                    Gestionar
-                  </Link>
+                  <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <EstadoEmpresaToggle empresaId={e.id} activa={e.activa} />
+                    <Link href={`/superadmin/empresa/${e.id}`} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem' }}>
+                      Gestionar
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
