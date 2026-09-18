@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { verifySession, SESSION_COOKIE } from '@/lib/superadmin/session'
+import { setEmpresaInstrucciones } from '@/lib/superadmin/data'
 
 async function isAuthed() {
   const token = cookies().get(SESSION_COOKIE)?.value
@@ -30,6 +31,7 @@ export async function POST(request) {
   const sedes = Array.isArray(body.sedes)
     ? body.sedes.map(s => String(s ?? '').trim()).filter(Boolean)
     : []
+  const instrucciones = String(body.nlu_instrucciones ?? '').trim()
 
   if (!empresa_nombre) return NextResponse.json({ ok: false, message: 'Nombre de empresa requerido.' }, { status: 400 })
   if (!admin_email)    return NextResponse.json({ ok: false, message: 'Email del administrador requerido.' }, { status: 400 })
@@ -58,6 +60,12 @@ export async function POST(request) {
 
   if (!res.ok) {
     return NextResponse.json({ ok: false, message: data.error ?? data.message ?? `Error ${res.status}` }, { status: res.status })
+  }
+
+  // Guardar las reglas de reconocimiento del rubro (si se cargaron en el alta).
+  // La empresa ya existe; si esto falla no bloqueamos el alta.
+  if (data.empresa_id && instrucciones) {
+    try { await setEmpresaInstrucciones(data.empresa_id, instrucciones) } catch { /* se puede editar luego en la ficha */ }
   }
 
   return NextResponse.json({ ok: true, empresa_id: data.empresa_id, temp_password: data.temp_password })

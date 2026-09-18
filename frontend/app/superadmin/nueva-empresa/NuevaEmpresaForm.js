@@ -11,6 +11,7 @@ export default function NuevaEmpresaForm() {
   const [rubro, setRubro]     = useState('')
   const [email, setEmail]     = useState('')
   const [sedes, setSedes]     = useState([''])
+  const [instrucciones, setInstrucciones] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
   const [success,  setSuccess]  = useState(false)
@@ -45,10 +46,11 @@ export default function NuevaEmpresaForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          empresa_nombre: empresa.trim(),
-          rubro:          rubro.trim(),
-          admin_email:    email.trim(),
-          sedes:          sedesValidas,
+          empresa_nombre:    empresa.trim(),
+          rubro:             rubro.trim(),
+          admin_email:       email.trim(),
+          sedes:             sedesValidas,
+          nlu_instrucciones: instrucciones.trim(),
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -184,6 +186,20 @@ export default function NuevaEmpresaForm() {
               </button>
             )}
           </div>
+
+          <Field label="Reglas de reconocimiento del rubro (opcional)">
+            <textarea
+              value={instrucciones}
+              onChange={(e) => setInstrucciones(e.target.value)}
+              rows={4}
+              placeholder={'Ej: Tienda de calzado. Producto por CÓDIGO (EM0021-M4) y TALLA (T-39 / T40). El código y la talla NO son cantidad ni precio. El precio se dice "a X soles cada uno".'}
+              className="input-field"
+              style={{ resize: 'vertical', minHeight: 92, lineHeight: 1.5, paddingLeft: '12px' }}
+            />
+            <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
+              Para que el sistema entienda la voz/foto/códigos de esta empresa. Se puede editar luego en la ficha.
+            </span>
+          </Field>
 
           {error && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: '0.825rem', color: '#dc2626', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
