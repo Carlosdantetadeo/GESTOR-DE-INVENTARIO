@@ -477,15 +477,41 @@ export async function buscarSemantico(texto, limite = 5) {
 // Es la más precisa para CÓDIGOS (ej. "EM0021"): encuentra el producto aunque
 // el resto del nombre/talla difiera. Devuelve el formato { pieza, score }.
 export async function buscarPorTexto(texto, limite = 8) {
-  const q = (texto || '').trim().replace(/[,()*]/g, ' ').trim()
+  const q = (texto || '').trim()
   if (q.length < 2) return []
-  const { data, error } = await supabase
-    .from('productos')
-    .select('id, nombre, referencia')
-    .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
-    .limit(limite)
-  if (error || !data) return []
-  return data.map((p) => ({
+  // Tokenizar; priorizar los tokens con dígitos (código/talla). No buscar la frase
+  // entera (no coincide por el guion/espacios de la talla).
+  const tokens = q.split(/\s+/).map((t) => t.replace(/[,()%_*]/g, '')).filter((t) => t.length >= 2)
+  const conDigito = tokens.filter((t) => /\d/.test(t))
+  const buscables = (conDigito.length ? conDigito : tokens).sort((a, b) => b.length - a.length).slice(0, 4)
+  if (!buscables.length) return []
+
+  const traer = async (toks) => {
+    const ors = toks.flatMap((t) => [`nombre.ilike.%${t}%`, `referencia.ilike.%${t}%`])
+    const { data } = await supabase.from('productos').select('id, nombre, referencia').or(ors.join(',')).limit(40)
+    return data || []
+  }
+  // Primero por el token más específico (el código); si no hay, por todos los tokens.
+  let data = await traer([buscables[0]])
+  if (!data.length && buscables.length > 1) data = await traer(buscables)
+
+  // Comparar sin guiones/espacios: "T41" matchea "T-41", "X25421 M3" matchea "X25421-M3".
+  const compact = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const scored = data
+    .map((p) => {
+      const nc = compact(p.nombre) + compact(p.referencia || '')
+      let peso = 0
+      for (const t of buscables) {
+        const tc = compact(t)
+        if (tc && nc.includes(tc)) peso += tc.length   // el código (largo) pesa más que la talla
+      }
+      return { p, peso }
+    })
+    .filter((x) => x.peso > 0)
+    .sort((a, b) => b.peso - a.peso)
+    .slice(0, limite)
+
+  return scored.map(({ p }) => ({
     pieza: { id: p.id, producto_id: p.id, nombre: p.nombre, referencia: p.referencia },
     score: 1,
   }))
