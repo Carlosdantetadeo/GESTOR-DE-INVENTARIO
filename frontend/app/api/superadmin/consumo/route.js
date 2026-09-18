@@ -17,19 +17,6 @@ export async function GET(request) {
   }
   const { searchParams } = new URL(request.url)
   const mes = searchParams.get('mes') || null
-  const data = await getConsumoResumen(mes)
-  // Mapear al formato que espera la tabla del cliente (snake_case).
-  const consumo = data.map((e) => ({
-    empresa_id:          e.id,
-    empresa_nombre:      e.nombre,
-    modelo:              e.nluModel,
-    tokens_entrada:      e.tokensEntrada,
-    tokens_salida:       e.tokensSalida,
-    costo_usd:           e.costoMes,
-    limite_mensual_usd:  e.limiteMensual,
-    accion_al_superar:   e.accionAlSuperar,
-    alerta_al_pct:       e.alertaAlPct,
-    modelo_degradado_id: e.modeloDegradadoId,
-  }))
+  const consumo = await getConsumoResumen(mes)   // ya viene por empresa+modelo en snake_case
   return NextResponse.json({ ok: true, consumo })
 }

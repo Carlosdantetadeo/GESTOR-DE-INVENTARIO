@@ -366,7 +366,9 @@ export async function updateEmpresaModelo(empresaId, modelo) {
 
 // ─── Consumo y límites de gasto ──────────────────────────────────────────────
 
-// Retorna consumo agregado por empresa para el mes indicado (YYYY-MM) o el mes actual.
+// Consumo del mes (YYYY-MM o mes actual), una fila por EMPRESA + MODELO.
+// Así, si una empresa cambió de modelo en el mes, se ve cuánto gastó con cada uno.
+// El límite/gasto es por empresa: `costo_empresa` trae el total para el % vs límite.
 export async function getConsumoResumen(mes) {
   const supa = getAdminClient()
   const ahora = new Date()
@@ -376,38 +378,50 @@ export async function getConsumoResumen(mes) {
   const hasta  = new Date(Date.UTC(year, month, 1)).toISOString()
 
   const [{ data: empresas }, { data: consumoRows }, { data: limites }] = await Promise.all([
-    supa.from('empresas').select('id, nombre, nlu_model, activa').order('nombre'),
-    supa.from('consumo_ia').select('empresa_id, tokens_entrada, tokens_salida, costo_usd')
+    supa.from('empresas').select('id, nombre, activa').order('nombre'),
+    supa.from('consumo_ia').select('empresa_id, modelo, tokens_entrada, tokens_salida, costo_usd')
       .gte('created_at', desde).lt('created_at', hasta),
     supa.from('nlu_spend_limits').select('*'),
   ])
 
-  const consumoMap = {}
+  // Agrupar por empresa+modelo y llevar el total por empresa (para el % vs límite).
+  const porEmpModelo = {}
+  const totalEmpresa = {}
   for (const c of consumoRows ?? []) {
-    if (!consumoMap[c.empresa_id]) consumoMap[c.empresa_id] = { tokens: 0, entrada: 0, salida: 0, costo: 0 }
-    consumoMap[c.empresa_id].entrada += (c.tokens_entrada ?? 0)
-    consumoMap[c.empresa_id].salida  += (c.tokens_salida ?? 0)
-    consumoMap[c.empresa_id].tokens  += (c.tokens_entrada ?? 0) + (c.tokens_salida ?? 0)
-    consumoMap[c.empresa_id].costo   += Number(c.costo_usd ?? 0)
+    const modelo = c.modelo || '—'
+    const k = `${c.empresa_id}|${modelo}`
+    if (!porEmpModelo[k]) porEmpModelo[k] = { empresa_id: c.empresa_id, modelo, entrada: 0, salida: 0, costo: 0 }
+    porEmpModelo[k].entrada += (c.tokens_entrada ?? 0)
+    porEmpModelo[k].salida  += (c.tokens_salida ?? 0)
+    porEmpModelo[k].costo   += Number(c.costo_usd ?? 0)
+    totalEmpresa[c.empresa_id] = (totalEmpresa[c.empresa_id] ?? 0) + Number(c.costo_usd ?? 0)
   }
 
   const limitesMap = {}
   for (const l of limites ?? []) limitesMap[l.empresa_id] = l
 
-  return (empresas ?? []).map(e => ({
-    id:               e.id,
-    nombre:           e.nombre,
-    nluModel:         e.nlu_model,
-    activa:           e.activa !== false,
-    tokensMes:        consumoMap[e.id]?.tokens ?? 0,
-    tokensEntrada:    consumoMap[e.id]?.entrada ?? 0,
-    tokensSalida:     consumoMap[e.id]?.salida ?? 0,
-    costoMes:         consumoMap[e.id]?.costo  ?? 0,
-    limiteMensual:    limitesMap[e.id]?.limite_mensual_usd   ?? null,
-    accionAlSuperar:  limitesMap[e.id]?.accion_al_superar    ?? null,
-    alertaAlPct:      limitesMap[e.id]?.alerta_al_pct        ?? 80,
-    modeloDegradadoId: limitesMap[e.id]?.modelo_degradado_id ?? null,
-  }))
+  const filas = []
+  for (const e of empresas ?? []) {
+    const lim = limitesMap[e.id]
+    const base = {
+      empresa_id:          e.id,
+      empresa_nombre:      e.nombre,
+      costo_empresa:       totalEmpresa[e.id] ?? 0,
+      limite_mensual_usd:  lim?.limite_mensual_usd ?? null,
+      accion_al_superar:   lim?.accion_al_superar ?? null,
+      alerta_al_pct:       lim?.alerta_al_pct ?? 80,
+      modelo_degradado_id: lim?.modelo_degradado_id ?? null,
+    }
+    const modelos = Object.values(porEmpModelo).filter((r) => r.empresa_id === e.id)
+    if (modelos.length === 0) {
+      filas.push({ ...base, modelo: null, tokens_entrada: 0, tokens_salida: 0, costo_usd: 0 })
+    } else {
+      for (const r of modelos) {
+        filas.push({ ...base, modelo: r.modelo, tokens_entrada: r.entrada, tokens_salida: r.salida, costo_usd: r.costo })
+      }
+    }
+  }
+  return filas
 }
 
 // Crea o actualiza el límite de gasto de una empresa.

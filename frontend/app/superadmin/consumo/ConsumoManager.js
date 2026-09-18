@@ -170,7 +170,8 @@ export default function ConsumoManager({ modelosDisponibles = [] }) {
               </thead>
               <tbody>
                 {filas.map(fila => {
-                  const pct = fila.limite_mensual_usd ? (fila.costo_usd / fila.limite_mensual_usd) * 100 : 0
+                  // El % se mide contra el total de la empresa (el límite es por empresa, no por modelo).
+                  const pct = fila.limite_mensual_usd ? (Number(fila.costo_empresa ?? fila.costo_usd ?? 0) / fila.limite_mensual_usd) * 100 : 0
                   const esEditando = editando === fila.empresa_id
 
                   return (
