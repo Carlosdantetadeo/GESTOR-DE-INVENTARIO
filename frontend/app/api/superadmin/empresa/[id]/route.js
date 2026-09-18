@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { verifySession, SESSION_COOKIE } from '@/lib/superadmin/session'
-import { updateEmpresaModelo, setEmpresaActiva, rotarTokenEmpresa, desconectarOperador, setEmpresaInstrucciones } from '@/lib/superadmin/data'
+import { updateEmpresaModelo, setEmpresaActiva, rotarTokenEmpresa, desconectarOperador, setEmpresaInstrucciones, setEmpresaMaxUsuarios } from '@/lib/superadmin/data'
 
 async function isAuthed() {
   const token = cookies().get(SESSION_COOKIE)?.value
@@ -42,6 +42,11 @@ export async function PATCH(request, { params }) {
 
   if (body.nlu_instrucciones !== undefined) {
     const res = await setEmpresaInstrucciones(params.id, body.nlu_instrucciones)
+    return NextResponse.json(res, { status: res.ok ? 200 : 400 })
+  }
+
+  if (body.max_usuarios !== undefined) {
+    const res = await setEmpresaMaxUsuarios(params.id, body.max_usuarios)
     return NextResponse.json(res, { status: res.ok ? 200 : 400 })
   }
 

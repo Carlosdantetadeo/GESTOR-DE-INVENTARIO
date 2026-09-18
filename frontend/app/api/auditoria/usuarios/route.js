@@ -95,11 +95,26 @@ export async function POST(request) {
   if (!email) return NextResponse.json({ error: 'faltan_datos' }, { status: 400 })
   if (!ROLES.includes(rol)) return NextResponse.json({ error: 'rol_invalido' }, { status: 400 })
 
+  const admin = getAdminClient()
+
+  // Límite de usuarios por empresa (plan). NULL = ilimitado.
+  const { data: emp } = await admin.from('empresas').select('max_usuarios').eq('id', empresaId).maybeSingle()
+  const limite = emp?.max_usuarios ?? null
+  if (limite != null) {
+    const { data: lista } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    const actuales = (lista?.users || []).filter((u) => u.app_metadata?.empresa_id === empresaId).length
+    if (actuales >= limite) {
+      return NextResponse.json({
+        error: 'limite_usuarios',
+        message: `Alcanzaste el límite de ${limite} usuario(s) de tu plan. Contactá al proveedor para ampliarlo.`,
+      }, { status: 403 })
+    }
+  }
+
   // Contraseña temporal generada por el server (mismo formato que el onboarding
   // del admin). El admin la ve una vez en pantalla y se la pasa al empleado.
   const password = `AD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
 
-  const admin = getAdminClient()
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,

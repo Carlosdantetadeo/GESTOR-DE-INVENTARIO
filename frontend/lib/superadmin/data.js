@@ -299,7 +299,7 @@ export async function getEmpresaDetalle(empresaId) {
 
   const { data: empresa } = await supa
     .from('empresas')
-    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at, telegram_token, telegram_token_admin, nlu_instrucciones')
+    .select('id, nombre, rubro, nlu_model, created_at, activa, suspendida_at, telegram_token, telegram_token_admin, nlu_instrucciones, max_usuarios')
     .eq('id', empresaId)
     .single()
   if (!empresa) return null
@@ -349,6 +349,16 @@ export async function setEmpresaInstrucciones(empresaId, texto) {
   const supa = getAdminClient()
   const valor = (texto ?? '').trim() || null
   const { error } = await supa.from('empresas').update({ nlu_instrucciones: valor }).eq('id', empresaId)
+  if (error) return { ok: false, message: error.message }
+  return { ok: true }
+}
+
+// Límite de usuarios (plan) por empresa. null/'' → ilimitado.
+export async function setEmpresaMaxUsuarios(empresaId, valor) {
+  const supa = getAdminClient()
+  const n = (valor === '' || valor == null) ? null : Math.max(1, Math.floor(Number(valor)))
+  if (n != null && !Number.isFinite(n)) return { ok: false, message: 'Número inválido.' }
+  const { error } = await supa.from('empresas').update({ max_usuarios: n }).eq('id', empresaId)
   if (error) return { ok: false, message: error.message }
   return { ok: true }
 }

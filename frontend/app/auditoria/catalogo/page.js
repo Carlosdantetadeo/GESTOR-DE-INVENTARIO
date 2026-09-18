@@ -306,7 +306,7 @@ export default function CatalogoPage() {
       cargarUsuarios()
     } else {
       const err = await res.json().catch(() => ({}))
-      setAviso(`No se pudo crear el usuario (${err.error || res.status}).`)
+      setAviso(err.message || `No se pudo crear el usuario (${err.error || res.status}).`)
     }
   }
 

@@ -8,6 +8,7 @@ import EstadoEmpresa from './EstadoEmpresa'
 import TokensTelegram from './TokensTelegram'
 import OperariosSuperadmin from './OperariosSuperadmin'
 import InstruccionesNlu from './InstruccionesNlu'
+import LimiteUsuarios from './LimiteUsuarios'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +57,12 @@ export default async function EmpresaDetalle({ params }) {
       <section style={card}>
         <div style={label}>Suspensión</div>
         <EstadoEmpresa empresaId={empresa.id} activa={empresa.activa !== false} />
+      </section>
+
+      {/* Sección — Límite de usuarios (plan) */}
+      <section style={card}>
+        <div style={label}>Límite de usuarios (plan)</div>
+        <LimiteUsuarios empresaId={empresa.id} valor={empresa.max_usuarios} />
       </section>
 
       {/* Sección — Tokens de conexión Telegram */}
