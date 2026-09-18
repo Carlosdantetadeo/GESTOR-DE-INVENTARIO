@@ -485,15 +485,18 @@ export async function buscarPorTexto(texto, limite = 8) {
   const conDigito = tokens.filter((t) => /\d/.test(t))
   const buscables = (conDigito.length ? conDigito : tokens).sort((a, b) => b.length - a.length).slice(0, 4)
   if (!buscables.length) return []
+  // Núcleos numéricos largos (ej "25421"): traen toda la familia del código aunque
+  // la voz haya perdido la "X" inicial o confundido el sufijo (M3 vs M13).
+  const nucleos = [...new Set(q.match(/\d{3,}/g) || [])]
 
   const traer = async (toks) => {
     const ors = toks.flatMap((t) => [`nombre.ilike.%${t}%`, `referencia.ilike.%${t}%`])
-    const { data } = await supabase.from('productos').select('id, nombre, referencia').or(ors.join(',')).limit(40)
+    const { data } = await supabase.from('productos').select('id, nombre, referencia').or(ors.join(',')).limit(60)
     return data || []
   }
-  // Primero por el token más específico (el código); si no hay, por todos los tokens.
-  let data = await traer([buscables[0]])
-  if (!data.length && buscables.length > 1) data = await traer(buscables)
+  // Traer la familia por el núcleo numérico; si no hay núcleo, por el token más específico.
+  let data = nucleos.length ? await traer(nucleos) : await traer([buscables[0]])
+  if (!data.length) data = await traer(buscables)
 
   // Comparar sin guiones/espacios: "T41" matchea "T-41", "X25421 M3" matchea "X25421-M3".
   const compact = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '')

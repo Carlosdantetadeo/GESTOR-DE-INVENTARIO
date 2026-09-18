@@ -106,7 +106,9 @@ export default function SalidasPage() {
       cantidad: cantidad ?? 1,
       precio: prec,
       candidatos,
-      mostrarCand: !best,
+      // Si hay varios códigos parecidos, abrir la lista para que confirmes el exacto
+      // (la voz no distingue "25421" de "X25421", ni "M3" de "M13").
+      mostrarCand: !best || candidatos.length > 1,
     })])
   }
 
