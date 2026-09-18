@@ -61,10 +61,10 @@ export default function SuperadminChrome({ children }) {
           <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Superadmin</span>
         </div>
         <nav className="sa-topbar-nav">
-          <Link href="/superadmin" style={navLinkStyle(isEmpresas)}><Building2 size={15} /> Empresas</Link>
-          <Link href="/superadmin/modelos" style={navLinkStyle(isModelos)}><Cpu size={15} /> Modelos</Link>
-          <Link href="/superadmin/consumo" style={navLinkStyle(isConsumo)}><BarChart2 size={15} /> Consumo</Link>
-          <a href="/api/superadmin/logout" style={{ ...navLinkStyle(false), color: 'hsl(var(--color-gasto))' }}><LogOut size={15} /></a>
+          <Link href="/superadmin" aria-label="Empresas" title="Empresas" style={{ ...navLinkStyle(isEmpresas), padding: '9px 10px' }}><Building2 size={18} /></Link>
+          <Link href="/superadmin/modelos" aria-label="Modelos" title="Modelos" style={{ ...navLinkStyle(isModelos), padding: '9px 10px' }}><Cpu size={18} /></Link>
+          <Link href="/superadmin/consumo" aria-label="Consumo" title="Consumo" style={{ ...navLinkStyle(isConsumo), padding: '9px 10px' }}><BarChart2 size={18} /></Link>
+          <a href="/api/superadmin/logout" aria-label="Salir" title="Salir" style={{ ...navLinkStyle(false), padding: '9px 10px', color: 'hsl(var(--color-gasto))' }}><LogOut size={18} /></a>
         </nav>
       </header>
 
