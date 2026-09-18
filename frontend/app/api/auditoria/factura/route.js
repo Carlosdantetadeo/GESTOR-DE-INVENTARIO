@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server'
 
 const PROMPT =
-  'Sos un extractor de facturas de compra de repuestos/autopartes. ' +
+  'Sos un extractor de boletas/facturas de una tienda (ropa, calzado, ferretería, etc.). ' +
   'Devolvé SOLO un JSON array (sin texto extra, sin markdown) con un objeto por ' +
   'ítem: {"descripcion": string, "cantidad": number, "precio_unitario": number}. ' +
   'Si un dato no está, poné null.'
@@ -23,7 +23,7 @@ export async function POST(request) {
 
   const base64 = Buffer.from(await imagen.arrayBuffer()).toString('base64')
   const dataUrl = `data:${imagen.type || 'image/jpeg'};base64,${base64}`
-  const model = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b'
+  const model = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b'
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
