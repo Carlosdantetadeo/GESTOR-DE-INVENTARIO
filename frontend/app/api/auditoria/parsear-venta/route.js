@@ -9,8 +9,10 @@ const PROMPT =
   'Devolvé SOLO un JSON sin texto extra ni markdown: {"items":[{"descripcion": string, "cantidad": number|null, "precio": number|null}]}. Un objeto por producto.\n' +
   'Muchos productos se identifican por un CÓDIGO (letras y números juntos, ej. "EM0021" o "EM0021-M4") y una TALLA (ej. "T-39", "T40", "talla 40"). ' +
   'Los dígitos que forman parte del CÓDIGO o de la TALLA NO son la cantidad ni el precio.\n' +
+  'A veces el vendedor dicta las LETRAS del código por su nombre (equis→X, eme→M, be→B, ce→C, de→D, efe→F, ge→G, jota→J, ka→K, ele→L, ene→N, pe→P, ere/erre→R, ese→S, te→T, uve/ve→V, doble ve→W, zeta→Z, i griega→Y). Reconstruí el código con esas letras.\n' +
   'EJEMPLOS:\n' +
   '"15 EM0021 talla 40 a 20 soles cada uno" → {"items":[{"descripcion":"EM0021 T40","cantidad":15,"precio":20}]}\n' +
+  '"un par equis 4444 eme 5 talla 43 a 80 soles" → {"items":[{"descripcion":"X4444-M5 T-43","cantidad":1,"precio":80}]}\n' +
   '"5 polos EM0021 a 20 y 3 gorras EM0034 a 15" → {"items":[{"descripcion":"polo EM0021","cantidad":5,"precio":20},{"descripcion":"gorra EM0034","cantidad":3,"precio":15}]}\n' +
   '"dos EM0034 T38 a diez cincuenta" → {"items":[{"descripcion":"EM0034 T38","cantidad":2,"precio":10.5}]}\n' +
   '"una llave francesa" → {"items":[{"descripcion":"llave francesa","cantidad":1,"precio":null}]}\n' +

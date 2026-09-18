@@ -25,6 +25,9 @@ export async function POST(request) {
   groqForm.append('file', audio, `audio.${ext}`)
   groqForm.append('model', 'whisper-large-v3')
   groqForm.append('language', 'es')
+  // Pista para que Whisper transcriba bien los CÓDIGOS con letras (no "equis"→X)
+  // y no confunda talla/precio. Sesga el vocabulario, no fuerza contenido.
+  groqForm.append('prompt', 'Venta de tienda. Los productos tienen códigos alfanuméricos con guion y talla, por ejemplo: X4444-M5 T-43, EM0021-M4 T-39, 25421-M10 T-40. La cantidad va en pares o unidades; el precio en soles.')
 
   const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',
