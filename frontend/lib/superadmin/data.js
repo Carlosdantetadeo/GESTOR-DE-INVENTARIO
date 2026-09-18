@@ -384,9 +384,11 @@ export async function getConsumoResumen(mes) {
 
   const consumoMap = {}
   for (const c of consumoRows ?? []) {
-    if (!consumoMap[c.empresa_id]) consumoMap[c.empresa_id] = { tokens: 0, costo: 0 }
-    consumoMap[c.empresa_id].tokens += (c.tokens_entrada ?? 0) + (c.tokens_salida ?? 0)
-    consumoMap[c.empresa_id].costo  += Number(c.costo_usd ?? 0)
+    if (!consumoMap[c.empresa_id]) consumoMap[c.empresa_id] = { tokens: 0, entrada: 0, salida: 0, costo: 0 }
+    consumoMap[c.empresa_id].entrada += (c.tokens_entrada ?? 0)
+    consumoMap[c.empresa_id].salida  += (c.tokens_salida ?? 0)
+    consumoMap[c.empresa_id].tokens  += (c.tokens_entrada ?? 0) + (c.tokens_salida ?? 0)
+    consumoMap[c.empresa_id].costo   += Number(c.costo_usd ?? 0)
   }
 
   const limitesMap = {}
@@ -398,6 +400,8 @@ export async function getConsumoResumen(mes) {
     nluModel:         e.nlu_model,
     activa:           e.activa !== false,
     tokensMes:        consumoMap[e.id]?.tokens ?? 0,
+    tokensEntrada:    consumoMap[e.id]?.entrada ?? 0,
+    tokensSalida:     consumoMap[e.id]?.salida ?? 0,
     costoMes:         consumoMap[e.id]?.costo  ?? 0,
     limiteMensual:    limitesMap[e.id]?.limite_mensual_usd   ?? null,
     accionAlSuperar:  limitesMap[e.id]?.accion_al_superar    ?? null,

@@ -104,9 +104,9 @@ export default function ConsumoManager({ modelosDisponibles = [] }) {
       f.modelo,
       f.tokens_entrada,
       f.tokens_salida,
-      f.costo_usd.toFixed(4),
+      Number(f.costo_usd ?? 0).toFixed(4),
       f.limite_mensual_usd ?? '',
-      f.limite_mensual_usd ? ((f.costo_usd / f.limite_mensual_usd) * 100).toFixed(1) : '',
+      f.limite_mensual_usd ? ((Number(f.costo_usd ?? 0) / f.limite_mensual_usd) * 100).toFixed(1) : '',
       f.accion_al_superar ?? '',
     ])
     const csv = [cabecera, ...filasCsv].map(r => r.join(',')).join('\n')
@@ -179,7 +179,7 @@ export default function ConsumoManager({ modelosDisponibles = [] }) {
                       <td style={{ padding: '10px 14px', color: 'hsl(var(--text-secondary))' }}>{fila.modelo || '—'}</td>
                       <td style={{ padding: '10px 14px', textAlign: 'right' }}>{fila.tokens_entrada?.toLocaleString('es-AR') ?? '—'}</td>
                       <td style={{ padding: '10px 14px', textAlign: 'right' }}>{fila.tokens_salida?.toLocaleString('es-AR') ?? '—'}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>${fila.costo_usd.toFixed(4)}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>${Number(fila.costo_usd ?? 0).toFixed(4)}</td>
 
                       {esEditando ? (
                         <>
