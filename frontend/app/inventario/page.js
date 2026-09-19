@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Download, Search, AlertTriangle, Coins, Layers, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react'
+import { Download, Search, AlertTriangle, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react'
 import { getStock, getTiendas, getEmpresaId } from '../../lib/queries'
 import { exportToExcel } from '../../lib/export'
 
@@ -186,81 +186,27 @@ export default function Inventario() {
         </button>
       </div>
 
-      {/* ── KPIs ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '14px' }}>
-        {/* Valor del almacén */}
-        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 18px' }}>
-          <div style={{ background: 'hsl(var(--accent) / 0.1)', color: 'hsl(var(--accent))', padding: '10px', borderRadius: 'var(--radius-sm)', flexShrink: 0 }}>
-            <Coins size={20} />
-          </div>
-          <div>
-            <div style={kpiLabel}>Valor del almacén</div>
-            <div style={kpiValue}>{loading ? '—' : `S/ ${fmt(valorTotal)}`}</div>
-            <div style={kpiHint}>costo × stock total</div>
-          </div>
-        </div>
-
-        {/* Productos */}
-        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 18px' }}>
-          <div style={{ background: 'hsl(var(--accent) / 0.1)', color: 'hsl(var(--accent))', padding: '10px', borderRadius: 'var(--radius-sm)', flexShrink: 0 }}>
-            <Layers size={20} />
-          </div>
-          <div>
-            <div style={kpiLabel}>Productos</div>
-            <div style={kpiValue}>{loading ? '—' : filtered.length}</div>
-            <div style={kpiHint}>en el filtro actual</div>
-          </div>
-        </div>
-
-        {/* Agotados */}
+      {/* ── Alerta de stock (solo si hay problemas) ── */}
+      {!loading && (agotadosCount > 0 || bajoCount > 0) && (
         <div
-          className="glass-card"
-          onClick={() => !loading && setSoloProblemas(v => !v)}
+          onClick={() => setSoloProblemas(v => !v)}
           style={{
-            display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 18px',
-            cursor: loading ? 'default' : 'pointer',
-            borderLeft: agotadosCount > 0 ? '3px solid hsl(0 75% 48%)' : undefined,
-            outline: soloProblemas && agotadosCount > 0 ? '2px solid hsl(0 75% 48% / 0.4)' : undefined,
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '10px 16px', borderRadius: 'var(--radius-md)',
+            background: soloProblemas ? 'hsl(38 92% 50% / 0.12)' : 'hsl(38 92% 50% / 0.07)',
+            border: `1px solid hsl(38 92% 50% / ${soloProblemas ? '0.45' : '0.25'})`,
+            cursor: 'pointer', userSelect: 'none',
           }}
         >
-          <div style={{
-            background: agotadosCount > 0 ? 'hsl(0 75% 55% / 0.1)' : 'hsl(var(--bg-base))',
-            color: agotadosCount > 0 ? 'hsl(0 75% 48%)' : 'hsl(var(--text-muted))',
-            padding: '10px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
-          }}>
-            <AlertTriangle size={20} />
-          </div>
-          <div>
-            <div style={kpiLabel}>Agotados</div>
-            <div style={{ ...kpiValue, color: agotadosCount > 0 ? 'hsl(0 75% 48%)' : 'inherit' }}>{loading ? '—' : agotadosCount}</div>
-            <div style={kpiHint}>toca para filtrar</div>
-          </div>
+          <AlertTriangle size={15} style={{ color: 'hsl(38 85% 38%)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.83rem', color: 'hsl(38 85% 38%)', fontWeight: 600, flex: 1 }}>
+            {[agotadosCount > 0 && `${agotadosCount} agotado${agotadosCount !== 1 ? 's' : ''}`, bajoCount > 0 && `${bajoCount} bajo mínimo`].filter(Boolean).join(' · ')}
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'hsl(38 85% 38%)', opacity: 0.8 }}>
+            {soloProblemas ? 'Ver todos' : 'Ver solo estos'}
+          </span>
         </div>
-
-        {/* Stock bajo */}
-        <div
-          className="glass-card"
-          onClick={() => !loading && setSoloProblemas(v => !v)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 18px',
-            cursor: loading ? 'default' : 'pointer',
-            borderLeft: bajoCount > 0 ? '3px solid hsl(38 92% 50%)' : undefined,
-          }}
-        >
-          <div style={{
-            background: bajoCount > 0 ? 'hsl(38 92% 50% / 0.1)' : 'hsl(var(--bg-base))',
-            color: bajoCount > 0 ? 'hsl(38 85% 38%)' : 'hsl(var(--text-muted))',
-            padding: '10px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
-          }}>
-            <AlertTriangle size={20} />
-          </div>
-          <div>
-            <div style={kpiLabel}>Bajo mínimo</div>
-            <div style={{ ...kpiValue, color: bajoCount > 0 ? 'hsl(38 85% 38%)' : 'inherit' }}>{loading ? '—' : bajoCount}</div>
-            <div style={kpiHint}>toca para filtrar</div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* ── Filtros ── */}
       <div className="glass-card" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', padding: '12px 16px' }}>
@@ -400,6 +346,3 @@ function Th({ children, onClick, style }) {
   )
 }
 
-const kpiLabel = { fontSize: '0.72rem', fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }
-const kpiValue = { fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.2 }
-const kpiHint  = { fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '2px' }
