@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Download, Search, AlertTriangle, Coins, Layers, ChevronUp, ChevronDown } from 'lucide-react'
+import Link from 'next/link'
+import { Download, Search, AlertTriangle, Coins, Layers, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react'
 import { getStock, getTiendas, getEmpresaId } from '../../lib/queries'
 import { exportToExcel } from '../../lib/export'
 
@@ -172,6 +173,9 @@ export default function Inventario() {
       {/* ── Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
         <div>
+          <Link href="/auditoria" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: 'hsl(var(--text-muted))', textDecoration: 'none', marginBottom: '8px' }}>
+            <ArrowLeft size={14} /> Volver al panel
+          </Link>
           <h1 style={{ fontSize: '1.7rem', fontWeight: 800, marginBottom: '4px' }}>Inventario</h1>
           <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.88rem' }}>
             Stock actual por sede, estado y valorización de tu almacén.
