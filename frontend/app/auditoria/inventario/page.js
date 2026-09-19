@@ -46,27 +46,6 @@ function getEstado(total, minimo) {
   return 'ok'
 }
 
-const ESTADO = {
-  agotado: { label: 'Agotado',    bg: 'hsl(0 75% 55% / 0.1)',    color: 'hsl(0 75% 45%)',   border: 'hsl(0 75% 48% / 0.25)' },
-  bajo:    { label: 'Stock bajo', bg: 'hsl(38 92% 50% / 0.1)',   color: 'hsl(38 85% 38%)',  border: 'hsl(38 92% 50% / 0.3)' },
-  ok:      { label: 'Normal',     bg: 'hsl(142 72% 40% / 0.08)', color: 'hsl(142 60% 30%)', border: 'hsl(142 72% 40% / 0.25)' },
-}
-
-function Badge({ estado }) {
-  const c = ESTADO[estado]
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '5px',
-      padding: '3px 10px', borderRadius: '99px',
-      fontSize: '0.72rem', fontWeight: 700,
-      background: c.bg, color: c.color, border: `1px solid ${c.border}`,
-      whiteSpace: 'nowrap',
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-      {c.label}
-    </span>
-  )
-}
 
 export default function InventarioAuditoria() {
   const [empresaId, setEmpresaId] = useState(null)
@@ -123,11 +102,7 @@ export default function InventarioAuditoria() {
     else if (sortCol === 'total') { va = getTotalStock(a); vb = getTotalStock(b) }
     else if (sortCol === 'costo') { va = a.costo; vb = b.costo }
     else if (sortCol === 'valor') { va = getTotalStock(a) * a.costo; vb = getTotalStock(b) * b.costo }
-    else if (sortCol === 'estado') {
-      const ord = { agotado: 0, bajo: 1, ok: 2 }
-      va = ord[getEstado(getTotalStock(a), a.stockMinimo)]
-      vb = ord[getEstado(getTotalStock(b), b.stockMinimo)]
-    }
+
     if (va === undefined) return 0
     const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb
     return sortDir === 'asc' ? cmp : -cmp
@@ -233,10 +208,8 @@ export default function InventarioAuditoria() {
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <Th onClick={() => toggleSort('nombre')} style={{ minWidth: 200 }}>Producto <SortIcon col="nombre" /></Th>
-                <Th>Categoría</Th>
                 {pivotTiendas.map(t => <Th key={t.id}>{t.nombre}</Th>)}
                 <Th onClick={() => toggleSort('total')}>Total <SortIcon col="total" /></Th>
-                <Th onClick={() => toggleSort('estado')}>Estado <SortIcon col="estado" /></Th>
                 <Th>Mín.</Th>
                 <Th onClick={() => toggleSort('costo')}>Costo <SortIcon col="costo" /></Th>
                 <Th>Precio</Th>
@@ -245,12 +218,11 @@ export default function InventarioAuditoria() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Cargando…</td></tr>
+                <tr><td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Cargando…</td></tr>
               ) : sorted.length === 0 ? (
-                <tr><td colSpan={7 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Sin productos con los filtros aplicados.</td></tr>
+                <tr><td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Sin productos con los filtros aplicados.</td></tr>
               ) : sorted.map(prod => {
                 const total = getTotalStock(prod)
-                const estado = getEstado(total, prod.stockMinimo)
                 return (
                   <tr key={prod.id} style={{ borderBottom: '1px solid #f1f5f9' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
@@ -266,11 +238,6 @@ export default function InventarioAuditoria() {
                         <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{prod.unidad}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '11px 16px' }}>
-                      <span style={{ fontSize: '0.74rem', background: '#f1f5f9', padding: '3px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                        {prod.categoria}
-                      </span>
-                    </td>
                     {pivotTiendas.map(t => {
                       const qty = getTiendaStock(prod, t.id)
                       const low = qty < prod.stockMinimo
@@ -281,7 +248,6 @@ export default function InventarioAuditoria() {
                       )
                     })}
                     <td style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>{total}</td>
-                    <td style={{ padding: '11px 16px' }}><Badge estado={estado} /></td>
                     <td style={{ padding: '11px 16px', textAlign: 'right', color: '#64748b' }}>{prod.stockMinimo}</td>
                     <td style={{ padding: '11px 16px', textAlign: 'right', color: '#64748b' }}>S/ {prod.costo.toFixed(2)}</td>
                     <td style={{ padding: '11px 16px', textAlign: 'right', color: '#64748b' }}>S/ {prod.sugerido.toFixed(2)}</td>
