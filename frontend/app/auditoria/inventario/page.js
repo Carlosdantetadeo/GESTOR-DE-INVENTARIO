@@ -174,7 +174,7 @@ export default function InventarioAuditoria() {
         <div>
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>Inventario</h1>
           <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-            Stock actual por sede, estado y valorización.
+            {loading ? 'Cargando…' : `${productos.length} producto${productos.length !== 1 ? 's' : ''} en catálogo`}
           </p>
         </div>
         <button onClick={handleExport} disabled={loading} style={{
@@ -244,9 +244,8 @@ export default function InventarioAuditoria() {
       </div>
 
       {/* ── Tabla ── */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflowX: 'auto' }}>
+        <table style={{ minWidth: '820px', width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <Th onClick={() => toggleSort('nombre')} style={{ minWidth: 200 }}>Producto <SortIcon col="nombre" /></Th>
@@ -308,11 +307,10 @@ export default function InventarioAuditoria() {
               })}
             </tbody>
           </table>
-        </div>
 
         {!loading && sorted.length > 0 && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', fontSize: '0.78rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <span>{sorted.length} producto{sorted.length !== 1 ? 's' : ''}</span>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', fontSize: '0.78rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', minWidth: '820px' }}>
+            <span>{sorted.length} de {productos.length} producto{productos.length !== 1 ? 's' : ''}</span>
             <span>Valor total: <strong style={{ color: '#0f172a' }}>S/ {fmt(valorTotal)}</strong></span>
           </div>
         )}
