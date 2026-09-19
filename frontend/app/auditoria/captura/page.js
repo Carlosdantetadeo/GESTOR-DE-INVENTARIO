@@ -10,11 +10,10 @@ import { canSupervise } from '../../../lib/auditoria/auth'
 import { getDB } from '../../../lib/auditoria/offline/db'
 import { enqueue } from '../../../lib/auditoria/offline/queue'
 import { registerFlushers, flushStore, flushAll } from '../../../lib/auditoria/offline/syncEngine'
-import { syncCatalogo, buscarLocal, getCatalogoMeta, getConfigLocal } from '../../../lib/auditoria/offline/catalogo'
+import { syncCatalogo, buscarLocal, getCatalogoMeta } from '../../../lib/auditoria/offline/catalogo'
 import { flushFotos } from '../../../lib/auditoria/offline/fotos'
 import { encolarAudio, listAudios, removeAudio, flushAudios } from '../../../lib/auditoria/offline/audios'
 import { getOrCreateSesionActiva, subirConteo } from '../../../lib/auditoria/queries'
-import { evaluarSemaforo } from '../../../lib/auditoria/semaforo'
 import { comprimirImagen } from '../../../lib/auditoria/imagen'
 import { Page, Title, Button, Field, Input, Select, Card, Note, T } from '../../../lib/auditoria/ui'
 
@@ -23,8 +22,6 @@ const ESTADOS = [
   { v: 'deterioro_menor', l: 'Deterioro menor' },
   { v: 'danada_oxidada', l: 'Dañada / oxidada' },
 ]
-
-const COLOR_BG = { verde: '#16a34a', amarillo: '#f59e0b', rojo: '#ef4444' }
 
 // Flusher de conteos: sube los items 'conteo' de la cola (idempotente).
 const conteosFlusher = () =>
@@ -54,7 +51,6 @@ export default function CapturaPage() {
   const [estado, setEstado] = useState('integra')
   const [grabando, setGrabando] = useState(false)
   const [aviso, setAviso] = useState('')
-  const [mesesStockMuerto, setMesesStockMuerto] = useState(6)
   const [fotos, setFotos] = useState([]) // { blob, url } pendientes de adjuntar
   const [audios, setAudios] = useState([]) // notas de voz offline
   const recorderRef = useRef(null)
@@ -89,7 +85,6 @@ export default function CapturaPage() {
         if (!vivo) return
         setCatalogoInfo(info)
         setSesionId(id)
-        if (cfg?.meses_stock_muerto) setMesesStockMuerto(cfg.meses_stock_muerto)
       } catch {
         setAviso('No se pudo preparar el catálogo o la sesión.')
       }
@@ -103,10 +98,6 @@ export default function CapturaPage() {
     if (!q.trim()) { setResultados([]); return }
     setResultados(await buscarLocal(q))
   }, [])
-
-  const semaforo = pieza && cantidad !== ''
-    ? evaluarSemaforo(pieza, { cantidad: Number(cantidad), estado_fisico: estado }, { meses_stock_muerto: mesesStockMuerto })
-    : null
 
   async function grabarVoz() {
     try {
@@ -190,7 +181,7 @@ export default function CapturaPage() {
   }
 
   async function confirmar() {
-    if (!pieza || cantidad === '' || !sesionId || !semaforo) return
+    if (!pieza || cantidad === '' || !sesionId) return
     const item = {
       tipo: 'conteo',
       empresa_id: session.empresaId,
@@ -199,8 +190,6 @@ export default function CapturaPage() {
       producto_id: pieza.producto_id ?? pieza.id,
       cantidad: Number(cantidad),
       estado_fisico: estado,
-      semaforo_color: semaforo.color,
-      semaforo_razon: semaforo.razon,
       canal: 'manual',
       auditor_uid: session.user.id,
       created_at: new Date().toISOString(),
@@ -306,15 +295,6 @@ export default function CapturaPage() {
             </Select>
           </Field>
 
-          {semaforo && (
-            <div style={{ background: COLOR_BG[semaforo.color], color: '#fff', padding: 14, borderRadius: 12 }}>
-              <div style={{ fontWeight: 700, textTransform: 'uppercase' }}>{semaforo.color}</div>
-              <div>{semaforo.razon}</div>
-              {semaforo.accion && <div style={{ fontSize: '0.85rem', marginTop: 4 }}>→ {semaforo.accion}</div>}
-              {semaforo.estrategia && <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>{semaforo.estrategia}</div>}
-            </div>
-          )}
-
           <div>
             <label style={adjuntarBtn}>
               📷 Adjuntar foto
@@ -332,7 +312,7 @@ export default function CapturaPage() {
             )}
           </div>
 
-          <Button variant="dark" full disabled={cantidad === ''} onClick={confirmar}>✅ Confirmar conteo</Button>
+          <Button variant="dark" full disabled={!cantidad} onClick={confirmar}>✅ Confirmar conteo</Button>
         </Card>
       )}
 
