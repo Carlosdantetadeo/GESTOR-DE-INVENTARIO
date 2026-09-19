@@ -23,7 +23,7 @@ export default function AuditoriaHome() {
     supervisa && { href: '/auditoria/captura', icon: '🎤', label: 'Contar', desc: 'Auditar stock por voz' },
     (vendedor || supervisa) && { href: '/auditoria/recepcion', icon: '📷', label: 'Recepción', desc: 'Leer una factura' },
     supervisa && { href: '/auditoria/supervisor', icon: '📊', label: 'Panel', desc: 'Sesiones y alertas' },
-    { href: '/inventario', icon: '🗃️', label: 'Inventario', desc: 'Stock y valorización' },
+    supervisa && { href: '/inventario', icon: '🗃️', label: 'Inventario', desc: 'Stock y valorización' },
     admin && { href: '/auditoria/reportes', icon: '📈', label: 'Reportes', desc: 'Ventas por sede y vendedor' },
     admin && { href: '/auditoria/catalogo', icon: '⚙️', label: 'Administración', desc: 'Catálogo, sedes y usuarios' },
   ].filter(Boolean)
