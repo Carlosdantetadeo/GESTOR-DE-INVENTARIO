@@ -158,48 +158,50 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
           {isAdmin && adminItems.map(renderNavItem)}
         </nav>
 
-        {/* User */}
-        <div style={{
-          borderTop: '1px solid hsl(var(--border))',
-          paddingTop: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 4px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: 'var(--radius-sm)',
-              background: 'hsl(var(--bg-card-hover))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              border: '1px solid hsl(var(--border))',
-              flexShrink: 0
-            }} aria-hidden="true">
-              {userInitials}
+        {/* User — oculto en /inventario porque se accede desde auditoria */}
+        {pathname !== '/inventario' && (
+          <div style={{
+            borderTop: '1px solid hsl(var(--border))',
+            paddingTop: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 4px' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'hsl(var(--bg-card-hover))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                border: '1px solid hsl(var(--border))',
+                flexShrink: 0
+              }} aria-hidden="true">
+                {userInitials}
+              </div>
+              <div style={{ overflow: 'hidden' }}>
+                <span style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                  {userEmail || '…'}
+                </span>
+              </div>
             </div>
-            <div style={{ overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
-                {userEmail || '…'}
-              </span>
-            </div>
-          </div>
 
-          <button
-            className="btn btn-secondary"
-            onClick={handleLogout}
-            style={{ width: '100%', padding: '9px', fontSize: '0.8rem' }}
-            aria-label="Cerrar sesión"
-          >
-            <LogOut size={14} aria-hidden="true" />
-            Cerrar Sesión
-          </button>
-        </div>
+            <button
+              className="btn btn-secondary"
+              onClick={handleLogout}
+              style={{ width: '100%', padding: '9px', fontSize: '0.8rem' }}
+              aria-label="Cerrar sesión"
+            >
+              <LogOut size={14} aria-hidden="true" />
+              Cerrar Sesión
+            </button>
+          </div>
+        )}
       </aside>
 
       <style jsx global>{`
