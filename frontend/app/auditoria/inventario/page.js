@@ -177,13 +177,21 @@ export default function InventarioAuditoria() {
             {loading ? 'Cargando…' : `${productos.length} producto${productos.length !== 1 ? 's' : ''} en catálogo`}
           </p>
         </div>
-        <button onClick={handleExport} disabled={loading} style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          background: '#fff', border: '1px solid #e2e8f0', color: '#374151',
-          borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-        }}>
-          <Download size={14} /> Exportar Excel
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+          <button onClick={handleExport} disabled={loading || filtered.length === 0} style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            background: '#fff', border: '1px solid #e2e8f0', color: '#374151',
+            borderRadius: 8, padding: '7px 14px', cursor: filtered.length === 0 ? 'default' : 'pointer',
+            fontSize: '0.8rem', fontWeight: 600, opacity: filtered.length === 0 ? 0.5 : 1,
+          }}>
+            <Download size={14} /> Exportar filtro actual
+          </button>
+          {!loading && (
+            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+              {filtered.length} producto{filtered.length !== 1 ? 's' : ''} en la descarga
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Alerta de stock (solo si hay problemas) ── */}
