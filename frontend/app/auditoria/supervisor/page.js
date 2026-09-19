@@ -15,6 +15,7 @@ export default function SupervisorPage() {
   const [tab, setTab]                   = useState('critico')
   const [cargando, setCargando]         = useState(true)
   const [error, setError]               = useState('')
+  const [expanded, setExpanded]         = useState(false)
 
   const cargar = useCallback(async () => {
     try {
@@ -98,10 +99,21 @@ export default function SupervisorPage() {
     cargar()
   }, [session, cargar])
 
+  useEffect(() => { setExpanded(false) }, [tab])
+
   if (!session || cargando) return <Page><p style={{ color: T.muted }}>Cargando…</p></Page>
   if (!canSupervise(session.rol)) return <Page><p style={{ color: T.muted }}>No tienes permiso.</p></Page>
 
   const totalCritico = critico.agotados.length + critico.bajo.length
+
+  const LIMIT = 10
+  const agotadosVis    = expanded ? critico.agotados : critico.agotados.slice(0, LIMIT)
+  const bajoVis        = expanded ? critico.bajo : critico.bajo.slice(0, Math.max(0, LIMIT - agotadosVis.length))
+  const criticoOcultos = totalCritico - agotadosVis.length - bajoVis.length
+  const paradosVis     = expanded ? sinMovimiento : sinMovimiento.slice(0, LIMIT)
+  const paradosOcultos = sinMovimiento.length - paradosVis.length
+  const vendidosVis    = expanded ? masVendidos : masVendidos.slice(0, LIMIT)
+  const vendidosOcultos = masVendidos.length - vendidosVis.length
 
   const TABS = [
     { id: 'critico',  icon: '⚠️', label: 'Falta stock',   sub: 'agotado o bajo mín.', value: totalCritico,        color: '#dc2626', bg: '#fef2f2' },
@@ -140,20 +152,23 @@ export default function SupervisorPage() {
             <Vacio>Todo en orden — sin alertas de stock</Vacio>
           ) : (
             <>
-              {critico.agotados.length > 0 && <>
+              {agotadosVis.length > 0 && <>
                 <Etiqueta color="#dc2626">Agotados · {critico.agotados.length}</Etiqueta>
-                {critico.agotados.map(p => (
+                {agotadosVis.map(p => (
                   <FilaSimple key={p.id} nombre={p.nombre}
                     badge="Sin stock" badgeColor="#dc2626" badgeBg="#fef2f2" />
                 ))}
               </>}
-              {critico.bajo.length > 0 && <>
+              {bajoVis.length > 0 && <>
                 <Etiqueta color="#92400e" style={{ marginTop: 10 }}>Bajo mínimo · {critico.bajo.length}</Etiqueta>
-                {critico.bajo.map(p => (
+                {bajoVis.map(p => (
                   <FilaSimple key={p.id} nombre={p.nombre}
                     badge={`${p.total} / mín ${p.minimo}`} badgeColor="#92400e" badgeBg="#fffbeb" />
                 ))}
               </>}
+              {criticoOcultos > 0 && (
+                <button onClick={() => setExpanded(true)} style={verMasStyle}>Ver {criticoOcultos} más</button>
+              )}
               <Link href="/auditoria/inventario" style={{ marginTop: 8, fontSize: '0.82rem', color: T.primary, fontWeight: 600, textDecoration: 'none' }}>
                 Ver inventario completo →
               </Link>
@@ -172,7 +187,7 @@ export default function SupervisorPage() {
               <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: T.muted }}>
                 Productos con stock que no vendieron en 60+ días — ordenados por más tiempo parado
               </p>
-              {sinMovimiento.map((p, i) => {
+              {paradosVis.map((p, i) => {
                 const maxDias = sinMovimiento[0]?.dias ?? 1
                 const pct = p.dias != null ? Math.round((p.dias / (maxDias || 1)) * 100) : 100
                 return (
@@ -191,6 +206,9 @@ export default function SupervisorPage() {
                   </div>
                 )
               })}
+              {paradosOcultos > 0 && (
+                <button onClick={() => setExpanded(true)} style={verMasStyle}>Ver {paradosOcultos} más</button>
+              )}
             </>
           )}
         </div>
@@ -206,7 +224,7 @@ export default function SupervisorPage() {
               <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: T.muted }}>
                 Productos más vendidos en los últimos 30 días — por unidades
               </p>
-              {masVendidos.map((p, i) => {
+              {vendidosVis.map((p, i) => {
                 const max = masVendidos[0]?.total ?? 1
                 const pct = Math.round((p.total / max) * 100)
                 return (
@@ -226,6 +244,9 @@ export default function SupervisorPage() {
                   </div>
                 )
               })}
+              {vendidosOcultos > 0 && (
+                <button onClick={() => setExpanded(true)} style={verMasStyle}>Ver {vendidosOcultos} más</button>
+              )}
             </>
           )}
         </div>
@@ -257,4 +278,10 @@ function FilaSimple({ nombre, badge, badgeColor, badgeBg }) {
 
 function Vacio({ children }) {
   return <p style={{ color: T.faint, fontSize: '0.88rem', margin: 0, padding: '16px 0' }}>{children}</p>
+}
+
+const verMasStyle = {
+  marginTop: 4, width: '100%', padding: '10px', border: `1px dashed ${T.line}`,
+  borderRadius: 10, background: 'transparent', cursor: 'pointer',
+  fontSize: '0.82rem', fontWeight: 600, color: T.primary,
 }
