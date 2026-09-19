@@ -8,8 +8,6 @@ import {
   ArrowLeftRight,
   Package,
   BarChart3,
-  Users,
-  Settings,
   ClipboardCheck,
   LogOut,
   Menu,
@@ -46,13 +44,9 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
     { name: 'Reportes', path: '/reportes', icon: BarChart3 },
   ]
 
-  const adminItems = [
-    { name: 'Usuarios', path: '/admin/usuarios', icon: Users },
-    { name: 'Configuración', path: '/admin/config', icon: Settings },
-    ...(isAdmin
-      ? [{ name: 'Ajuste de inventario', path: '/admin/ajuste', icon: ClipboardCheck }]
-      : []),
-  ]
+  const adminItems = isAdmin
+    ? [{ name: 'Ajuste de stock', path: '/admin/ajuste', icon: ClipboardCheck }]
+    : []
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
