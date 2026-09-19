@@ -1,5 +1,4 @@
 import './globals.css'
-import AppShell from '../components/AppShell'
 
 export const metadata = {
   metadataBase: new URL('https://almacenero.digital'),
@@ -30,16 +29,9 @@ export const metadata = {
 }
 
 export default function RootLayout({ children }) {
-  // Datos simulados de la empresa logueada
-  const empresaDemo = {
-    nombre: 'Inventario'
-  }
-
   return (
     <html lang="es">
-      <body>
-        <AppShell empresa={empresaDemo}>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }
