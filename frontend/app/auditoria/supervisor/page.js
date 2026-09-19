@@ -5,19 +5,20 @@ import Link from 'next/link'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
 import { supabase } from '../../../lib/supabase'
-import { Page, Title, Card, Note, T } from '../../../lib/auditoria/ui'
+import { Page, Title, Note, T } from '../../../lib/auditoria/ui'
 
 export default function SupervisorPage() {
   const { session } = useAuditoria()
-  const [critico, setCritico] = useState({ agotados: [], bajo: [] })
+  const [critico, setCritico]           = useState({ agotados: [], bajo: [] })
   const [sinMovimiento, setSinMovimiento] = useState([])
-  const [masVendidos, setMasVendidos] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [error, setError] = useState('')
+  const [masVendidos, setMasVendidos]   = useState([])
+  const [tab, setTab]                   = useState('critico')
+  const [cargando, setCargando]         = useState(true)
+  const [error, setError]               = useState('')
 
   const cargar = useCallback(async () => {
     try {
-      // ── Stock crítico ──────────────────────────────────────────────
+      // Stock crítico
       const { data: stockRows } = await supabase
         .from('stock')
         .select('cantidad, productos(id, nombre, stock_minimo)')
@@ -32,12 +33,11 @@ export default function SupervisorPage() {
       })
       const todos = Object.values(porProducto)
       const agotados = todos.filter(p => p.total <= 0)
-      const bajo = todos.filter(p => p.total > 0 && p.total < p.minimo)
+      const bajo     = todos.filter(p => p.total > 0 && p.total < p.minimo)
 
-      // ── Sin movimiento (60+ días sin ventas) ──────────────────────
-      const hace180 = new Date()
-      hace180.setDate(hace180.getDate() - 180)
-      const { data: ventasHistorial } = await supabase
+      // Sin movimiento 60+ días
+      const hace180 = new Date(); hace180.setDate(hace180.getDate() - 180)
+      const { data: historial } = await supabase
         .from('movimientos')
         .select('producto_id, created_at')
         .eq('tipo', 'venta')
@@ -45,28 +45,25 @@ export default function SupervisorPage() {
         .order('created_at', { ascending: false })
 
       const ultimaVenta = {}
-      ;(ventasHistorial ?? []).forEach(m => {
+      ;(historial ?? []).forEach(m => {
         if (!ultimaVenta[m.producto_id]) ultimaVenta[m.producto_id] = m.created_at
       })
-
-      const hoy = new Date()
-      const hace60 = new Date()
-      hace60.setDate(hoy.getDate() - 60)
+      const hoy   = new Date()
+      const hace60 = new Date(); hace60.setDate(hoy.getDate() - 60)
 
       const parados = todos
         .filter(p => p.total > 0)
         .filter(p => !ultimaVenta[p.id] || new Date(ultimaVenta[p.id]) < hace60)
         .map(p => ({
           ...p,
-          diasParado: ultimaVenta[p.id]
+          dias: ultimaVenta[p.id]
             ? Math.floor((hoy - new Date(ultimaVenta[p.id])) / 86400000)
             : null,
         }))
-        .sort((a, b) => (b.diasParado ?? 9999) - (a.diasParado ?? 9999))
+        .sort((a, b) => (b.dias ?? 9999) - (a.dias ?? 9999))
 
-      // ── Más vendidos (últimos 30 días) ────────────────────────────
-      const hace30 = new Date()
-      hace30.setDate(hace30.getDate() - 30)
+      // Más vendidos 30 días
+      const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30)
       const { data: ventas30 } = await supabase
         .from('movimientos')
         .select('producto_id, cantidad, productos(nombre)')
@@ -105,101 +102,153 @@ export default function SupervisorPage() {
 
   const totalCritico = critico.agotados.length + critico.bajo.length
 
+  const TABS = [
+    { id: 'critico',  label: '⚠️ Crítico',   value: totalCritico,       color: '#dc2626', bg: '#fef2f2' },
+    { id: 'parados',  label: '📦 Parados',   value: sinMovimiento.length, color: '#92400e', bg: '#fffbeb' },
+    { id: 'vendidos', label: '🔥 Vendidos',  value: masVendidos.length,   color: '#065f46', bg: '#ecfdf5' },
+  ]
+
   return (
     <Page>
       <Title>Panel</Title>
       {error && <Note tone="error">{error}</Note>}
 
-      {/* Stock crítico */}
-      <Seccion
-        titulo={`⚠️ Stock crítico${totalCritico > 0 ? ` (${totalCritico})` : ''}`}
-        vacio={totalCritico === 0}
-        mensajeVacio="Todo en orden — sin alertas de stock"
-      >
-        {critico.agotados.length > 0 && <>
-          <Etiqueta>Agotados — {critico.agotados.length}</Etiqueta>
-          {critico.agotados.map(p => (
-            <Fila key={p.id} nombre={p.nombre}
-              badge={{ texto: 'Sin stock', color: '#dc2626', bg: '#fef2f2' }} />
-          ))}
-        </>}
-        {critico.bajo.length > 0 && <>
-          <Etiqueta style={{ marginTop: critico.agotados.length > 0 ? 10 : 0 }}>
-            Bajo mínimo — {critico.bajo.length}
-          </Etiqueta>
-          {critico.bajo.map(p => (
-            <Fila key={p.id} nombre={p.nombre}
-              badge={{ texto: `${p.total} / mín ${p.minimo}`, color: '#92400e', bg: '#fffbeb' }} />
-          ))}
-        </>}
-        {totalCritico > 0 && (
-          <Link href="/auditoria/inventario" style={{ display: 'block', marginTop: 10, fontSize: '0.82rem', color: T.primary, textDecoration: 'none', fontWeight: 600 }}>
-            Ver inventario completo →
-          </Link>
-        )}
-      </Seccion>
-
-      {/* Sin movimiento */}
-      <Seccion
-        titulo={`📦 Sin ventas hace 60+ días (${sinMovimiento.length})`}
-        vacio={sinMovimiento.length === 0}
-        mensajeVacio="Todos los productos con stock tuvieron ventas recientes"
-      >
-        {sinMovimiento.map(p => (
-          <Fila key={p.id} nombre={p.nombre}
-            badge={{
-              texto: p.diasParado != null ? `${p.diasParado} días parado` : 'Nunca vendido',
-              color: '#6b7280', bg: '#f3f4f6',
-            }} />
+      {/* ── Selector de vista ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            border: `2px solid ${tab === t.id ? t.color : T.line}`,
+            borderRadius: 12, padding: '10px 6px', background: tab === t.id ? t.bg : '#fff',
+            cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s',
+          }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: t.color }}>{t.value}</div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: tab === t.id ? t.color : T.muted, marginTop: 2 }}>{t.label}</div>
+          </button>
         ))}
-      </Seccion>
+      </div>
 
-      {/* Más vendidos */}
-      <Seccion
-        titulo={`🔥 Más vendidos — últimos 30 días (${masVendidos.length})`}
-        vacio={masVendidos.length === 0}
-        mensajeVacio="Sin ventas registradas en los últimos 30 días"
-      >
-        {masVendidos.map((p, i) => (
-          <Fila key={p.id} nombre={p.nombre}
-            izq={<span style={{ fontSize: '0.72rem', color: T.faint, marginRight: 6, fontWeight: 700 }}>#{i + 1}</span>}
-            badge={{ texto: `${p.total} und`, color: '#065f46', bg: '#ecfdf5' }} />
-        ))}
-      </Seccion>
+      {/* ── Vista: Stock crítico ── */}
+      {tab === 'critico' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {totalCritico === 0 ? (
+            <Vacio>Todo en orden — sin alertas de stock</Vacio>
+          ) : (
+            <>
+              {critico.agotados.length > 0 && <>
+                <Etiqueta color="#dc2626">Agotados · {critico.agotados.length}</Etiqueta>
+                {critico.agotados.map(p => (
+                  <FilaSimple key={p.id} nombre={p.nombre}
+                    badge="Sin stock" badgeColor="#dc2626" badgeBg="#fef2f2" />
+                ))}
+              </>}
+              {critico.bajo.length > 0 && <>
+                <Etiqueta color="#92400e" style={{ marginTop: 10 }}>Bajo mínimo · {critico.bajo.length}</Etiqueta>
+                {critico.bajo.map(p => (
+                  <FilaSimple key={p.id} nombre={p.nombre}
+                    badge={`${p.total} / mín ${p.minimo}`} badgeColor="#92400e" badgeBg="#fffbeb" />
+                ))}
+              </>}
+              <Link href="/auditoria/inventario" style={{ marginTop: 8, fontSize: '0.82rem', color: T.primary, fontWeight: 600, textDecoration: 'none' }}>
+                Ver inventario completo →
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Vista: Sin movimiento ── */}
+      {tab === 'parados' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {sinMovimiento.length === 0 ? (
+            <Vacio>Todos los productos vendieron en los últimos 60 días</Vacio>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: T.muted }}>
+                Productos con stock que no vendieron en 60+ días — ordenados por más tiempo parado
+              </p>
+              {sinMovimiento.map((p, i) => {
+                const maxDias = sinMovimiento[0]?.dias ?? 1
+                const pct = p.dias != null ? Math.round((p.dias / (maxDias || 1)) * 100) : 100
+                return (
+                  <div key={p.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                      <span style={{ fontSize: '0.88rem', color: T.ink, fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
+                        {p.nombre}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap' }}>
+                        {p.dias != null ? `${p.dias} días` : 'Nunca vendido'}
+                      </span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 99, background: '#f1f5f9' }}>
+                      <div style={{ height: '100%', borderRadius: 99, background: pct > 80 ? '#dc2626' : pct > 50 ? '#f59e0b' : '#94a3b8', width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Vista: Más vendidos ── */}
+      {tab === 'vendidos' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {masVendidos.length === 0 ? (
+            <Vacio>Sin ventas registradas en los últimos 30 días</Vacio>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: T.muted }}>
+                Productos más vendidos en los últimos 30 días — por unidades
+              </p>
+              {masVendidos.map((p, i) => {
+                const max = masVendidos[0]?.total ?? 1
+                const pct = Math.round((p.total / max) * 100)
+                return (
+                  <div key={p.id} style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: T.faint, marginRight: 6 }}>#{i + 1}</span>
+                      <span style={{ fontSize: '0.88rem', color: T.ink, fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
+                        {p.nombre}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065f46', whiteSpace: 'nowrap' }}>
+                        {p.total} und
+                      </span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 99, background: '#f1f5f9' }}>
+                      <div style={{ height: '100%', borderRadius: 99, background: '#10b981', width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </div>
+      )}
     </Page>
   )
 }
 
-function Seccion({ titulo, children, vacio, mensajeVacio }) {
+function Etiqueta({ children, color, style }) {
   return (
-    <Card style={{ marginTop: 14 }}>
-      <h3 style={{ margin: '0 0 10px', fontSize: '1rem', fontWeight: 700, color: T.ink }}>{titulo}</h3>
-      {vacio
-        ? <p style={{ color: T.faint, fontSize: '0.85rem', margin: 0 }}>{mensajeVacio}</p>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>{children}</div>
-      }
-    </Card>
-  )
-}
-
-function Etiqueta({ children, style }) {
-  return (
-    <p style={{ margin: '0 0 4px', fontSize: '0.7rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.05em', ...style }}>
+    <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.05em', ...style }}>
       {children}
     </p>
   )
 }
 
-function Fila({ nombre, badge, izq }) {
+function FilaSimple({ nombre, badge, badgeColor, badgeBg }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', background: T.bg, borderRadius: 8 }}>
-      {izq}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 8, border: `1px solid ${T.line}` }}>
       <span style={{ fontSize: '0.88rem', color: T.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {nombre}
       </span>
-      <span style={{ fontSize: '0.74rem', fontWeight: 600, color: badge.color, background: badge.bg, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap', flexShrink: 0 }}>
-        {badge.texto}
+      <span style={{ fontSize: '0.74rem', fontWeight: 600, color: badgeColor, background: badgeBg, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {badge}
       </span>
     </div>
   )
+}
+
+function Vacio({ children }) {
+  return <p style={{ color: T.faint, fontSize: '0.88rem', margin: 0, padding: '16px 0' }}>{children}</p>
 }
