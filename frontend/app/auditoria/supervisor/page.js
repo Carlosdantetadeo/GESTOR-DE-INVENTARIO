@@ -104,9 +104,9 @@ export default function SupervisorPage() {
   const totalCritico = critico.agotados.length + critico.bajo.length
 
   const TABS = [
-    { id: 'critico',  label: '⚠️ Crítico',   value: totalCritico,       color: '#dc2626', bg: '#fef2f2' },
-    { id: 'parados',  label: '📦 Parados',   value: sinMovimiento.length, color: '#92400e', bg: '#fffbeb' },
-    { id: 'vendidos', label: '🔥 Vendidos',  value: masVendidos.length,   color: '#065f46', bg: '#ecfdf5' },
+    { id: 'critico',  icon: '⚠️', label: 'Falta stock',   sub: 'agotado o bajo mín.', value: totalCritico,        color: '#dc2626', bg: '#fef2f2' },
+    { id: 'parados',  icon: '📦', label: 'Sin vender',     sub: '60+ días parado',      value: sinMovimiento.length, color: '#92400e', bg: '#fffbeb' },
+    { id: 'vendidos', icon: '🔥', label: 'Más vendidos',   sub: 'últimos 30 días',      value: masVendidos.length,   color: '#065f46', bg: '#ecfdf5' },
   ]
 
   return (
@@ -126,8 +126,9 @@ export default function SupervisorPage() {
             borderRadius: 12, padding: '10px 6px', background: tab === t.id ? t.bg : '#fff',
             cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s',
           }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: t.color }}>{t.value}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: tab === t.id ? t.color : T.muted, marginTop: 2 }}>{t.label}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: t.color, lineHeight: 1 }}>{t.value}</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: tab === t.id ? t.color : T.ink, marginTop: 4, lineHeight: 1.2 }}>{t.icon} {t.label}</div>
+            <div style={{ fontSize: '0.62rem', color: T.faint, marginTop: 2, lineHeight: 1.2 }}>{t.sub}</div>
           </button>
         ))}
       </div>
