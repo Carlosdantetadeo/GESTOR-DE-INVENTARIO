@@ -24,7 +24,6 @@ function pivotStock(stockRows) {
         unidad: prod.unidad || 'und',
         categoria: prod.categorias?.nombre || '—',
         costo: Number(prod.ultimo_costo) || 0,
-        sugerido: Number(prod.precio_venta_sugerido) || 0,
         stockMinimo: prod.stock_minimo ?? 5,
         stocks: {}
       }
@@ -46,6 +45,11 @@ function getEstado(total, minimo) {
   return 'ok'
 }
 
+const ALERTA = {
+  agotado: { bg: '#fef2f2', hover: '#fee2e2', border: '#dc2626', totalColor: '#dc2626' },
+  bajo:    { bg: '#fffbeb', hover: '#fef3c7', border: '#f59e0b', totalColor: '#d97706' },
+  ok:      { bg: '#fff',    hover: '#f8fafc', border: 'transparent', totalColor: '#0f172a' },
+}
 
 export default function InventarioAuditoria() {
   const [empresaId, setEmpresaId] = useState(null)
@@ -102,7 +106,6 @@ export default function InventarioAuditoria() {
     else if (sortCol === 'total') { va = getTotalStock(a); vb = getTotalStock(b) }
     else if (sortCol === 'costo') { va = a.costo; vb = b.costo }
     else if (sortCol === 'valor') { va = getTotalStock(a) * a.costo; vb = getTotalStock(b) * b.costo }
-
     if (va === undefined) return 0
     const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb
     return sortDir === 'asc' ? cmp : -cmp
@@ -114,10 +117,11 @@ export default function InventarioAuditoria() {
   }
 
   const pivotTiendas = tiendaFiltro === 'all' ? tiendas : tiendas.filter(t => String(t.id) === tiendaFiltro)
-
   const valorTotal = filtered.reduce((acc, p) => acc + getTotalStock(p) * p.costo, 0)
-
   const fmt = (n) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const agotados  = filtered.filter(p => getTotalStock(p) <= 0).length
+  const bajoMin   = filtered.filter(p => { const t = getTotalStock(p); return t > 0 && t < p.stockMinimo }).length
 
   const handleExport = () => {
     const rows = filtered.map(prod => {
@@ -125,10 +129,8 @@ export default function InventarioAuditoria() {
       tiendas.forEach(t => { base[`Stock ${t.nombre}`] = getTiendaStock(prod, t.id) })
       const total = getTotalStock(prod)
       base['Stock Total'] = total
-      base['Estado'] = ESTADO[getEstado(total, prod.stockMinimo)].label
       base['Stock Minimo'] = prod.stockMinimo
       base['Costo Unitario'] = prod.costo
-      base['Precio Sugerido'] = prod.sugerido
       base['Valorizacion'] = total * prod.costo
       return base
     })
@@ -140,50 +142,68 @@ export default function InventarioAuditoria() {
     : sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px' }}>
 
-      {/* ── Título y exportar ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+      {/* ── Título ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>Inventario</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-            {loading ? 'Cargando…' : `${productos.length} producto${productos.length !== 1 ? 's' : ''} en catálogo`}
+          <h1 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>Inventario</h1>
+          <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+            {loading ? 'Cargando…' : `${productos.length} productos en catálogo`}
           </p>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', flexShrink: 0 }}>
           <button onClick={handleExport} disabled={loading || filtered.length === 0} style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            background: '#fff', border: '1px solid #e2e8f0', color: '#374151',
-            borderRadius: 8, padding: '7px 14px', cursor: filtered.length === 0 ? 'default' : 'pointer',
-            fontSize: '0.8rem', fontWeight: 600, opacity: filtered.length === 0 ? 0.5 : 1,
+            background: '#0f172a', color: '#fff', border: 'none',
+            borderRadius: 8, padding: '7px 13px', cursor: filtered.length === 0 ? 'default' : 'pointer',
+            fontSize: '0.78rem', fontWeight: 600, opacity: filtered.length === 0 ? 0.4 : 1,
           }}>
-            <Download size={14} /> Exportar filtro actual
+            <Download size={13} /> Exportar
           </button>
           {!loading && (
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-              {filtered.length} producto{filtered.length !== 1 ? 's' : ''} en la descarga
+            <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+              {filtered.length} producto{filtered.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
       </div>
 
+      {/* ── Alertas rápidas ── */}
+      {!loading && (agotados > 0 || bajoMin > 0) && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {agotados > 0 && (
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+              ⚠ {agotados} agotado{agotados !== 1 ? 's' : ''}
+            </span>
+          )}
+          {bajoMin > 0 && (
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' }}>
+              ↓ {bajoMin} bajo mínimo
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── Filtros ── */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ flex: 1, minWidth: '180px', position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
           <input
             type="text"
-            placeholder="Buscar por nombre o código…"
+            placeholder="Buscar producto o código…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', paddingLeft: '32px', padding: '8px 10px 8px 32px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '8px 10px 8px 32px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: '0.84rem', outline: 'none', boxSizing: 'border-box', background: '#fff' }}
           />
         </div>
-        <select value={categoria} onChange={e => setCategoria(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: '0.85rem', minWidth: '150px' }}>
-          <option value="all">Todas las categorías</option>
-          {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={tiendaFiltro} onChange={e => setTiendaFiltro(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: '0.85rem', minWidth: '130px' }}>
+        {categorias.length > 0 && (
+          <select value={categoria} onChange={e => setCategoria(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: '0.84rem', background: '#fff' }}>
+            <option value="all">Todas las categorías</option>
+            {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        <select value={tiendaFiltro} onChange={e => setTiendaFiltro(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: '0.84rem', background: '#fff' }}>
           <option value="all">Todas las sedes</option>
           {tiendas.map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
         </select>
@@ -191,10 +211,10 @@ export default function InventarioAuditoria() {
           <button
             onClick={() => { setSoloProblemas(false); if (typeof window !== 'undefined') { const u = new URL(window.location.href); u.searchParams.delete('stock'); window.history.replaceState({}, '', u) } }}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 12px',
-              borderRadius: '99px', cursor: 'pointer',
-              background: 'hsl(38 92% 50% / 0.1)', color: 'hsl(38 85% 38%)',
-              border: '1px solid hsl(38 92% 50% / 0.35)', fontSize: '0.78rem', fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 12px',
+              borderRadius: 99, cursor: 'pointer',
+              background: '#fffbeb', color: '#d97706',
+              border: '1px solid #fde68a', fontSize: '0.78rem', fontWeight: 600,
             }}
           >
             Solo alertas ×
@@ -203,65 +223,65 @@ export default function InventarioAuditoria() {
       </div>
 
       {/* ── Tabla ── */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflowX: 'auto' }}>
-        <table style={{ minWidth: '820px', width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <Th onClick={() => toggleSort('nombre')} style={{ minWidth: 200 }}>Producto <SortIcon col="nombre" /></Th>
-                {pivotTiendas.map(t => <Th key={t.id}>{t.nombre}</Th>)}
-                <Th onClick={() => toggleSort('total')}>Total <SortIcon col="total" /></Th>
-                <Th>Mín.</Th>
-                <Th onClick={() => toggleSort('costo')}>Costo <SortIcon col="costo" /></Th>
-                <Th>Precio</Th>
-                <Th onClick={() => toggleSort('valor')}>Valor <SortIcon col="valor" /></Th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Cargando…</td></tr>
-              ) : sorted.length === 0 ? (
-                <tr><td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Sin productos con los filtros aplicados.</td></tr>
-              ) : sorted.map(prod => {
-                const total = getTotalStock(prod)
-                return (
-                  <tr key={prod.id} style={{ borderBottom: '1px solid #f1f5f9' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                    onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '11px 16px' }}>
-                      <div style={{ fontWeight: 600, lineHeight: 1.3 }}>{prod.nombre}</div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
-                        {prod.referencia && (
-                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                            {prod.referencia}
-                          </span>
-                        )}
-                        <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{prod.unidad}</span>
-                      </div>
-                    </td>
-                    {pivotTiendas.map(t => {
-                      const qty = getTiendaStock(prod, t.id)
-                      const low = qty < prod.stockMinimo
-                      return (
-                        <td key={t.id} style={{ padding: '11px 16px', textAlign: 'right', fontWeight: low ? 700 : 400, color: low ? 'hsl(0 75% 48%)' : 'inherit' }}>
-                          {qty}
-                        </td>
-                      )
-                    })}
-                    <td style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>{total}</td>
-                    <td style={{ padding: '11px 16px', textAlign: 'right', color: '#64748b' }}>{prod.stockMinimo}</td>
-                    <td style={{ padding: '11px 16px', textAlign: 'right', color: '#64748b' }}>S/ {prod.costo.toFixed(2)}</td>
-                    <td style={{ padding: '11px 16px', textAlign: 'right', color: '#64748b' }}>S/ {prod.sugerido.toFixed(2)}</td>
-                    <td style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>S/ {fmt(total * prod.costo)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, overflowX: 'auto' }}>
+        <table style={{ minWidth: '680px', width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+          <thead>
+            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+              <Th onClick={() => toggleSort('nombre')} style={{ minWidth: 200 }}>Producto <SortIcon col="nombre" /></Th>
+              {pivotTiendas.map(t => <Th key={t.id} style={{ textAlign: 'right' }}>{t.nombre}</Th>)}
+              <Th onClick={() => toggleSort('total')} style={{ textAlign: 'right' }}>Total <SortIcon col="total" /></Th>
+              <Th style={{ textAlign: 'right' }}>Mín.</Th>
+              <Th onClick={() => toggleSort('costo')} style={{ textAlign: 'right' }}>Costo unit. <SortIcon col="costo" /></Th>
+              <Th onClick={() => toggleSort('valor')} style={{ textAlign: 'right' }}>Valorización <SortIcon col="valor" /></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Cargando…</td></tr>
+            ) : sorted.length === 0 ? (
+              <tr><td colSpan={5 + pivotTiendas.length} style={{ textAlign: 'center', color: '#94a3b8', padding: '48px' }}>Sin productos con los filtros aplicados.</td></tr>
+            ) : sorted.map(prod => {
+              const total = getTotalStock(prod)
+              const estado = getEstado(total, prod.stockMinimo)
+              const al = ALERTA[estado]
+              return (
+                <tr key={prod.id} style={{ borderBottom: '1px solid #f1f5f9', background: al.bg, borderLeft: `3px solid ${al.border}` }}
+                  onMouseEnter={e => e.currentTarget.style.background = al.hover}
+                  onMouseLeave={e => e.currentTarget.style.background = al.bg}>
+                  <td style={{ padding: '10px 16px' }}>
+                    <div style={{ fontWeight: 600, color: '#0f172a', lineHeight: 1.3 }}>{prod.nombre}</div>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                      {prod.referencia && (
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                          {prod.referencia}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{prod.unidad}</span>
+                    </div>
+                  </td>
+                  {pivotTiendas.map(t => {
+                    const qty = getTiendaStock(prod, t.id)
+                    const low = qty < prod.stockMinimo
+                    return (
+                      <td key={t.id} style={{ padding: '10px 16px', textAlign: 'right', fontWeight: low ? 700 : 400, color: low ? '#dc2626' : '#374151' }}>
+                        {qty}
+                      </td>
+                    )
+                  })}
+                  <td style={{ padding: '10px 16px', fontWeight: 800, textAlign: 'right', color: al.totalColor, fontSize: '0.9rem' }}>{total}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', color: estado !== 'ok' ? al.totalColor : '#94a3b8', fontWeight: estado !== 'ok' ? 600 : 400 }}>{prod.stockMinimo}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', color: '#64748b' }}>S/ {prod.costo.toFixed(2)}</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 700, textAlign: 'right', color: '#0f172a' }}>S/ {fmt(total * prod.costo)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
 
         {!loading && sorted.length > 0 && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', fontSize: '0.78rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', minWidth: '820px' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', fontSize: '0.78rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', minWidth: '680px' }}>
             <span>{sorted.length} de {productos.length} producto{productos.length !== 1 ? 's' : ''}</span>
-            <span>Valor total: <strong style={{ color: '#0f172a' }}>S/ {fmt(valorTotal)}</strong></span>
+            <span>Valorización total: <strong style={{ color: '#0f172a' }}>S/ {fmt(valorTotal)}</strong></span>
           </div>
         )}
       </div>
@@ -273,8 +293,8 @@ function Th({ children, onClick, style }) {
   return (
     <th onClick={onClick} style={{
       padding: '10px 16px', textAlign: 'left', fontWeight: 700,
-      fontSize: '0.72rem', color: '#64748b',
-      textTransform: 'uppercase', letterSpacing: '0.04em',
+      fontSize: '0.7rem', color: '#64748b',
+      textTransform: 'uppercase', letterSpacing: '0.05em',
       whiteSpace: 'nowrap', userSelect: 'none',
       cursor: onClick ? 'pointer' : 'default', ...style,
     }}>
