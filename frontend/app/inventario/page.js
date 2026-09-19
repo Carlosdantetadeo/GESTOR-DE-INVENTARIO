@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Download, Search, AlertTriangle, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react'
+import { Download, Search, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react'
 import { getStock, getTiendas, getEmpresaId } from '../../lib/queries'
 import { exportToExcel } from '../../lib/export'
 
@@ -168,22 +168,37 @@ export default function Inventario() {
     : sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
 
   return (
-    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <Link href="/auditoria" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: 'hsl(var(--text-muted))', textDecoration: 'none', marginBottom: '8px' }}>
-            <ArrowLeft size={14} /> Volver al panel
-          </Link>
-          <h1 style={{ fontSize: '1.7rem', fontWeight: 800, marginBottom: '4px' }}>Inventario</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.88rem' }}>
-            Stock actual por sede, estado y valorización de tu almacén.
-          </p>
-        </div>
-        <button onClick={handleExport} className="btn btn-secondary" disabled={loading} style={{ gap: '6px' }}>
-          <Download size={15} /> Exportar Excel
+    <>
+      {/* ── Header oscuro (mismo que auditoria) ── */}
+      <header style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px', background: '#0f172a', color: '#fff',
+        position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Link href="/auditoria" style={{
+            color: '#94a3b8', textDecoration: 'none', fontSize: '1.1rem',
+            lineHeight: 1, padding: '4px 2px',
+          }} aria-label="Volver al panel">←</Link>
+          <strong>Almacenero Digital</strong>
+        </span>
+        <button onClick={handleExport} disabled={loading} style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          background: 'transparent', border: '1px solid #475569', color: '#fff',
+          borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: '0.75rem',
+        }}>
+          <Download size={13} /> Exportar
         </button>
+      </header>
+
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '24px' }}>
+
+      {/* ── Título ── */}
+      <div>
+        <h1 style={{ fontSize: '1.7rem', fontWeight: 800, marginBottom: '4px' }}>Inventario</h1>
+        <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.88rem' }}>
+          Stock actual por sede, estado y valorización de tu almacén.
+        </p>
       </div>
 
       {/* ── Alerta de stock (solo si hay problemas) ── */}
@@ -329,6 +344,7 @@ export default function Inventario() {
         )}
       </div>
     </div>
+    </>
   )
 }
 
