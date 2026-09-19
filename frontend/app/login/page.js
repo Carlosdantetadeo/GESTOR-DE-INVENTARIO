@@ -21,7 +21,10 @@ export default function Login() {
 
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
     if (authError) {
-      setError('Correo o contraseña incorrectos.')
+      const esBaneado = authError.code === 'user_banned' || authError.message?.toLowerCase().includes('banned')
+      setError(esBaneado
+        ? 'Tu cuenta está desactivada. Contacta al administrador.'
+        : 'Correo o contraseña incorrectos.')
       setLoading(false)
       return
     }
