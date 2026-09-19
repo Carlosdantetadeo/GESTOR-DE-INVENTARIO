@@ -161,16 +161,20 @@ export default function Sidebar({ empresa = { nombre: 'Inventario' } }) {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }} role="navigation" aria-label="Navegación principal">
           {menuItems.map(renderNavItem)}
 
-          <div style={{
-            margin: '14px 12px 4px',
-            fontSize: '0.65rem',
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            color: 'hsl(var(--text-muted))'
-          }}>
-            ADMINISTRACIÓN
-          </div>
-          {adminItems.map(renderNavItem)}
+          {isAdmin && (
+            <>
+              <div style={{
+                margin: '14px 12px 4px',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                color: 'hsl(var(--text-muted))'
+              }}>
+                ADMINISTRACIÓN
+              </div>
+              {adminItems.map(renderNavItem)}
+            </>
+          )}
         </nav>
 
         {/* User */}
