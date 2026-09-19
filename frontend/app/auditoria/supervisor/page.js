@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuditoria } from '../AuditoriaShell'
 import { canSupervise } from '../../../lib/auditoria/auth'
-import { supabase } from '../../../lib/supabase'
+import { supabase } from '../../../lib/auditoria/queries'
 import { Page, Title, Note, T } from '../../../lib/auditoria/ui'
 
 export default function SupervisorPage() {
@@ -84,8 +84,9 @@ export default function SupervisorPage() {
       setSinMovimiento(parados)
       setMasVendidos(ranking)
       setError('')
-    } catch {
-      setError('No se pudieron cargar los datos.')
+    } catch (e) {
+      console.error('Panel error:', e)
+      setError('No se pudieron cargar los datos. Toca para reintentar.')
     } finally {
       setCargando(false)
     }
@@ -111,7 +112,11 @@ export default function SupervisorPage() {
   return (
     <Page>
       <Title>Panel</Title>
-      {error && <Note tone="error">{error}</Note>}
+      {error && (
+        <div onClick={cargar} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', marginBottom: 12, cursor: 'pointer' }}>
+          <p style={{ margin: 0, color: '#dc2626', fontSize: '0.88rem', fontWeight: 600 }}>{error}</p>
+        </div>
+      )}
 
       {/* ── Selector de vista ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
