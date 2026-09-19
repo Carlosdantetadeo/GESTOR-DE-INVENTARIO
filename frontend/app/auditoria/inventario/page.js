@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Download, Search, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react'
+import { Download, Search, ChevronUp, ChevronDown } from 'lucide-react'
 import { getStock, getTiendas, getEmpresaId } from '../../../lib/queries'
 import { exportToExcel } from '../../../lib/export'
 
@@ -141,8 +141,6 @@ export default function InventarioAuditoria() {
   const pivotTiendas = tiendaFiltro === 'all' ? tiendas : tiendas.filter(t => String(t.id) === tiendaFiltro)
 
   const valorTotal = filtered.reduce((acc, p) => acc + getTotalStock(p) * p.costo, 0)
-  const agotadosCount = filtered.filter(p => getTotalStock(p) <= 0).length
-  const bajoCount = filtered.filter(p => { const t = getTotalStock(p); return t > 0 && t < p.stockMinimo }).length
 
   const fmt = (n) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -193,28 +191,6 @@ export default function InventarioAuditoria() {
           )}
         </div>
       </div>
-
-      {/* ── Alerta de stock (solo si hay problemas) ── */}
-      {!loading && (agotadosCount > 0 || bajoCount > 0) && (
-        <div
-          onClick={() => setSoloProblemas(v => !v)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            padding: '10px 16px', borderRadius: '10px',
-            background: soloProblemas ? 'hsl(38 92% 50% / 0.12)' : 'hsl(38 92% 50% / 0.07)',
-            border: `1px solid hsl(38 92% 50% / ${soloProblemas ? '0.45' : '0.25'})`,
-            cursor: 'pointer', userSelect: 'none',
-          }}
-        >
-          <AlertTriangle size={15} style={{ color: 'hsl(38 85% 38%)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.83rem', color: 'hsl(38 85% 38%)', fontWeight: 600, flex: 1 }}>
-            {[agotadosCount > 0 && `${agotadosCount} agotado${agotadosCount !== 1 ? 's' : ''}`, bajoCount > 0 && `${bajoCount} bajo mínimo`].filter(Boolean).join(' · ')}
-          </span>
-          <span style={{ fontSize: '0.75rem', color: 'hsl(38 85% 38%)', opacity: 0.8 }}>
-            {soloProblemas ? 'Ver todos' : 'Ver solo estos'}
-          </span>
-        </div>
-      )}
 
       {/* ── Filtros ── */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
