@@ -4,7 +4,7 @@ Sistema de inventario para comercios (ferreterías, abarrotes, autopartes y más
 El registro de ventas e inventario se hace desde la **app web/móvil** por texto, **voz** o **foto**.
 El **bot de Telegram** se usa solo para recibir el **reporte del día**.
 
-**App / dashboard:** https://dashboard.almacenero.digital
+**App:** https://almacenero.digital
 
 ---
 
@@ -12,9 +12,9 @@ El **bot de Telegram** se usa solo para recibir el **reporte del día**.
 
 | | |
 |---|---|
-| **App** | https://dashboard.almacenero.digital |
-| **Ingresar** | https://dashboard.almacenero.digital/login — con tu **email** y **contraseña** |
-| **Empresa nueva** | https://dashboard.almacenero.digital/registro — genera tu usuario y una contraseña temporal `AD-XXXXXXXX` |
+| **App** | https://almacenero.digital |
+| **Ingresar** | https://almacenero.digital/login — con tu **email** y **contraseña** |
+| **Empresa nueva** | https://almacenero.digital/registro — genera tu usuario y una contraseña temporal `AD-XXXXXXXX` |
 | **Olvidé mi contraseña** | En `/login` → **"¿Olvidaste tu contraseña?"** → te llega un email con el link |
 | **No tengo usuario** | Te lo crea el **administrador** de tu empresa (Administración → Usuarios) |
 
@@ -47,7 +47,7 @@ Tu contraseña temporal: AD-XXXXXXXX
 
 ### Paso 3 — Ingresá a la app
 
-1. Andá a **https://dashboard.almacenero.digital/login**
+1. Andá a **https://almacenero.digital/login**
 2. Ingresá con tu email y la contraseña temporal
 3. Cambiá la contraseña la primera vez desde **"¿Olvidaste tu contraseña?"**: te llega un email con un link para crear una nueva
 
@@ -222,3 +222,16 @@ Solo el administrador, tanto en la app (sección Reportes) como por Telegram (`/
 
 **¿Puede un vendedor ver el inventario o los reportes?**
 No. El vendedor solo registra ventas de su sede. El resto lo ven supervisor y admin.
+
+---
+
+## 8. Acceso de plataforma (Superadmin)
+
+> Este acceso es exclusivo del equipo de Almacenero Digital. No es para los clientes.
+
+| | |
+|---|---|
+| **Superadmin** | https://almacenero.digital/superadmin |
+| **Login superadmin** | https://almacenero.digital/superadmin/login |
+
+Desde el superadmin se gestionan todas las empresas registradas en la plataforma: activar/suspender, configurar modelos de IA, ver consumo y crear empresas nuevas de forma manual.
