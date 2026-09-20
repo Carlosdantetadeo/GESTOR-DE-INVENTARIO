@@ -26,7 +26,7 @@ El **bot de Telegram** se usa solo para recibir el **reporte del día**.
 
 ### Paso 1 — Crear tu empresa
 
-1. Entrá a **https://dashboard.almacenero.digital/registro**
+1. Entrá a **https://almacenero.digital/registro**
 2. Completá el formulario:
    - **Nombre de la empresa** — ej: `Ferretería Los Andes`
    - **Rubro del negocio** — ej: `ferretería`, `abarrotes`, `autopartes`
