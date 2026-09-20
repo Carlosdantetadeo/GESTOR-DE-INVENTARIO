@@ -148,7 +148,7 @@ El registro crea **solo al administrador**. Los demás usuarios los crea el admi
    - **Sede** (opcional): la sucursal donde trabaja
 3. Tocá **Crear usuario**.
 
-Entregale a cada persona su email y contraseña. Ingresan en **https://dashboard.almacenero.digital/login** y ven solo lo que su rol permite.
+Entregale a cada persona su email y contraseña. Ingresan en **https://almacenero.digital/login** y ven solo lo que su rol permite.
 
 > Poné siempre un **nombre** a cada vendedor: así los reportes muestran quién vendió qué.
 
